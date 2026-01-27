@@ -1,0 +1,56 @@
+[project]
+name = "trace"
+version = "0.3.0"
+description = "MCP server for document search over local knowledge bases"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp>=2.0.0",
+    "chromadb>=0.4.0",
+    "sentence-transformers>=2.2.0",
+    "transformers>=4.40.0",
+    "fastembed>=0.3.0",
+    "bm25s>=0.2.0",
+    "PyStemmer>=2.2.0",
+    "pydantic-settings>=2.0.0",
+    # Document format extractors
+    "pymupdf>=1.24.0",       # PDF text extraction
+    "python-docx>=1.0.0",    # Word document extraction
+    "python-pptx>=0.6.0",    # PowerPoint extraction
+]
+
+[project.scripts]
+trace = "trace_search.trace_server:main"
+
+[project.optional-dependencies]
+convert = [
+    "markitdown[pdf,docx,pptx]",  # Document conversion
+    "pandas>=2.0.0",              # CSV/XLSX handling
+    "tabulate>=0.9.0",            # DataFrame.to_markdown()
+    "openpyxl>=3.1.0",            # Excel support
+    "rich>=13.0.0",               # Progress bars
+    "click>=8.0.0",               # CLI
+]
+
+[dependency-groups]
+dev = [
+    "matplotlib>=3.8.0",
+    "numpy>=1.26.0",
+    "pytest>=8.0.0",
+    "click>=8.0.0",
+    "PyYAML>=6.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/trace_search"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
