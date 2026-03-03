@@ -1,0 +1,64 @@
+version: "1.0"
+description: "Evaluation thresholds for CI/CD regression detection"
+
+# Path-based accuracy thresholds (exact path match)
+path_accuracy:
+  top_1:
+    target: 0.75      # Green - meeting goals
+    warning: 0.70     # Yellow - needs attention
+    critical: 0.60    # Red - failing
+  top_5:
+    target: 0.95
+    warning: 0.90
+    critical: 0.80
+
+# Keyword-based accuracy thresholds (content match)
+keyword_accuracy:
+  top_1:
+    target: 0.80
+    warning: 0.75
+    critical: 0.65
+  top_5:
+    target: 0.95
+    warning: 0.90
+    critical: 0.80
+
+# Keyword matching configuration
+keyword_match:
+  min_keywords: 2  # Minimum keywords to count as a hit
+
+# Latency thresholds (milliseconds)
+latency:
+  p50:
+    target: 20        # Normal queries should be fast
+    warning: 50
+    critical: 100
+  p95:
+    target: 50        # 95th percentile
+    warning: 100
+    critical: 200
+  p99:
+    target: 100       # 99th percentile
+    warning: 200
+    critical: 500
+
+# Regression detection thresholds
+regression:
+  # Minimum accuracy drop to flag as regression
+  top_1_drop_threshold: 0.05    # 5% drop in Top-1 accuracy
+  top_5_drop_threshold: 0.03    # 3% drop in Top-5 accuracy
+
+  # Maximum latency increase to flag as regression
+  latency_increase_threshold: 0.50  # 50% increase in p95 latency
+
+  # Minimum queries that must regress (pass->fail) to flag
+  min_regressed_queries: 2
+
+# CI mode settings
+ci:
+  # Exit code 1 if any of these conditions are met
+  fail_on:
+    - top_1_below_critical     # Top-1 accuracy below critical threshold
+    - top_5_below_critical     # Top-5 accuracy below critical threshold
+    - latency_above_critical   # P95 latency above critical threshold
+    - regression_detected      # Regression compared to baseline

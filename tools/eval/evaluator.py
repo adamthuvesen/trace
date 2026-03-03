@@ -1,0 +1,361 @@
+"""Evaluation harness for wiki search."""
+
+from __future__ import annotations
+
+import logging
+import os
+import statistics
+import time
+from collections import defaultdict
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import yaml
+
+from tools.eval.models import (
+    CategoryMetrics,
+    EvaluationReport,
+    FileTypeMetrics,
+    GoldenQuery,
+    QueryResult,
+)
+
+if TYPE_CHECKING:
+    from trace_search.indexer import WikiIndexer
+    from trace_search.search import HybridSearch, KeywordSearch, SemanticSearch
+
+logger = logging.getLogger(__name__)
+
+EVAL_DIR = Path(__file__).parent
+DEFAULT_GOLDEN_QUERIES_PATH = EVAL_DIR / "golden_queries.yaml"
+EXAMPLE_GOLDEN_QUERIES_PATH = EVAL_DIR / "golden_queries.example.yaml"
+
+
+def get_golden_queries_path() -> Path:
+    """Resolve golden-queries YAML (env, then Settings/.env, then default)."""
+    override = (os.environ.get("EVAL_GOLDEN_QUERIES") or "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    try:
+        from trace_search.config import settings
+
+        if settings.eval_golden_queries is not None:
+            return settings.eval_golden_queries.expanduser().resolve()
+    except Exception:
+        pass
+    return DEFAULT_GOLDEN_QUERIES_PATH.resolve()
+
+
+def _missing_golden_queries_message(path: Path) -> str:
+    return (
+        f"Golden queries file not found: {path}\n\n"
+        "Create one from the template (gitignored by default):\n"
+        f"  cp {EXAMPLE_GOLDEN_QUERIES_PATH} {DEFAULT_GOLDEN_QUERIES_PATH}\n\n"
+        "Then set KB_PATH to a corpus whose files match expected_path in that YAML, "
+        "or set EVAL_GOLDEN_QUERIES to a different file."
+    )
+
+
+def load_golden_queries(
+    quick_only: bool = False,
+    categories: list[str] | None = None,
+    file_types: list[str] | None = None,
+) -> list[GoldenQuery]:
+    """Load golden queries from YAML file with optional filtering."""
+    path = get_golden_queries_path()
+    if not path.is_file():
+        raise ValueError(_missing_golden_queries_message(path))
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        raise ValueError(f"Invalid YAML in {path}: {e}") from e
+
+    if not isinstance(data, dict) or not isinstance(data.get("queries"), list):
+        raise ValueError(f"{path} must contain a top-level 'queries' list")
+
+    queries = []
+    for i, q in enumerate(data.get("queries", [])):
+        try:
+            query = GoldenQuery.from_dict(q)
+        except KeyError as e:
+            raise ValueError(f"Query at index {i} missing required field: {e}") from e
+        except TypeError as e:
+            raise ValueError(f"Query at index {i} has invalid data: {e}") from e
+
+        # Apply filters
+        if quick_only and not query.quick_set:
+            continue
+        if categories and query.category not in categories:
+            continue
+        if file_types and query.file_type not in file_types:
+            continue
+
+        queries.append(query)
+
+    return queries
+
+
+def create_searcher(
+    indexer: WikiIndexer,
+    search_mode: str,
+) -> SemanticSearch | KeywordSearch | HybridSearch:
+    """Create a searcher based on the mode."""
+    from trace_search.search import HybridSearch, KeywordSearch, SemanticSearch
+
+    if search_mode == "semantic":
+        return SemanticSearch(indexer.collection, indexer.backend)
+    elif search_mode == "bm25":
+        return KeywordSearch(indexer)
+    elif search_mode == "hybrid":
+        return HybridSearch(indexer, indexer.backend)
+    else:
+        raise ValueError(f"Unknown search mode: {search_mode}")
+
+
+def evaluate_query(
+    query: GoldenQuery,
+    searcher: SemanticSearch | KeywordSearch | HybridSearch,
+    search_mode: str,
+    top_k: int = 5,
+    min_keywords: int = 2,
+) -> QueryResult:
+    """Evaluate a single query and return the result.
+
+    Args:
+        query: The golden query to evaluate.
+        searcher: The search engine to use.
+        search_mode: The search mode (semantic, bm25, hybrid).
+        top_k: Number of results to retrieve.
+        min_keywords: Minimum keywords to count as a hit.
+    """
+    # Run search with timing
+    start = time.perf_counter()
+    if search_mode == "bm25":
+        hits = searcher.search(query.query, max_results=top_k)
+    else:
+        hits = searcher.search(query.query, top_k=top_k)
+    latency_ms = (time.perf_counter() - start) * 1000
+
+    if not hits:
+        return QueryResult(
+            query_id=query.id,
+            query=query.query,
+            top_1_path_hit=False,
+            top_5_path_hit=False,
+            top_1_keyword_hit=False,
+            top_5_keyword_hit=False,
+            retrieved_path="(no results)",
+            retrieved_score=0.0,
+            latency_ms=latency_ms,
+            keywords_found=[],
+            keywords_missing=query.expected_keywords,
+        )
+
+    # Check path match at top-1
+    top_1_path = hits[0]["path"]
+    top_1_path_hit = query.matches_path(top_1_path)
+
+    # Check path match in top-5
+    top_5_path_hit = any(query.matches_path(h["path"]) for h in hits[:5])
+
+    # Check keyword match at top-1
+    top_1_content = hits[0]["content"].lower()
+    top_1_keywords = [k for k in query.expected_keywords if k.lower() in top_1_content]
+    top_1_keyword_hit = len(top_1_keywords) >= min_keywords
+
+    # Check keyword match in top-5
+    all_content = " ".join(h["content"].lower() for h in hits[:5])
+    top_5_keywords = [k for k in query.expected_keywords if k.lower() in all_content]
+    top_5_keyword_hit = len(top_5_keywords) >= min_keywords
+
+    return QueryResult(
+        query_id=query.id,
+        query=query.query,
+        top_1_path_hit=top_1_path_hit,
+        top_5_path_hit=top_5_path_hit,
+        top_1_keyword_hit=top_1_keyword_hit,
+        top_5_keyword_hit=top_5_keyword_hit,
+        retrieved_path=top_1_path,
+        retrieved_score=hits[0].get("score", 0.0),
+        latency_ms=latency_ms,
+        keywords_found=top_5_keywords,
+        keywords_missing=[
+            k for k in query.expected_keywords if k.lower() not in all_content
+        ],
+    )
+
+
+def compute_category_metrics(
+    queries: list[GoldenQuery],
+    results: list[QueryResult],
+) -> dict[str, CategoryMetrics]:
+    """Compute metrics grouped by category."""
+    # Group results by category
+    by_category: dict[str, list[tuple[GoldenQuery, QueryResult]]] = defaultdict(list)
+    query_map = {q.id: q for q in queries}
+
+    for result in results:
+        query = query_map.get(result.query_id)
+        if query:
+            by_category[query.category].append((query, result))
+
+    # Compute metrics for each category
+    metrics = {}
+    for category, items in by_category.items():
+        query_count = len(items)
+        top_1_path_hits = sum(1 for _, r in items if r.top_1_path_hit)
+        top_5_path_hits = sum(1 for _, r in items if r.top_5_path_hit)
+        top_1_keyword_hits = sum(1 for _, r in items if r.top_1_keyword_hit)
+        top_5_keyword_hits = sum(1 for _, r in items if r.top_5_keyword_hit)
+        avg_latency = statistics.mean(r.latency_ms for _, r in items) if items else 0.0
+
+        metrics[category] = CategoryMetrics(
+            category=category,
+            query_count=query_count,
+            top_1_path_hits=top_1_path_hits,
+            top_5_path_hits=top_5_path_hits,
+            top_1_keyword_hits=top_1_keyword_hits,
+            top_5_keyword_hits=top_5_keyword_hits,
+            avg_latency_ms=avg_latency,
+        )
+
+    return metrics
+
+
+def compute_file_type_metrics(
+    queries: list[GoldenQuery],
+    results: list[QueryResult],
+) -> dict[str, FileTypeMetrics]:
+    """Compute metrics grouped by file type."""
+    # Group results by file type
+    by_type: dict[str, list[tuple[GoldenQuery, QueryResult]]] = defaultdict(list)
+    query_map = {q.id: q for q in queries}
+
+    for result in results:
+        query = query_map.get(result.query_id)
+        if query:
+            by_type[query.file_type].append((query, result))
+
+    # Compute metrics for each file type
+    metrics = {}
+    for file_type, items in by_type.items():
+        query_count = len(items)
+        top_1_path_hits = sum(1 for _, r in items if r.top_1_path_hit)
+        top_5_path_hits = sum(1 for _, r in items if r.top_5_path_hit)
+        avg_latency = statistics.mean(r.latency_ms for _, r in items) if items else 0.0
+
+        metrics[file_type] = FileTypeMetrics(
+            file_type=file_type,
+            query_count=query_count,
+            top_1_path_hits=top_1_path_hits,
+            top_5_path_hits=top_5_path_hits,
+            avg_latency_ms=avg_latency,
+        )
+
+    return metrics
+
+
+def run_evaluation(
+    indexer: WikiIndexer,
+    search_mode: str = "hybrid",
+    quick_only: bool = False,
+    categories: list[str] | None = None,
+    file_types: list[str] | None = None,
+    top_k: int = 5,
+) -> EvaluationReport:
+    """Run the full evaluation and return a report."""
+    from trace_search.config import settings
+    from trace_search.search import SemanticSearch
+
+    from tools.eval import load_thresholds
+
+    # Load configuration
+    thresholds = load_thresholds()
+    min_keywords = thresholds.get("keyword_match", {}).get("min_keywords", 2)
+
+    # Load queries
+    queries = load_golden_queries(
+        quick_only=quick_only,
+        categories=categories,
+        file_types=file_types,
+    )
+
+    if not queries:
+        raise ValueError("No queries match the specified filters")
+
+    logger.info(
+        "Running evaluation with %d queries (mode: %s)", len(queries), search_mode
+    )
+
+    # Create searcher
+    searcher = create_searcher(indexer, search_mode)
+
+    # Clear embedding cache for consistent timing
+    SemanticSearch._embedding_cache.clear()
+
+    # Run evaluation
+    results: list[QueryResult] = []
+    for i, query in enumerate(queries, 1):
+        result = evaluate_query(query, searcher, search_mode, top_k, min_keywords)
+        results.append(result)
+
+        status = (
+            "HIT"
+            if result.top_1_path_hit
+            else ("PARTIAL" if result.top_5_path_hit else "MISS")
+        )
+        logger.debug(
+            "[%d/%d] %s: %s - %s",
+            i,
+            len(queries),
+            status,
+            query.query[:40],
+            result.retrieved_path[:50],
+        )
+
+    # Compute overall metrics
+    total = len(results)
+    top_1_path_hits = sum(1 for r in results if r.top_1_path_hit)
+    top_5_path_hits = sum(1 for r in results if r.top_5_path_hit)
+    top_1_keyword_hits = sum(1 for r in results if r.top_1_keyword_hit)
+    top_5_keyword_hits = sum(1 for r in results if r.top_5_keyword_hit)
+
+    # Compute latency percentiles using proper statistics
+    latencies = sorted(r.latency_ms for r in results)
+    if len(latencies) >= 2:
+        # Use quantiles for proper percentile calculation
+        # n=100 gives 99 cut points (percentiles 1-99)
+        quantiles = statistics.quantiles(latencies, n=100)
+        p50 = quantiles[49]  # 50th percentile (index 49 in 0-based)
+        p95 = quantiles[94]  # 95th percentile
+        p99 = quantiles[98] if len(quantiles) > 98 else latencies[-1]
+    elif len(latencies) == 1:
+        p50 = p95 = p99 = latencies[0]
+    else:
+        p50 = p95 = p99 = 0.0
+
+    # Compute breakdown metrics
+    by_category = compute_category_metrics(queries, results)
+    by_file_type = compute_file_type_metrics(queries, results)
+
+    return EvaluationReport(
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        search_mode=search_mode,
+        embedding_model=settings.embedding_model,
+        total_queries=total,
+        quick_set_only=quick_only,
+        top_1_path_accuracy=top_1_path_hits / total if total > 0 else 0.0,
+        top_5_path_accuracy=top_5_path_hits / total if total > 0 else 0.0,
+        top_1_keyword_accuracy=top_1_keyword_hits / total if total > 0 else 0.0,
+        top_5_keyword_accuracy=top_5_keyword_hits / total if total > 0 else 0.0,
+        latency_p50_ms=p50,
+        latency_p95_ms=p95,
+        latency_p99_ms=p99,
+        latency_mean_ms=statistics.mean(latencies) if latencies else 0.0,
+        by_category=by_category,
+        by_file_type=by_file_type,
+        results=results,
+        regression=None,
+    )
