@@ -1,0 +1,292 @@
+version: '1.0'
+description: >-
+  Template for search evaluation. Copy to golden_queries.yaml (gitignored) and set KB_PATH
+  to a knowledge base whose files match expected_path entries. Optionally keep a local
+  tools/eval/fixture_kb tree (also gitignored) with that layout.
+queries:
+- id: concepts-001
+  query: What is BM25?
+  category: concepts
+  expected_path: glossary/bm25.md
+  expected_keywords:
+  - BM25
+  - keyword
+  - ranking
+  file_type: .md
+  quick_set: true
+  description: BM25 ranking overview
+- id: concepts-002
+  query: What is RRF?
+  category: concepts
+  expected_path: glossary/rrf.md
+  expected_keywords:
+  - RRF
+  - rank
+  - fusion
+  file_type: .md
+  quick_set: true
+  description: Reciprocal rank fusion overview
+- id: concepts-003
+  query: What is ANN search?
+  category: concepts
+  expected_path: glossary/ann-search.md
+  expected_keywords:
+  - ANN
+  - nearest neighbor
+  - vector
+  file_type: .md
+  quick_set: true
+  description: ANN search definition
+- id: concepts-004
+  query: What is hybrid search?
+  category: concepts
+  expected_path: search/hybrid-search.md
+  expected_keywords:
+  - hybrid search
+  - semantic
+  - keyword
+  file_type: .md
+  quick_set: true
+  description: Hybrid search overview
+- id: concepts-005
+  query: What are the key search quality metrics?
+  category: concepts
+  expected_path: search/quality-metrics.md
+  expected_keywords:
+  - precision
+  - recall
+  - latency
+  file_type: .md
+  quick_set: false
+  description: Search quality metrics
+- id: indexing-001
+  query: How does heading-based chunking work?
+  category: indexing
+  expected_path: indexing/heading-chunking.md
+  expected_keywords:
+  - heading-based
+  - chunking
+  - sections
+  file_type: .md
+  quick_set: true
+  description: Heading-based chunking
+- id: indexing-002
+  query: What is chunk overlap?
+  category: indexing
+  expected_path: indexing/chunk-overlap.md
+  expected_keywords:
+  - overlap
+  - chunk
+  - context
+  file_type: .md
+  quick_set: true
+  description: Chunk overlap behavior
+- id: indexing-003
+  query: How does partial reindexing work?
+  category: indexing
+  expected_path: indexing/partial-reindexing.md
+  expected_keywords:
+  - partial reindex
+  - changed
+  - documents
+  file_type: .md
+  quick_set: true
+  description: Partial reindex workflow
+- id: indexing-004
+  query: How do extractors handle frontmatter?
+  category: indexing
+  expected_path: indexing/frontmatter-metadata.md
+  expected_keywords:
+  - frontmatter
+  - metadata
+  - extract
+  file_type: .md
+  quick_set: false
+  description: Frontmatter extraction
+- id: indexing-005
+  query: What file formats are supported?
+  category: indexing
+  expected_path: indexing/supported-formats.md
+  expected_keywords:
+  - supported formats
+  - markdown
+  - pdf
+  file_type: .md
+  quick_set: false
+  description: Supported file formats
+- id: features-001
+  query: What is multi-collection search?
+  category: features
+  expected_path: features/multi-collection-search.md
+  expected_keywords:
+  - multi-collection
+  - collections
+  - search
+  file_type: .md
+  quick_set: true
+  description: Multi-collection search
+- id: features-002
+  query: What is reranking?
+  category: features
+  expected_path: features/reranking.md
+  expected_keywords:
+  - reranking
+  - results
+  - relevance
+  file_type: .md
+  quick_set: true
+  description: Reranking behavior
+- id: features-003
+  query: What is query expansion?
+  category: features
+  expected_path: features/query-expansion.md
+  expected_keywords:
+  - query expansion
+  - synonyms
+  - terms
+  file_type: .md
+  quick_set: false
+  description: Query expansion
+- id: config-001
+  query: How do I set KB_PATH?
+  category: config
+  expected_path: config/kb-path.md
+  expected_keywords:
+  - KB_PATH
+  - knowledge base
+  - path
+  file_type: .md
+  quick_set: true
+  description: KB_PATH configuration
+- id: config-002
+  query: How do I override INDEX_PATH?
+  category: config
+  expected_path: config/index-path.md
+  expected_keywords:
+  - INDEX_PATH
+  - index
+  - path
+  file_type: .md
+  quick_set: true
+  description: INDEX_PATH configuration
+- id: docs-001
+  query: What is the writing style guide?
+  category: docs
+  expected_path: docs/writing-style-guide.md
+  expected_keywords:
+  - style guide
+  - writing
+  - docs
+  file_type: .md
+  quick_set: true
+  description: Writing style guide
+- id: docs-002
+  query: How does the documentation review checklist work?
+  category: docs
+  expected_path: docs/review-checklist.md
+  expected_keywords:
+  - documentation review
+  - checklist
+  - accuracy
+  file_type: .md
+  quick_set: false
+  description: Documentation review checklist
+- id: docs-003
+  query: How do release notes work?
+  category: docs
+  expected_path: docs/release-notes.md
+  expected_keywords:
+  - release notes
+  - changes
+  - version
+  file_type: .md
+  quick_set: false
+  description: Release notes workflow
+- id: reference-001
+  query: Where is the API reference?
+  category: reference
+  expected_path: reference/api-reference.md
+  expected_keywords:
+  - API reference
+  - endpoints
+  - schema
+  file_type: .md
+  quick_set: true
+  description: API reference location
+- id: reference-002
+  query: Where is the troubleshooting guide?
+  category: reference
+  expected_path: reference/troubleshooting.md
+  expected_keywords:
+  - troubleshooting
+  - guide
+  - errors
+  file_type: .md
+  quick_set: true
+  description: Troubleshooting guide
+- id: evaluation-001
+  query: How does benchmark reporting work?
+  category: evaluation
+  expected_path: evaluation/benchmark-reporting.md
+  expected_keywords:
+  - benchmark
+  - report
+  - latency
+  file_type: .md
+  quick_set: false
+  description: Benchmark reporting
+- id: evaluation-002
+  query: What is the latency budget?
+  category: evaluation
+  expected_path: evaluation/latency-budget.md
+  expected_keywords:
+  - latency budget
+  - p95
+  - p99
+  file_type: .md
+  quick_set: false
+  description: Latency budget targets
+- id: platform-001
+  query: How does parser pipeline architecture work?
+  category: platform
+  expected_path: platform/parser-pipeline.md
+  expected_keywords:
+  - parser
+  - pipeline
+  - architecture
+  file_type: .md
+  quick_set: false
+  description: Parser pipeline architecture
+- id: telemetry-001
+  query: What are event instrumentation guidelines?
+  category: telemetry
+  expected_path: telemetry/event-instrumentation.md
+  expected_keywords:
+  - event instrumentation
+  - tracking
+  - schema
+  file_type: .md
+  quick_set: false
+  description: Event instrumentation guidelines
+- id: exports-001
+  query: How do notebook exports support analysis?
+  category: exports
+  expected_path: exports/notebook-exports.md
+  expected_keywords:
+  - notebook export
+  - analysis
+  - metadata
+  file_type: .md
+  quick_set: false
+  description: Notebook export analysis
+- id: observability-001
+  query: What is audit logging?
+  category: observability
+  expected_path: observability/audit-logging.md
+  expected_keywords:
+  - audit logging
+  - events
+  - monitoring
+  file_type: .md
+  quick_set: false
+  description: Audit logging overview
