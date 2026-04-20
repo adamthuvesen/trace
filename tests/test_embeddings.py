@@ -87,3 +87,11 @@ def test_eval_cli_has_ab_flag():
 
     param_names = {p.name for p in main.params}
     assert "ab" in param_names
+    for name in (
+        "ci_stress",
+        "include_stress",
+        "stress",
+        "strict_keywords",
+        "strict_keywords_top1",
+    ):
+        assert name in param_names

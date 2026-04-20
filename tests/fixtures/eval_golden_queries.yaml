@@ -1,0 +1,112 @@
+# Golden queries for tests/fixtures/eval_kb — small corpus for CI/local smoke eval.
+#
+# Run the same harness as production eval without copying golden_queries.example.yaml:
+#
+#   KB_PATH=tests/fixtures/eval_kb \
+#   EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
+#   uv run python -m tools.eval.cli --full --search semantic
+#
+# Add --include-stress to include the two paraphrase queries at the bottom.
+version: '1.0'
+description: Fixture KB golden set (8 core + 2 stress)
+queries:
+- id: easy-bm25
+  query: What is BM25?
+  category: concepts
+  expected_path: glossary/bm25.md
+  expected_keywords:
+  - BM25
+  - keyword
+  - ranking
+  quick_set: true
+- id: easy-rrf
+  query: What is RRF?
+  category: concepts
+  expected_path: glossary/rrf.md
+  expected_keywords:
+  - RRF
+  - rank
+  - fusion
+  quick_set: true
+- id: easy-ann
+  query: What is ANN search?
+  category: concepts
+  expected_path: glossary/ann-search.md
+  expected_keywords:
+  - ANN
+  - nearest neighbor
+  - vector
+  quick_set: true
+- id: easy-hybrid
+  query: What is hybrid search?
+  category: concepts
+  expected_path: search/hybrid-search.md
+  expected_keywords:
+  - hybrid search
+  - semantic
+  - keyword
+  quick_set: true
+- id: easy-overlap
+  query: What is chunk overlap?
+  category: indexing
+  expected_path: indexing/chunk-overlap.md
+  expected_keywords:
+  - overlap
+  - chunk
+  - context
+  quick_set: false
+- id: easy-rerank
+  query: What is reranking?
+  category: features
+  expected_path: features/reranking.md
+  expected_keywords:
+  - reranking
+  - results
+  - relevance
+  quick_set: false
+- id: easy-kb-path
+  query: How do I set KB_PATH?
+  category: config
+  expected_path: config/kb-path.md
+  expected_keywords:
+  - KB_PATH
+  - knowledge base
+  - path
+  quick_set: false
+- id: easy-style
+  query: What is the writing style guide?
+  category: docs
+  expected_path: docs/writing-style-guide.md
+  expected_keywords:
+  - style guide
+  - writing
+  - docs
+  quick_set: false
+- id: stress-bm25
+  query: >-
+    Which bag-of-words scoring model dampens term frequency and normalizes by
+    document length?
+  category: concepts
+  expected_path: glossary/bm25.md
+  expected_keywords:
+  - BM25
+  - keyword
+  - ranking
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+  max_rank: 2
+- id: stress-hybrid
+  query: >-
+    I need both lexical overlap and semantic similarity in one result list—what
+    pattern should I read about first?
+  category: concepts
+  expected_path: search/hybrid-search.md
+  expected_keywords:
+  - hybrid search
+  - semantic
+  - keyword
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+  max_rank: 3
