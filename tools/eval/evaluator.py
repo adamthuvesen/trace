@@ -61,8 +61,15 @@ def load_golden_queries(
     quick_only: bool = False,
     categories: list[str] | None = None,
     file_types: list[str] | None = None,
+    stress_only: bool = False,
+    include_stress: bool = False,
 ) -> list[GoldenQuery]:
-    """Load golden queries from YAML file with optional filtering."""
+    """Load golden queries from YAML file with optional filtering.
+
+    By default, queries with ``stress_set: true`` are excluded so ``--quick`` /
+    ``--full`` counts stay stable. Use ``--include-stress`` to add them, or
+    ``--stress`` to run only the stress subset.
+    """
     path = get_golden_queries_path()
     if not path.is_file():
         raise ValueError(_missing_golden_queries_message(path))
@@ -83,6 +90,12 @@ def load_golden_queries(
             raise ValueError(f"Query at index {i} missing required field: {e}") from e
         except TypeError as e:
             raise ValueError(f"Query at index {i} has invalid data: {e}") from e
+
+        if stress_only:
+            if not query.stress_set:
+                continue
+        elif not include_stress and query.stress_set:
+            continue
 
         # Apply filters
         if quick_only and not query.quick_set:
@@ -114,12 +127,40 @@ def create_searcher(
         raise ValueError(f"Unknown search mode: {search_mode}")
 
 
+def _effective_min_keywords(
+    query: GoldenQuery,
+    global_min: int,
+    strict_keywords: bool,
+) -> int:
+    if query.min_keywords is not None:
+        return query.min_keywords
+    if strict_keywords and query.expected_keywords:
+        return len(query.expected_keywords)
+    return global_min
+
+
+def _keyword_scope_content(
+    hits: list[dict],
+    *,
+    top_k: int,
+    strict_keywords_top1: bool,
+) -> tuple[str, str]:
+    """Return (top_1_lower, scope_lower) for keyword substring checks."""
+    top_1 = hits[0]["content"].lower() if hits else ""
+    if strict_keywords_top1 or not hits:
+        return top_1, top_1
+    scope = " ".join(h["content"].lower() for h in hits[:top_k])
+    return top_1, scope
+
+
 def evaluate_query(
     query: GoldenQuery,
     searcher: SemanticSearch | KeywordSearch | HybridSearch,
     search_mode: str,
     top_k: int = 5,
     min_keywords: int = 2,
+    strict_keywords: bool = False,
+    strict_keywords_top1: bool = False,
 ) -> QueryResult:
     """Evaluate a single query and return the result.
 
@@ -128,8 +169,15 @@ def evaluate_query(
         searcher: The search engine to use.
         search_mode: The search mode (semantic, bm25, hybrid).
         top_k: Number of results to retrieve.
-        min_keywords: Minimum keywords to count as a hit.
+        min_keywords: Minimum keywords to count as a hit (unless overridden per query
+            or by ``strict_keywords``).
+        strict_keywords: Require all listed ``expected_keywords`` to match (or
+            ``query.min_keywords`` when set).
+        strict_keywords_top1: Evaluate keyword hits using only the top-1 chunk body
+            (applies to both top-1 and top-5 keyword metrics).
     """
+    need = _effective_min_keywords(query, min_keywords, strict_keywords)
+
     # Run search with timing
     start = time.perf_counter()
     if search_mode == "bm25":
@@ -151,7 +199,22 @@ def evaluate_query(
             latency_ms=latency_ms,
             keywords_found=[],
             keywords_missing=query.expected_keywords,
+            path_first_hit_rank=None,
+            path_reciprocal_rank=0.0,
+            path_hit_within_max_rank=False,
         )
+
+    path_first_hit_rank: int | None = None
+    for i, h in enumerate(hits[:top_k], start=1):
+        if query.matches_path(h["path"]):
+            path_first_hit_rank = i
+            break
+
+    reciprocal = 1.0 / path_first_hit_rank if path_first_hit_rank else 0.0
+    max_rank = query.max_rank if query.max_rank is not None else top_k
+    path_hit_within_max_rank = (
+        path_first_hit_rank is not None and path_first_hit_rank <= max_rank
+    )
 
     # Check path match at top-1
     top_1_path = hits[0]["path"]
@@ -160,15 +223,14 @@ def evaluate_query(
     # Check path match in top-5
     top_5_path_hit = any(query.matches_path(h["path"]) for h in hits[:5])
 
-    # Check keyword match at top-1
-    top_1_content = hits[0]["content"].lower()
+    top_1_content, scope_content = _keyword_scope_content(
+        hits, top_k=top_k, strict_keywords_top1=strict_keywords_top1
+    )
     top_1_keywords = [k for k in query.expected_keywords if k.lower() in top_1_content]
-    top_1_keyword_hit = len(top_1_keywords) >= min_keywords
+    top_1_keyword_hit = len(top_1_keywords) >= need
 
-    # Check keyword match in top-5
-    all_content = " ".join(h["content"].lower() for h in hits[:5])
-    top_5_keywords = [k for k in query.expected_keywords if k.lower() in all_content]
-    top_5_keyword_hit = len(top_5_keywords) >= min_keywords
+    top_5_keywords = [k for k in query.expected_keywords if k.lower() in scope_content]
+    top_5_keyword_hit = len(top_5_keywords) >= need
 
     return QueryResult(
         query_id=query.id,
@@ -182,8 +244,11 @@ def evaluate_query(
         latency_ms=latency_ms,
         keywords_found=top_5_keywords,
         keywords_missing=[
-            k for k in query.expected_keywords if k.lower() not in all_content
+            k for k in query.expected_keywords if k.lower() not in scope_content
         ],
+        path_first_hit_rank=path_first_hit_rank,
+        path_reciprocal_rank=reciprocal,
+        path_hit_within_max_rank=path_hit_within_max_rank,
     )
 
 
@@ -264,6 +329,10 @@ def run_evaluation(
     categories: list[str] | None = None,
     file_types: list[str] | None = None,
     top_k: int = 5,
+    stress_only: bool = False,
+    include_stress: bool = False,
+    strict_keywords: bool = False,
+    strict_keywords_top1: bool = False,
 ) -> EvaluationReport:
     """Run the full evaluation and return a report."""
     from trace_search.config import settings
@@ -280,6 +349,8 @@ def run_evaluation(
         quick_only=quick_only,
         categories=categories,
         file_types=file_types,
+        stress_only=stress_only,
+        include_stress=include_stress,
     )
 
     if not queries:
@@ -298,7 +369,15 @@ def run_evaluation(
     # Run evaluation
     results: list[QueryResult] = []
     for i, query in enumerate(queries, 1):
-        result = evaluate_query(query, searcher, search_mode, top_k, min_keywords)
+        result = evaluate_query(
+            query,
+            searcher,
+            search_mode,
+            top_k,
+            min_keywords,
+            strict_keywords=strict_keywords,
+            strict_keywords_top1=strict_keywords_top1,
+        )
         results.append(result)
 
         status = (
@@ -321,6 +400,9 @@ def run_evaluation(
     top_5_path_hits = sum(1 for r in results if r.top_5_path_hit)
     top_1_keyword_hits = sum(1 for r in results if r.top_1_keyword_hit)
     top_5_keyword_hits = sum(1 for r in results if r.top_5_keyword_hit)
+    mean_rr = statistics.mean(r.path_reciprocal_rank for r in results) if results else 0.0
+    within_max = sum(1 for r in results if r.path_hit_within_max_rank)
+    within_max_acc = within_max / total if total > 0 else 0.0
 
     # Compute latency percentiles using proper statistics
     latencies = sorted(r.latency_ms for r in results)
@@ -358,4 +440,13 @@ def run_evaluation(
         by_file_type=by_file_type,
         results=results,
         regression=None,
+        mean_reciprocal_rank=mean_rr,
+        within_max_rank_path_accuracy=within_max_acc,
+        include_stress=(
+            stress_only
+            or (include_stress and any(q.stress_set for q in queries))
+        ),
+        stress_only=stress_only,
+        strict_keywords=strict_keywords,
+        strict_keywords_top1=strict_keywords_top1,
     )

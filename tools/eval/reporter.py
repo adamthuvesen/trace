@@ -99,6 +99,19 @@ def generate_markdown_report(report: EvaluationReport) -> str:
         keyword_thresh["top_5"]["critical"],
     )
 
+    run_flags = []
+    if report.stress_only:
+        run_flags.append("stress subset")
+    elif report.include_stress:
+        run_flags.append("includes stress queries")
+    if report.strict_keywords:
+        run_flags.append(
+            "strict keywords"
+            + (" (top-1 scope)" if report.strict_keywords_top1 else "")
+        )
+    if run_flags:
+        lines.extend(["**Eval mode:** " + ", ".join(run_flags), ""])
+
     lines.extend(
         [
             "## Overall Metrics",
@@ -109,6 +122,8 @@ def generate_markdown_report(report: EvaluationReport) -> str:
             f"| Top-5 Path Accuracy | {report.top_5_path_accuracy:.1%} | {t5_path_status} | ≥{path_thresh['top_5']['target']:.0%} |",
             f"| Top-1 Keyword Accuracy | {report.top_1_keyword_accuracy:.1%} | {t1_kw_status} | ≥{keyword_thresh['top_1']['target']:.0%} |",
             f"| Top-5 Keyword Accuracy | {report.top_5_keyword_accuracy:.1%} | {t5_kw_status} | ≥{keyword_thresh['top_5']['target']:.0%} |",
+            f"| Mean Reciprocal Rank (path) | {report.mean_reciprocal_rank:.3f} | - | - |",
+            f"| Within max_rank Path | {report.within_max_rank_path_accuracy:.1%} | - | - |",
             "",
             "## Latency",
             "",
@@ -250,8 +265,15 @@ def generate_console_report(report: EvaluationReport) -> str:
         f"Embedding Model: {report.embedding_model}",
         f"Total Queries:   {report.total_queries}",
         f"Quick Set Only:  {'Yes' if report.quick_set_only else 'No'}",
-        "",
     ]
+    if report.stress_only:
+        lines.append("Eval subset:     stress only")
+    elif report.include_stress:
+        lines.append("Eval subset:     core + stress")
+    if report.strict_keywords:
+        scope = " (top-1 body only)" if report.strict_keywords_top1 else ""
+        lines.append(f"Keyword mode:    strict{scope}")
+    lines.append("")
 
     # Overall metrics with status
     def status_str(value: float, target: float, warning: float, critical: float) -> str:
@@ -274,6 +296,8 @@ def generate_console_report(report: EvaluationReport) -> str:
             f"Top-5 Path:    {status_str(report.top_5_path_accuracy, path_thresh['top_5']['target'], path_thresh['top_5']['warning'], path_thresh['top_5']['critical'])} (target: ≥{path_thresh['top_5']['target']:.0%})",
             f"Top-1 Keyword: {status_str(report.top_1_keyword_accuracy, keyword_thresh['top_1']['target'], keyword_thresh['top_1']['warning'], keyword_thresh['top_1']['critical'])} (target: ≥{keyword_thresh['top_1']['target']:.0%})",
             f"Top-5 Keyword: {status_str(report.top_5_keyword_accuracy, keyword_thresh['top_5']['target'], keyword_thresh['top_5']['warning'], keyword_thresh['top_5']['critical'])} (target: ≥{keyword_thresh['top_5']['target']:.0%})",
+            f"MRR (path):      {report.mean_reciprocal_rank:.3f}",
+            f"Within max_rank: {report.within_max_rank_path_accuracy:.1%}",
             "",
         ]
     )

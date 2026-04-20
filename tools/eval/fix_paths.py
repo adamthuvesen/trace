@@ -190,8 +190,8 @@ def analyze_queries(
     from trace_search.indexer import WikiIndexer
     from trace_search.search import HybridSearch, KeywordSearch, SemanticSearch
 
-    # Load all queries (not just quick set)
-    queries = load_golden_queries(quick_only=False)
+    # Load all queries (not just quick set), including stress_set entries
+    queries = load_golden_queries(quick_only=False, include_stress=True)
     logger.info("Analyzing %d golden queries...", len(queries))
 
     # Initialize indexer

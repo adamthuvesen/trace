@@ -3,6 +3,10 @@ description: >-
   Template for search evaluation. Copy to golden_queries.yaml (gitignored) and set KB_PATH
   to a knowledge base whose files match expected_path entries. Optionally keep a local
   tools/eval/fixture_kb tree (also gitignored) with that layout.
+
+  Queries with stress_set: true are skipped unless you pass --include-stress or run
+  --stress / --ci-stress. Sync this template into your local golden_queries.yaml when
+  you add new stress cases.
 queries:
 - id: concepts-001
   query: What is BM25?
@@ -290,3 +294,128 @@ queries:
   file_type: .md
   quick_set: false
   description: Audit logging overview
+
+# --- Stress subset (paraphrases / under-specified; excluded from default --quick/--full) ---
+- id: stress-concepts-001
+  query: >-
+    Which bag-of-words scoring model is the usual baseline when people say "lexical
+    retrieval", the one that dampens term frequency and normalizes by document length?
+  category: concepts
+  expected_path: glossary/bm25.md
+  expected_keywords:
+  - BM25
+  - keyword
+  - ranking
+  file_type: .md
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+  max_rank: 2
+  description: BM25 without naming BM25
+- id: stress-concepts-002
+  query: >-
+    How do you merge ranked lists from different retrievers without training a new
+    model—what's the standard score combination trick?
+  category: concepts
+  expected_path: glossary/rrf.md
+  expected_keywords:
+  - RRF
+  - rank
+  - fusion
+  file_type: .md
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+  description: RRF indirect wording
+- id: stress-concepts-003
+  query: >-
+    When latency matters and you cannot scan every embedding, what family of algorithms
+    trades exact distance for speed in vector search?
+  category: concepts
+  expected_path: glossary/ann-search.md
+  expected_keywords:
+  - ANN
+  - nearest neighbor
+  - vector
+  file_type: .md
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+  description: ANN without acronym in question
+- id: stress-search-001
+  query: >-
+    I need both lexical overlap and semantic similarity in one result list—what pattern
+    should I read about first?
+  category: concepts
+  expected_path: search/hybrid-search.md
+  expected_keywords:
+  - hybrid search
+  - semantic
+  - keyword
+  file_type: .md
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+  max_rank: 3
+  description: Hybrid search paraphrase
+- id: stress-indexing-001
+  query: >-
+    Why do we sometimes repeat a few sentences at chunk boundaries instead of cutting
+    cleanly—what is that called?
+  category: indexing
+  expected_path: indexing/chunk-overlap.md
+  expected_keywords:
+  - overlap
+  - chunk
+  - context
+  file_type: .md
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+  description: Chunk overlap without jargon
+- id: stress-features-001
+  query: >-
+    After the first stage returns dozens of candidates, what optional second step reorders
+    them with a heavier model?
+  category: features
+  expected_path: features/reranking.md
+  expected_keywords:
+  - reranking
+  - results
+  - relevance
+  file_type: .md
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+  description: Reranking indirect
+- id: stress-config-001
+  query: >-
+    The docs mention an env var for pointing the indexer at my markdown tree—what is it
+    called again?
+  category: config
+  expected_path: config/kb-path.md
+  expected_keywords:
+  - KB_PATH
+  - knowledge base
+  - path
+  file_type: .md
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+  description: KB_PATH without naming it upfront
+- id: stress-docs-001
+  query: >-
+    Where do we keep rules for tone, headings, and clarity so contributions stay
+    consistent?
+  category: docs
+  expected_path: docs/writing-style-guide.md
+  expected_keywords:
+  - style guide
+  - writing
+  - docs
+  file_type: .md
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+  min_keywords: 3
+  description: Style guide vague ask

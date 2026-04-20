@@ -62,3 +62,34 @@ ci:
     - top_5_below_critical     # Top-5 accuracy below critical threshold
     - latency_above_critical   # P95 latency above critical threshold
     - regression_detected      # Regression compared to baseline
+
+# Stricter gates for `tools.eval.cli --ci-stress` (stress subset only).
+# Omits keys to inherit from the defaults above.
+stress:
+  path_accuracy:
+    top_1:
+      target: 0.50
+      warning: 0.40
+      critical: 0.30
+    top_5:
+      target: 0.85
+      warning: 0.75
+      critical: 0.65
+  keyword_accuracy:
+    top_1:
+      target: 0.55
+      warning: 0.45
+      critical: 0.35
+    top_5:
+      target: 0.80
+      warning: 0.70
+      critical: 0.60
+  ci:
+    fail_on:
+      - top_1_below_critical
+      - top_5_below_critical
+      - latency_above_critical
+      - regression_detected
+    # Uncomment to enforce ranking quality on the stress subset:
+    # - mrr_below_critical
+    mrr_critical: 0.45

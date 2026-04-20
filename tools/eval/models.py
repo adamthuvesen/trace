@@ -20,6 +20,10 @@ class GoldenQuery:
     alternate_paths: list[str] = field(default_factory=list)
     quick_set: bool = False
     description: str = ""
+    difficulty: str = "easy"
+    stress_set: bool = False
+    min_keywords: int | None = None
+    max_rank: int | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> GoldenQuery:
@@ -34,6 +38,10 @@ class GoldenQuery:
             alternate_paths=data.get("alternate_paths", []),
             quick_set=data.get("quick_set", False),
             description=data.get("description", ""),
+            difficulty=data.get("difficulty", "easy"),
+            stress_set=data.get("stress_set", False),
+            min_keywords=data.get("min_keywords"),
+            max_rank=data.get("max_rank"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -48,6 +56,10 @@ class GoldenQuery:
             "alternate_paths": self.alternate_paths,
             "quick_set": self.quick_set,
             "description": self.description,
+            "difficulty": self.difficulty,
+            "stress_set": self.stress_set,
+            "min_keywords": self.min_keywords,
+            "max_rank": self.max_rank,
         }
 
     def matches_path(self, retrieved_path: str) -> bool:
@@ -83,6 +95,9 @@ class QueryResult:
     latency_ms: float
     keywords_found: list[str] = field(default_factory=list)
     keywords_missing: list[str] = field(default_factory=list)
+    path_first_hit_rank: int | None = None
+    path_reciprocal_rank: float = 0.0
+    path_hit_within_max_rank: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -98,6 +113,9 @@ class QueryResult:
             "latency_ms": self.latency_ms,
             "keywords_found": self.keywords_found,
             "keywords_missing": self.keywords_missing,
+            "path_first_hit_rank": self.path_first_hit_rank,
+            "path_reciprocal_rank": self.path_reciprocal_rank,
+            "path_hit_within_max_rank": self.path_hit_within_max_rank,
         }
 
 
@@ -281,6 +299,13 @@ class EvaluationReport:
     # Optional regression report
     regression: RegressionReport | None = None
 
+    mean_reciprocal_rank: float = 0.0
+    within_max_rank_path_accuracy: float = 0.0
+    include_stress: bool = False
+    stress_only: bool = False
+    strict_keywords: bool = False
+    strict_keywords_top1: bool = False
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
@@ -293,6 +318,8 @@ class EvaluationReport:
             "top_5_path_accuracy": self.top_5_path_accuracy,
             "top_1_keyword_accuracy": self.top_1_keyword_accuracy,
             "top_5_keyword_accuracy": self.top_5_keyword_accuracy,
+            "mean_reciprocal_rank": self.mean_reciprocal_rank,
+            "within_max_rank_path_accuracy": self.within_max_rank_path_accuracy,
             "latency_p50_ms": self.latency_p50_ms,
             "latency_p95_ms": self.latency_p95_ms,
             "latency_p99_ms": self.latency_p99_ms,
@@ -301,6 +328,10 @@ class EvaluationReport:
             "by_file_type": {k: v.to_dict() for k, v in self.by_file_type.items()},
             "results": [r.to_dict() for r in self.results],
             "regression": self.regression.to_dict() if self.regression else None,
+            "include_stress": self.include_stress,
+            "stress_only": self.stress_only,
+            "strict_keywords": self.strict_keywords,
+            "strict_keywords_top1": self.strict_keywords_top1,
         }
 
     @classmethod
@@ -368,6 +399,9 @@ class EvaluationReport:
                     latency_ms=r["latency_ms"],
                     keywords_found=r.get("keywords_found", []),
                     keywords_missing=r.get("keywords_missing", []),
+                    path_first_hit_rank=r.get("path_first_hit_rank"),
+                    path_reciprocal_rank=r.get("path_reciprocal_rank", 0.0),
+                    path_hit_within_max_rank=r.get("path_hit_within_max_rank", False),
                 )
             )
 
@@ -381,6 +415,8 @@ class EvaluationReport:
             top_5_path_accuracy=data["top_5_path_accuracy"],
             top_1_keyword_accuracy=data.get("top_1_keyword_accuracy", 0.0),
             top_5_keyword_accuracy=data.get("top_5_keyword_accuracy", 0.0),
+            mean_reciprocal_rank=data.get("mean_reciprocal_rank", 0.0),
+            within_max_rank_path_accuracy=data.get("within_max_rank_path_accuracy", 0.0),
             latency_p50_ms=data.get("latency_p50_ms", 0.0),
             latency_p95_ms=data.get("latency_p95_ms", 0.0),
             latency_p99_ms=data.get("latency_p99_ms", 0.0),
@@ -389,4 +425,8 @@ class EvaluationReport:
             by_file_type=by_file_type,
             results=results,
             regression=None,  # Regression is computed fresh
+            include_stress=data.get("include_stress", False),
+            stress_only=data.get("stress_only", False),
+            strict_keywords=data.get("strict_keywords", False),
+            strict_keywords_top1=data.get("strict_keywords_top1", False),
         )

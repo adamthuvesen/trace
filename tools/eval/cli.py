@@ -2,11 +2,20 @@
 """CLI for wiki search evaluation suite.
 
 Usage:
-    # Quick evaluation (~14 template queries)
+    # Quick evaluation (~14 template queries; stress subset excluded by default)
     uv run python -m tools.eval.cli --quick
 
-    # Full evaluation (~26 template queries)
+    # Full evaluation (~26 template queries, excluding stress items)
     uv run python -m tools.eval.cli --full
+
+    # Include stress / paraphrase queries in quick or full
+    uv run python -m tools.eval.cli --full --include-stress
+
+    # Only the stress subset (harder paraphrases)
+    uv run python -m tools.eval.cli --stress
+
+    # Stricter keyword scoring (all expected_keywords must appear)
+    uv run python -m tools.eval.cli --full --strict-keywords
 
     # Specific search mode
     uv run python -m tools.eval.cli --search semantic
@@ -22,6 +31,9 @@ Usage:
 
     # CI mode (exit 1 on regression)
     uv run python -m tools.eval.cli --ci
+
+    # CI against stress thresholds (implies --stress)
+    uv run python -m tools.eval.cli --ci-stress
 
     # Promote current results to baseline
     uv run python -m tools.eval.cli --promote
@@ -100,6 +112,31 @@ logger = logging.getLogger(__name__)
     help="CI mode: exit 1 on regression or critical threshold failure",
 )
 @click.option(
+    "--ci-stress",
+    is_flag=True,
+    help="Like --ci but evaluate only the stress subset and use stress CI thresholds",
+)
+@click.option(
+    "--include-stress",
+    is_flag=True,
+    help="Include stress_set queries in quick/full (default: exclude them)",
+)
+@click.option(
+    "--stress",
+    is_flag=True,
+    help="Run only stress_set queries (paraphrase / harder cases)",
+)
+@click.option(
+    "--strict-keywords",
+    is_flag=True,
+    help="Require all expected_keywords to match (per-query min_keywords still overrides)",
+)
+@click.option(
+    "--strict-keywords-top1",
+    is_flag=True,
+    help="With --strict-keywords, match keywords only in the top-1 chunk body",
+)
+@click.option(
     "--promote",
     is_flag=True,
     help="Promote results to new baseline after evaluation",
@@ -129,6 +166,11 @@ def main(
     file_type: tuple[str, ...],
     baseline: Path | None,
     ci: bool,
+    ci_stress: bool,
+    include_stress: bool,
+    stress: bool,
+    strict_keywords: bool,
+    strict_keywords_top1: bool,
     promote: bool,
     verbose: bool,
     output_dir: Path,
@@ -142,6 +184,16 @@ def main(
     # Validate mutually exclusive flags
     if quick and full:
         raise click.UsageError("Cannot specify both --quick and --full")
+    if stress and include_stress:
+        raise click.UsageError("Cannot specify both --stress and --include-stress")
+    if ci and ci_stress:
+        raise click.UsageError("Cannot specify both --ci and --ci-stress")
+    if strict_keywords_top1 and not strict_keywords:
+        raise click.UsageError("--strict-keywords-top1 requires --strict-keywords")
+
+    ci_mode = ci or ci_stress
+    stress_only = stress or ci_stress
+    include_stress_queries = include_stress and not stress_only
 
     # Default to quick if neither specified
     quick_only = quick or not full
@@ -155,6 +207,8 @@ def main(
         quick_only=quick_only,
         categories=categories,
         file_types=file_types,
+        stress_only=stress_only,
+        include_stress=include_stress_queries,
     )
     click.echo(f"Loaded {len(queries)} queries for evaluation")
 
@@ -202,6 +256,10 @@ def main(
         quick_only=quick_only,
         categories=categories,
         file_types=file_types,
+        stress_only=stress_only,
+        include_stress=include_stress_queries,
+        strict_keywords=strict_keywords,
+        strict_keywords_top1=strict_keywords_top1,
     )
 
     # Compare to baseline if specified
@@ -209,7 +267,7 @@ def main(
         click.echo(f"Loading baseline: {baseline}")
         baseline_report = load_baseline(baseline)
         report.regression = compare_results(report, baseline_report)
-    elif ci:
+    elif ci_mode:
         # In CI mode, try to find latest baseline automatically
         latest = get_latest_baseline(search_mode=search)
         if latest:
@@ -234,8 +292,8 @@ def main(
         click.echo(f"Promoted to baseline: {baseline_path}")
 
     # CI mode: check thresholds and exit code
-    if ci:
-        passed, failures = check_ci_thresholds(report)
+    if ci_mode:
+        passed, failures = check_ci_thresholds(report, stress_subset=ci_stress)
         if not passed:
             click.echo()
             click.echo("CI FAILURES:")
@@ -244,7 +302,8 @@ def main(
             sys.exit(1)
         else:
             click.echo()
-            click.echo("CI: All thresholds passed")
+            suffix = " (stress subset)" if ci_stress else ""
+            click.echo(f"CI: All thresholds passed{suffix}")
 
 
 def _run_ab(
@@ -285,6 +344,8 @@ def _run_ab(
             quick_only=quick_only,
             categories=categories,
             file_types=file_types,
+            stress_only=False,
+            include_stress=False,
         )
         results[backend_name] = {
             "top1_path": report.top_1_path_accuracy,
