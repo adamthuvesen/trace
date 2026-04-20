@@ -30,8 +30,8 @@ ENV/
 .env.*
 !.env.example
 
-# Repo docs
-docs/
+# Repo docs (root only; not tests/fixtures/**/docs/)
+/docs/
 
 # Index data (stored in content repos, not here)
 .chroma_db*/
