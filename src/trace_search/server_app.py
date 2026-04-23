@@ -11,17 +11,24 @@ from fastmcp import FastMCP
 
 from trace_search.config import settings, configure_logging
 from trace_search.embeddings import EmbeddingBackend, build_embedding_backend
+from trace_search.diagnostics import diagnose_collections, render_doctor_report
 from trace_search.indexer import (
     SUPPORTED_EXTENSIONS,
     WikiIndexer,
     extract_content,
     extract_title,
+    get_default_index_root,
+    should_exclude_path,
 )
 from trace_search.search import (
     HybridSearch,
     KeywordSearch,
+    SearchRoute,
     SemanticSearch,
+    SmartSearch,
+    SmartSearchResult,
     format_results,
+    format_smart_search,
 )
 
 configure_logging()
@@ -64,6 +71,7 @@ class Collection:
     _semantic: SemanticSearch | None = field(default=None, repr=False)
     _keyword: KeywordSearch | None = field(default=None, repr=False)
     _hybrid: HybridSearch | None = field(default=None, repr=False)
+    _smart: SmartSearch | None = field(default=None, repr=False)
 
     def reset(self) -> None:
         """Clear all cached search components so they are rebuilt on next access."""
@@ -71,6 +79,7 @@ class Collection:
         self._semantic = None
         self._keyword = None
         self._hybrid = None
+        self._smart = None
 
     def ensure_index(
         self,
@@ -82,8 +91,8 @@ class Collection:
             model_slug = settings.model_slug
             self._indexer = WikiIndexer(
                 kb_path=self.kb_path,
-                chroma_path=self.index_path / self.name / f".chroma_db_{model_slug}",
-                bm25_path=self.index_path / self.name / f".bm25_index_{model_slug}",
+                chroma_path=self.index_path / f".chroma_db_{model_slug}",
+                bm25_path=self.index_path / f".bm25_index_{model_slug}",
                 backend=backend,
             )
             if not skip_build:
@@ -107,6 +116,39 @@ class Collection:
             self._hybrid = HybridSearch(indexer, indexer.backend)
         return self._hybrid
 
+    def get_smart(self, backend: EmbeddingBackend | None = None) -> SmartSearch:
+        if self._smart is None:
+            indexer = self.ensure_index(backend)
+            self._smart = SmartSearch(indexer, indexer.backend)
+        return self._smart
+
+    def get_neighbor_content(
+        self,
+        path: str,
+        chunk_index: int | None,
+        chunk_count: int | None,
+        backend: EmbeddingBackend | None = None,
+    ) -> str | None:
+        """Fetch bounded neighboring chunk content for richer context packets."""
+        if chunk_index is None or chunk_count is None or chunk_count <= 1:
+            return None
+        neighbor_ids = [
+            f"{path}::{i}"
+            for i in (chunk_index - 1, chunk_index + 1)
+            if 0 <= i < chunk_count
+        ]
+        if not neighbor_ids:
+            return None
+        indexer = self.ensure_index(backend)
+        results = indexer.collection.get(
+            ids=neighbor_ids,
+            include=["documents", "metadatas"],
+        )
+        docs = results.get("documents") or []
+        if not docs:
+            return None
+        return "\n\n".join(str(doc) for doc in docs if doc)
+
     def rebuild(self, backend: EmbeddingBackend | None = None) -> int:
         """Clear caches, force-rebuild the index, and return the new chunk count."""
         self.reset()
@@ -121,10 +163,13 @@ class CollectionRegistry:
         self._backend: EmbeddingBackend | None = None
         self._warmed: bool = False
         idx_root = index_root or (settings.index_path if settings.index_path else None)
+        self._index_root = idx_root
 
         self.collections: dict[str, Collection] = {}
         for name, kb_path in collections.items():
-            col_index = idx_root if idx_root else kb_path / ".mcp-search" / "indexes"
+            col_index = get_default_index_root(
+                kb_path, idx_root, name if idx_root else None
+            )
             self.collections[name] = Collection(
                 name=name,
                 kb_path=kb_path,
@@ -197,6 +242,73 @@ class CollectionRegistry:
             top_k,
             [c.name for c in cols],
         )
+
+    def search_smart(
+        self, query: str, top_k: int, collection: str | None
+    ) -> SmartSearchResult:
+        cols = self._resolve(collection)
+        if len(cols) == 1:
+            result = cols[0].get_smart(self.backend).search(query, top_k)
+            hits = [
+                self._with_neighbor_context(cols[0], hit)
+                for hit in result.hits
+            ]
+            return SmartSearchResult(hits=hits, route=result.route)
+
+        results = [c.get_smart(self.backend).search(query, top_k) for c in cols]
+        tagged_lists: list[list[dict]] = []
+        for result, col in zip(results, cols):
+            tagged_hits = []
+            for hit in result.hits:
+                hit = self._with_neighbor_context(col, hit)
+                hit["collection"] = col.name
+                tagged_hits.append(hit)
+            tagged_lists.append(tagged_hits)
+
+        merged_hits = self._merge_results(
+            tagged_lists,
+            top_k,
+            [c.name for c in cols],
+        )
+        fallback_used = any(result.route.fallback_used for result in results)
+        strategy = "hybrid" if fallback_used else "keyword"
+        reasons = sorted({result.route.reason for result in results})
+        return SmartSearchResult(
+            hits=merged_hits,
+            route=SearchRoute(
+                strategy=strategy,
+                reason="; ".join(reasons),
+                fallback_used=fallback_used,
+            ),
+        )
+
+    def probe_search(self, query: str, top_k: int, collection: str | None) -> list[dict]:
+        """Run a sample query only when indexes already exist."""
+        model_slug = settings.model_slug
+        missing = []
+        for col in self._resolve(collection):
+            chroma_path = col.index_path / f".chroma_db_{model_slug}"
+            bm25_path = col.index_path / f".bm25_index_{model_slug}"
+            if not chroma_path.exists() or not bm25_path.exists():
+                missing.append(col.name)
+        if missing:
+            names = ", ".join(sorted(missing))
+            raise ValueError(
+                f"Sample query skipped because indexes are missing for: {names}. "
+                "Run `reindex` first."
+            )
+        return self.search_smart(query, top_k, collection).hits
+
+    def _with_neighbor_context(self, col: Collection, hit: dict) -> dict:
+        enriched = hit.copy()
+        if "neighbor_content" not in enriched:
+            enriched["neighbor_content"] = col.get_neighbor_content(
+                str(enriched.get("path", "")),
+                enriched.get("chunk_index"),
+                enriched.get("chunk_count"),
+                self.backend,
+            )
+        return enriched
 
     @staticmethod
     def _merge_results(
@@ -282,7 +394,7 @@ class CollectionRegistry:
                 ext = file_path.suffix.lower()
                 if ext not in SUPPORTED_EXTENSIONS:
                     continue
-                if any(part.startswith(".") for part in file_path.parts):
+                if should_exclude_path(file_path, kb):
                     continue
                 rel_path = str(file_path.relative_to(kb))
                 if ext == ".md":
@@ -340,6 +452,25 @@ class CollectionRegistry:
             results.append(f"**{col.name}**: {chunks} chunks indexed")
         return "Reindex complete.\n\n" + "\n".join(results)
 
+    def doctor(
+        self,
+        sample_query: str | None = None,
+        collection: str | None = None,
+    ) -> str:
+        """Run Trace diagnostics for configuration, corpus, indexes, and queries."""
+        report = diagnose_collections(
+            {name: col.kb_path for name, col in self.collections.items()},
+            index_root=self._index_root,
+            sample_query=sample_query,
+            sample_collection=collection,
+            sample_query_runner=lambda query, col_name: self.probe_search(
+                query,
+                5,
+                col_name,
+            ),
+        )
+        return render_doctor_report(report)
+
     def index_stats(self, collection: str | None) -> str:
         cols = self._resolve(collection)
         sections = []
@@ -391,18 +522,19 @@ def _build_multi_instructions(collection_names: list[str]) -> str:
     return f"""Knowledge search server with multiple collections: {names}.
 
 Use these tools to search across knowledge bases:
-- search: **DEFAULT** - Fast keyword search with acronym expansion (best accuracy)
+- search: **DEFAULT** - Smart BM25-first search with semantic/hybrid fallback
 - semantic_search: Find documents by meaning/concept (for vague natural language)
 - search_hybrid: Combined semantic + keyword with ranking (slower, use if search fails)
 - get_document: Retrieve full document content
 - list_documents: Browse available documents by folder
+- doctor: Diagnose configuration, visible documents, index health, and sample queries
 - reindex: Rebuild indexes after adding or updating documents
 
 All search tools accept an optional `collection` parameter to target a specific
 knowledge base. Omit it or pass "all" to search across all collections.
 
-Start with `search` for most queries. Use `semantic_search` only for vague
-conceptual questions where exact terms are unknown.
+Start with `search` for most queries. It reports which strategy won and suggests
+useful `get_document` follow-ups for top results.
 """
 
 
@@ -432,12 +564,11 @@ def build_multi_mcp(
     def search(query: str, top_k: int = 10, collection: str | None = None) -> str:
         """Search knowledge bases. This is the default and recommended search tool.
 
-        Uses fast BM25 keyword matching with automatic acronym expansion.
-        Best for specific terms, acronyms, process names, tools, and teams.
+        Starts with fast BM25 keyword matching, then falls back when results are weak.
         Set `collection` to target a specific knowledge base, or omit to search all.
         """
-        results = registry.search_keyword(query, top_k, collection)
-        return format_results(results)
+        result = registry.search_smart(query, top_k, collection)
+        return format_smart_search(result, query)
 
     @mcp.tool()
     def semantic_search(
@@ -494,6 +625,14 @@ def build_multi_mcp(
         """
         return registry.reindex(collection)
 
+    @mcp.tool()
+    def doctor(
+        sample_query: str | None = None,
+        collection: str | None = None,
+    ) -> str:
+        """Diagnose Trace configuration, corpus visibility, index health, and queries."""
+        return registry.doctor(sample_query=sample_query, collection=collection)
+
     return mcp, {
         "search": search,
         "semantic_search": semantic_search,
@@ -503,4 +642,5 @@ def build_multi_mcp(
         "list_documents": list_documents,
         "index_stats": index_stats,
         "reindex": reindex,
+        "doctor": doctor,
     }

@@ -41,6 +41,8 @@ class TorchBackend:
         self.dim = int(np.asarray(probe).shape[-1])
 
     def encode(self, texts: list[str]) -> np.ndarray:
+        if not texts:
+            return np.empty((0, self.dim), dtype=np.float32)
         vectors = self._model.encode(texts)
         return np.asarray(vectors, dtype=np.float32)
 
@@ -73,6 +75,8 @@ class OnnxBackend:
         self.dim = int(np.asarray(probe).shape[-1])
 
     def encode(self, texts: list[str]) -> np.ndarray:
+        if not texts:
+            return np.empty((0, self.dim), dtype=np.float32)
         vectors = list(self._model.embed(list(texts)))
         return np.asarray(np.stack(vectors), dtype=np.float32)
 

@@ -31,6 +31,8 @@ __all__ = [
     "extract_csv_content",
     "extract_code_content",
     "extract_notebook_content",
+    "get_default_index_root",
+    "should_exclude_path",
     "chunk_by_headings",
     "chunk_by_paragraphs",
     "create_contextual_chunk",
@@ -98,11 +100,73 @@ class TokenCounter:
         last_tokens = tokens[-n:]
         return self._tokenizer.decode(last_tokens, skip_special_tokens=True)
 
+    def split_to_token_windows(
+        self,
+        text: str,
+        *,
+        max_tokens: int,
+        overlap_tokens: int,
+    ) -> list[str]:
+        """Split text into token windows without dropping content."""
+        self._ensure_tokenizer()
+        tokens = self._tokenizer.encode(text, add_special_tokens=False)
+        if len(tokens) <= max_tokens:
+            return [text]
+
+        step = (
+            max_tokens - overlap_tokens
+            if 0 < overlap_tokens < max_tokens
+            else max_tokens
+        )
+        chunks = []
+        for start in range(0, len(tokens), step):
+            window = tokens[start : start + max_tokens]
+            if not window:
+                break
+            chunks.append(self._tokenizer.decode(window, skip_special_tokens=True))
+            if start + max_tokens >= len(tokens):
+                break
+        return chunks
+
 
 @lru_cache(maxsize=1)
 def _get_token_counter() -> TokenCounter:
     """Get singleton TokenCounter instance (lazy-loaded)."""
     return TokenCounter()
+
+
+def _relative_parts(kb_path: Path, path: Path) -> tuple[str, ...]:
+    """Return path parts relative to the KB root, resolving only when needed."""
+    try:
+        return path.relative_to(kb_path).parts
+    except ValueError:
+        return path.resolve().relative_to(kb_path.resolve()).parts
+
+
+def should_exclude_path(
+    path: Path,
+    kb_path: Path,
+    exclude_patterns: list[str] | None = None,
+) -> bool:
+    """Return whether a KB-relative path should be skipped."""
+    exclude = set(exclude_patterns or settings.exclude_patterns_list)
+    return any(
+        part.startswith(".") or part in exclude
+        for part in _relative_parts(kb_path, path)
+    )
+
+
+def get_default_index_root(
+    kb_path: Path,
+    index_root: Path | None = None,
+    collection_name: str | None = None,
+) -> Path:
+    """Resolve the root directory that contains model-specific indexes."""
+    if index_root is None:
+        return kb_path / ".mcp-search" / "indexes"
+    if collection_name:
+        return index_root / collection_name
+    return index_root
 
 
 def extract_title(content: str, path: Path) -> str:
@@ -293,6 +357,44 @@ def _get_overlap_text(chunk: str, overlap_size: int, use_tokens: bool) -> str:
         return _get_token_counter().get_last_n_tokens(chunk, overlap_size)
     # Character-based: take last N chars
     return chunk[-overlap_size:] if len(chunk) > overlap_size else chunk
+
+
+def _split_oversized_text(
+    text: str,
+    *,
+    use_tokens: bool,
+    max_size: int,
+    overlap_size: int,
+) -> list[str]:
+    """Split one oversized text block into windows without losing content."""
+    if _get_size(text, use_tokens) <= max_size:
+        return [text]
+
+    if use_tokens:
+        return _get_token_counter().split_to_token_windows(
+            text,
+            max_tokens=max_size,
+            overlap_tokens=overlap_size,
+        )
+
+    step = max_size - overlap_size if 0 < overlap_size < max_size else max_size
+    return [text[start : start + max_size] for start in range(0, len(text), step)]
+
+
+def _prepend_overlap_if_fits(
+    overlap: str,
+    chunk: str,
+    *,
+    use_tokens: bool,
+    max_size: int,
+) -> str:
+    """Prefix overlap only when it does not force truncating the new chunk."""
+    if not overlap:
+        return chunk
+    combined = f"{overlap}\n\n{chunk}"
+    if _get_size(combined, use_tokens) <= max_size:
+        return combined
+    return chunk
 
 
 def _merge_tiny_chunks(
@@ -604,11 +706,53 @@ def chunk_by_paragraphs(
     pending_overlap = ""
 
     for para in paragraphs:
+        if not para:
+            continue
         para_size = _get_size(para, use_tokens)
-        current_size = _get_size(current_chunk, use_tokens)
 
-        if current_size + para_size <= max_size:
-            current_chunk += "\n\n" + para if current_chunk else para
+        if para_size > max_size:
+            if current_chunk:
+                chunks.append(current_chunk)
+                pending_overlap = _get_overlap_text(
+                    current_chunk, overlap_size, use_tokens
+                )
+                current_chunk = ""
+
+            sub_chunks = _split_oversized_text(
+                para,
+                use_tokens=use_tokens,
+                max_size=max_size,
+                overlap_size=overlap_size,
+            )
+            if pending_overlap and sub_chunks:
+                sub_chunks[0] = _prepend_overlap_if_fits(
+                    pending_overlap,
+                    sub_chunks[0],
+                    use_tokens=use_tokens,
+                    max_size=max_size,
+                )
+                pending_overlap = ""
+            chunks.extend(sub_chunks)
+            if sub_chunks:
+                pending_overlap = _get_overlap_text(
+                    sub_chunks[-1], overlap_size, use_tokens
+                )
+            continue
+
+        if current_chunk:
+            candidate = f"{current_chunk}\n\n{para}"
+        else:
+            candidate = _prepend_overlap_if_fits(
+                pending_overlap,
+                para,
+                use_tokens=use_tokens,
+                max_size=max_size,
+            )
+
+        if _get_size(candidate, use_tokens) <= max_size:
+            current_chunk = candidate
+            if pending_overlap:
+                pending_overlap = ""
         else:
             if current_chunk:
                 chunks.append(current_chunk)
@@ -617,20 +761,13 @@ def chunk_by_paragraphs(
                 )
 
             # Start new chunk with overlap if applicable
-            if pending_overlap:
-                current_chunk = pending_overlap + "\n\n" + para
-            else:
-                current_chunk = para
+            current_chunk = _prepend_overlap_if_fits(
+                pending_overlap,
+                para,
+                use_tokens=use_tokens,
+                max_size=max_size,
+            )
             pending_overlap = ""
-
-            # If single paragraph exceeds max, truncate it
-            if _get_size(current_chunk, use_tokens) > max_size:
-                if use_tokens:
-                    current_chunk = _get_token_counter().truncate_to_tokens(
-                        current_chunk, max_size
-                    )
-                else:
-                    current_chunk = current_chunk[:max_size]
 
     if current_chunk:
         chunks.append(current_chunk)
@@ -641,6 +778,19 @@ def chunk_by_paragraphs(
 def create_contextual_chunk(title: str, folder: str, chunk: str) -> str:
     """Add document context to chunk (Anthropic's contextual retrieval pattern)."""
     return f"Document: {title}\nFolder: {folder}\n\n{chunk}"
+
+
+def extract_breadcrumb(chunk: str, title: str) -> str:
+    """Extract a readable heading breadcrumb from a chunk."""
+    headings = []
+    for line in chunk.splitlines():
+        stripped = line.strip()
+        match = re.match(r"^(#{1,6})\s+(.+)$", stripped)
+        if match:
+            headings.append(match.group(2).strip())
+    if headings:
+        return " > ".join(headings[-3:])
+    return title
 
 
 class WikiIndexer:
@@ -666,10 +816,9 @@ class WikiIndexer:
         # Model-specific index paths to prevent dimension mismatch
         model_slug = settings.model_slug
 
-        # Use explicit index_path setting if available, otherwise fall back to
-        # the resolved kb_path (works in both single-KB and multi-collection mode
-        # since self.kb_path is already set above).
-        index_base = settings.index_path if settings.index_path else self.kb_path
+        # Use explicit INDEX_PATH when set; otherwise keep indexes in the
+        # documented per-KB .mcp-search/indexes directory.
+        index_base = get_default_index_root(self.kb_path, settings.index_path)
 
         if chroma_path:
             self.chroma_path = Path(chroma_path)
@@ -722,8 +871,7 @@ class WikiIndexer:
 
     def _should_exclude(self, path: Path) -> bool:
         """Check if path should be excluded based on patterns (exact part match)."""
-        exclude = set(settings.exclude_patterns_list)
-        return any(part in exclude for part in path.parts)
+        return should_exclude_path(path, self.kb_path)
 
     def load_documents(self) -> list[dict[str, str]]:
         """Load all supported files from knowledge base."""
@@ -732,8 +880,6 @@ class WikiIndexer:
         for file_path in self.kb_path.rglob("*"):
             ext = file_path.suffix.lower()
             if ext not in SUPPORTED_EXTENSIONS:
-                continue
-            if any(part.startswith(".") for part in file_path.parts):
                 continue
             if self._should_exclude(file_path):
                 continue
@@ -808,6 +954,7 @@ class WikiIndexer:
 
         for doc in docs:
             chunks = chunk_by_headings(doc["content"])
+            chunk_count = len(chunks)
             for i, chunk in enumerate(chunks):
                 all_chunks.append(
                     create_contextual_chunk(doc["title"], doc["folder"], chunk)
@@ -819,6 +966,8 @@ class WikiIndexer:
                         "title": doc["title"],
                         "folder": doc["folder"],
                         "chunk_index": i,
+                        "chunk_count": chunk_count,
+                        "breadcrumb": extract_breadcrumb(chunk, doc["title"]),
                     }
                 )
 
@@ -864,6 +1013,12 @@ class WikiIndexer:
 
     def build_index(self, force: bool = False) -> int:
         """Build or update the search index. Returns number of chunks indexed."""
+        from trace_search.index_metadata import (
+            build_index_metadata,
+            utc_now_iso,
+            write_index_metadata,
+        )
+
         force = self._reconcile_index_state(force)
         if not force:
             return self.collection.count()
@@ -871,6 +1026,7 @@ class WikiIndexer:
         self._clear_chroma_collection()
         self._clear_bm25_index()
 
+        build_started_at = utc_now_iso()
         logger.info("Loading documents...")
         docs = self.load_documents()
         logger.info("Found %s documents", len(docs))
@@ -879,6 +1035,14 @@ class WikiIndexer:
 
         if not all_chunks:
             logger.info("No chunks to index")
+            metadata = build_index_metadata(
+                kb_path=self.kb_path,
+                build_started_at=build_started_at,
+                build_completed_at=utc_now_iso(),
+                document_count=len(docs),
+                chunk_count=0,
+            )
+            write_index_metadata(self.bm25_path.parent, metadata)
             return 0
 
         logger.info("Generating embeddings for %s chunks...", len(all_chunks))
@@ -891,6 +1055,14 @@ class WikiIndexer:
             "Index complete: %s chunks (ChromaDB + BM25)",
             self.collection.count(),
         )
+        metadata = build_index_metadata(
+            kb_path=self.kb_path,
+            build_started_at=build_started_at,
+            build_completed_at=utc_now_iso(),
+            document_count=len(docs),
+            chunk_count=self.collection.count(),
+        )
+        write_index_metadata(self.bm25_path.parent, metadata)
         return self.collection.count()
 
     def _clear_chroma_collection(self) -> None:
