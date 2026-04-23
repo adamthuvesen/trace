@@ -21,6 +21,7 @@ SERVER_TOOL_NAMES = (
     "list_documents",
     "index_stats",
     "reindex",
+    "doctor",
 )
 CODE_EXTENSIONS = (".sql", ".py", ".ts", ".tsx", ".yml", ".yaml", ".ipynb")
 
@@ -352,3 +353,20 @@ class TestListDocumentsDeterminism:
         assert "`a/a.sql`" in first
         assert "`a/x.md`" in first
         assert "`b/z.pdf`" not in first
+
+    def test_list_documents_uses_indexer_exclusions(self, tmp_path):
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "node_modules").mkdir()
+        (tmp_path / "docs" / "intro.md").write_text(
+            "# Intro\n\nContent", encoding="utf-8"
+        )
+        (tmp_path / "node_modules" / "package.md").write_text(
+            "# Package\n\nShould not list",
+            encoding="utf-8",
+        )
+
+        _, tools = build_multi_mcp("exclude-test", {"docs": tmp_path})
+        result = tools["list_documents"].fn(limit=50)
+
+        assert "`docs/intro.md`" in result
+        assert "node_modules" not in result

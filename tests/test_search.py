@@ -50,7 +50,9 @@ class TestHybridSearchQueryClassification:
 
     def test_long_query_classified_as_default(self):
         """Longer queries should be classified as 'default' with question weight."""
-        query_type, weight = self._classify("compare semantic and keyword search behavior")
+        query_type, weight = self._classify(
+            "compare semantic and keyword search behavior"
+        )
         assert query_type == "default"
         assert weight == HybridSearch.WEIGHT_QUESTION
 
@@ -102,6 +104,46 @@ class TestBM25Parameters:
         """BM25 parameters should be configured in settings."""
         assert settings.bm25_k1 == 1.2
         assert settings.bm25_b == 0.5
+
+
+class TestHybridSearchFusion:
+    """Tests for hybrid search using both engines."""
+
+    def test_short_query_uses_semantic_and_keyword_results(self):
+        from unittest.mock import MagicMock
+
+        hybrid = HybridSearch.__new__(HybridSearch)
+        hybrid.semantic = MagicMock()
+        hybrid.keyword = MagicMock()
+        hybrid.semantic.search.return_value = [
+            {
+                "id": "semantic.md::0",
+                "path": "semantic.md",
+                "title": "Semantic",
+                "folder": "",
+                "content": "semantic content",
+                "score": 0.9,
+                "source": "semantic",
+            }
+        ]
+        hybrid.keyword.search.return_value = [
+            {
+                "id": "keyword.md::0",
+                "path": "keyword.md",
+                "title": "Keyword",
+                "folder": "",
+                "content": "keyword content",
+                "score": 2.0,
+                "source": "keyword",
+            }
+        ]
+
+        results = hybrid.search("RRF", top_k=2)
+
+        hybrid.semantic.search.assert_called_once()
+        hybrid.keyword.search.assert_called_once()
+        assert {hit["path"] for hit in results} == {"semantic.md", "keyword.md"}
+        assert all(hit["source"] == "hybrid" for hit in results)
 
 
 class TestFormatResults:

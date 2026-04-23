@@ -95,6 +95,25 @@ class TestCollectionRegistry:
         reg = CollectionRegistry({"beta": kb1, "alpha": kb2})
         assert reg.collection_names == ["alpha", "beta"]
 
+    def test_default_index_root_stays_inside_collection_kb(self, tmp_path):
+        from trace_search.server_app import CollectionRegistry
+
+        kb = tmp_path / "docs"
+        kb.mkdir()
+
+        reg = CollectionRegistry({"docs": kb})
+        assert reg.collections["docs"].index_path == kb / ".mcp-search" / "indexes"
+
+    def test_explicit_index_root_uses_collection_subdir(self, tmp_path):
+        from trace_search.server_app import CollectionRegistry
+
+        kb = tmp_path / "docs"
+        index_root = tmp_path / "indexes"
+        kb.mkdir()
+
+        reg = CollectionRegistry({"docs": kb}, index_root=index_root)
+        assert reg.collections["docs"].index_path == index_root / "docs"
+
     def test_resolve_specific(self, tmp_path):
         from trace_search.server_app import CollectionRegistry
 
@@ -249,6 +268,7 @@ class TestBuildMultiMcp:
             "list_documents",
             "index_stats",
             "reindex",
+            "doctor",
         }
 
     def test_instructions_list_collections(self, tmp_path):

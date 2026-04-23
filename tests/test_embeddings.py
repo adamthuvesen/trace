@@ -81,6 +81,18 @@ def test_invalid_backend_value_raises(monkeypatch):
         Settings()
 
 
+def test_empty_encode_returns_empty_matrix():
+    torch_backend = TorchBackend.__new__(TorchBackend)
+    torch_backend.dim = 384
+    onnx_backend = OnnxBackend.__new__(OnnxBackend)
+    onnx_backend.dim = 384
+
+    for backend in (torch_backend, onnx_backend):
+        out = backend.encode([])
+        assert out.shape == (0, 384)
+        assert out.dtype == np.float32
+
+
 def test_eval_cli_has_ab_flag():
     """Smoke test: --ab flag is registered on the eval CLI."""
     from tools.eval.cli import main

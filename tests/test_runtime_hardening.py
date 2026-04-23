@@ -217,6 +217,25 @@ def test_chroma_path_env_override_is_honored(
     assert indexer.chroma_path == custom_chroma
 
 
+def test_default_indexes_live_under_mcp_search_indexes(
+    tmp_path, monkeypatch, patched_indexer_runtime
+):
+    """Direct WikiIndexer defaults should match documented server index layout."""
+    from trace_search.config import get_settings
+
+    monkeypatch.setenv("KB_PATH", str(tmp_path))
+    get_settings.cache_clear()
+
+    try:
+        indexer = patched_indexer_runtime.WikiIndexer()
+    finally:
+        get_settings.cache_clear()
+
+    expected_root = tmp_path / ".mcp-search" / "indexes"
+    assert indexer.chroma_path.parent == expected_root
+    assert indexer.bm25_path.parent == expected_root
+
+
 def test_force_rebuild_with_empty_docs_clears_stale_indexes(
     tmp_path,
     monkeypatch,
@@ -327,6 +346,30 @@ def test_load_documents_is_deterministic(
     assert paths == sorted(paths)
 
 
+def test_load_documents_allows_hidden_parent_dirs(
+    tmp_path,
+    monkeypatch,
+    patched_indexer_runtime,
+):
+    """Hidden ancestors outside the KB root should not exclude valid documents."""
+    from trace_search.config import get_settings
+
+    kb = tmp_path / ".mirror" / "docs"
+    kb.mkdir(parents=True)
+    (kb / "intro.md").write_text("# Intro\n\ncontent", encoding="utf-8")
+
+    monkeypatch.setenv("KB_PATH", str(kb))
+    get_settings.cache_clear()
+
+    try:
+        indexer = patched_indexer_runtime.WikiIndexer()
+        docs = indexer.load_documents()
+    finally:
+        get_settings.cache_clear()
+
+    assert [doc["path"] for doc in docs] == ["intro.md"]
+
+
 def test_load_documents_single_rglob_walk(
     tmp_path, monkeypatch, patched_indexer_runtime
 ):
@@ -408,6 +451,15 @@ class TestExcludePatternMatching:
         indexer = self._make_indexer(tmp_path, patched_indexer_runtime, monkeypatch)
         p = tmp_path / ".venv" / "lib" / "site.py"
         assert indexer._should_exclude(p)
+
+    def test_hidden_parent_outside_kb_is_not_excluded(
+        self, tmp_path, monkeypatch, patched_indexer_runtime
+    ):
+        """Only KB-relative hidden parts should be excluded."""
+        kb = tmp_path / ".mirror" / "docs"
+        kb.mkdir(parents=True)
+        indexer = self._make_indexer(kb, patched_indexer_runtime, monkeypatch)
+        assert not indexer._should_exclude(kb / "intro.md")
 
 
 class TestAtomicChromaReset:

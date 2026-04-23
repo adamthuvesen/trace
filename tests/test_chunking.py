@@ -314,6 +314,19 @@ class TestChunkByParagraphsCharacterMode:
         for chunk in chunks:
             assert len(chunk) <= max_chars
 
+    def test_oversized_paragraph_preserves_all_content(self):
+        """A single oversized paragraph is split, not truncated."""
+        content = "".join(f"{i:03d}" for i in range(120))
+        chunks = chunk_by_paragraphs(
+            content,
+            max_chunk_chars=100,
+            use_tokens=False,
+            enable_overlap=False,
+        )
+        assert len(chunks) > 1
+        assert all(len(chunk) <= 100 for chunk in chunks)
+        assert "".join(chunks) == content
+
     def test_single_paragraph_fits(self):
         """Single paragraph under limit stays as one chunk."""
         content = "This is a short paragraph."
@@ -437,6 +450,17 @@ class TestEdgeCases:
             enable_overlap=False,
         )
         assert len(chunks) > 0
+
+    def test_large_plain_text_keeps_tail_content(self):
+        """Heading chunking should not drop the tail of a long plain-text block."""
+        content = "A" * 250 + "TAIL"
+        chunks = chunk_by_headings(
+            content,
+            max_chunk_chars=100,
+            use_tokens=False,
+            enable_overlap=False,
+        )
+        assert "TAIL" in "".join(chunks)
 
 
 class TestBackwardCompatibility:
