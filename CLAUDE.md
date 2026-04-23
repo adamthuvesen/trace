@@ -28,12 +28,17 @@ uv run trace
 KB_PATH=/path/to/your/docs uv run fastmcp dev src/trace_search/trace_server.py
 
 # Tests
-KB_PATH=/path/to/your/docs uv run pytest tests/ -v
-uv run pytest -m "not slow"          # skip embedding tests
+KB_PATH=/path/to/your/docs uv run python -m pytest tests/ -v
+uv run python -m pytest -m "not slow"          # skip embedding tests
 
-# Evaluation (~12 quick / ~25 full queries): local golden_queries.yaml + KB_PATH
+# Evaluation — full wiki (local golden_queries.yaml + KB_PATH)
 cp tools/eval/golden_queries.example.yaml tools/eval/golden_queries.yaml
 KB_PATH=/path/to/your/docs uv run python -c "from trace_search.indexer import WikiIndexer; WikiIndexer().build_index(force=True)"
 KB_PATH=/path/to/your/docs uv run python -m tools.eval --quick
 KB_PATH=/path/to/your/docs uv run python -m tools.eval --full
+
+# Evaluation — tiny committed fixture (no copy step; good smoke test)
+KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
+  uv run python -m tools.eval.cli --full --search semantic
+# Optional: pytest uses the same golden file — uv run python -m pytest tests/test_eval_retrieval.py -m slow
 ```

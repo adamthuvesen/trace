@@ -21,6 +21,10 @@ KB_COLLECTIONS="docs:/path/to/docs,team-docs:/path/to/second-kb" uv run trace
 # Single collection
 KB_PATH=/path/to/your/docs uv run trace
 
+# Diagnose setup before starting or from a shell
+KB_PATH=/path/to/your/docs uv run trace doctor
+KB_PATH=/path/to/your/docs uv run trace doctor "sample query"
+
 # Local inspector
 KB_COLLECTIONS="docs:/path/to/docs,team-docs:/path/to/second-kb" \
 uv run fastmcp dev src/trace_search/trace_server.py
@@ -54,18 +58,41 @@ claude mcp add trace \
 
 | Tool | Description |
 |---|---|
-| `search` | BM25 keyword search with acronym expansion (default) |
+| `search` | Smart BM25-first search with semantic/hybrid fallback (default) |
 | `semantic_search` | Vector similarity search |
-| `keyword_search` | Alias for `search` |
+| `keyword_search` | Direct BM25 keyword search for exact terms |
 | `search_hybrid` | Semantic + keyword combined |
 | `get_document` | Fetch a document by path |
 | `list_documents` | List documents, optionally by folder |
 | `index_stats` | Show index status |
+| `doctor` | Diagnose config, visible docs, exclusions, indexes, and sample queries |
 | `reindex` | Rebuild indexes |
 
 In multi-collection mode, search and document tools accept an optional `collection` parameter.
 
-Start with `search`. Use `semantic_search` when exact terms are unknown. Use `search_hybrid` as a fallback.
+Start with `search`. It runs BM25 first, falls back when results look weak, reports the winning strategy, groups context by document, includes match evidence, and suggests useful `get_document(path=...)` follow-ups.
+
+Use `keyword_search`, `semantic_search`, or `search_hybrid` when you want a specific retrieval mode for debugging, evaluation, or deterministic comparisons.
+
+## Troubleshooting
+
+Run `trace doctor` when search returns nothing or setup feels suspicious:
+
+```bash
+KB_PATH=/path/to/your/docs uv run trace doctor "frontmatter"
+KB_COLLECTIONS="docs:/path/to/docs,team:/path/to/team" uv run trace doctor --collection docs "onboarding"
+```
+
+Doctor checks:
+
+- whether `KB_PATH` / `KB_COLLECTIONS` is valid
+- how many supported documents are visible by extension
+- how many paths are excluded and why
+- whether ChromaDB and BM25 indexes are missing, stale, incompatible, or unknown
+- last successful index time when metadata exists
+- optional sample query latency and top-result summary
+
+If doctor reports unknown metadata for an older index, run `reindex` once to populate model and freshness metadata.
 
 ## Index Storage
 
