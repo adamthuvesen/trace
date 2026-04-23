@@ -74,6 +74,21 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def resolve_eval_scope(
+    *,
+    quick: bool,
+    full: bool,
+    include_stress: bool,
+    stress: bool,
+    ci_stress: bool,
+) -> tuple[bool, bool, bool]:
+    """Return (quick_only, stress_only, include_stress_queries)."""
+    stress_only = stress or ci_stress
+    quick_only = False if stress_only else quick or not full
+    include_stress_queries = include_stress and not stress_only
+    return quick_only, stress_only, include_stress_queries
+
+
 @click.command()
 @click.option(
     "--quick",
@@ -192,11 +207,13 @@ def main(
         raise click.UsageError("--strict-keywords-top1 requires --strict-keywords")
 
     ci_mode = ci or ci_stress
-    stress_only = stress or ci_stress
-    include_stress_queries = include_stress and not stress_only
-
-    # Default to quick if neither specified
-    quick_only = quick or not full
+    quick_only, stress_only, include_stress_queries = resolve_eval_scope(
+        quick=quick,
+        full=full,
+        include_stress=include_stress,
+        stress=stress,
+        ci_stress=ci_stress,
+    )
 
     # Convert category and file_type tuples to lists
     categories = list(category) if category else None

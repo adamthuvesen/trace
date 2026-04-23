@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 import statistics
 import time
@@ -151,6 +152,21 @@ def _keyword_scope_content(
         return top_1, top_1
     scope = " ".join(h["content"].lower() for h in hits[:top_k])
     return top_1, scope
+
+
+def percentile(sorted_values: list[float], pct: float) -> float:
+    """Inclusive linear percentile bounded by observed min/max."""
+    if not sorted_values:
+        return 0.0
+    if len(sorted_values) == 1:
+        return sorted_values[0]
+    rank = (len(sorted_values) - 1) * (pct / 100)
+    lower = math.floor(rank)
+    upper = math.ceil(rank)
+    if lower == upper:
+        return sorted_values[lower]
+    weight = rank - lower
+    return sorted_values[lower] * (1 - weight) + sorted_values[upper] * weight
 
 
 def evaluate_query(
@@ -400,23 +416,17 @@ def run_evaluation(
     top_5_path_hits = sum(1 for r in results if r.top_5_path_hit)
     top_1_keyword_hits = sum(1 for r in results if r.top_1_keyword_hit)
     top_5_keyword_hits = sum(1 for r in results if r.top_5_keyword_hit)
-    mean_rr = statistics.mean(r.path_reciprocal_rank for r in results) if results else 0.0
+    mean_rr = (
+        statistics.mean(r.path_reciprocal_rank for r in results) if results else 0.0
+    )
     within_max = sum(1 for r in results if r.path_hit_within_max_rank)
     within_max_acc = within_max / total if total > 0 else 0.0
 
-    # Compute latency percentiles using proper statistics
+    # Compute latency percentiles bounded by observed values, even for tiny samples.
     latencies = sorted(r.latency_ms for r in results)
-    if len(latencies) >= 2:
-        # Use quantiles for proper percentile calculation
-        # n=100 gives 99 cut points (percentiles 1-99)
-        quantiles = statistics.quantiles(latencies, n=100)
-        p50 = quantiles[49]  # 50th percentile (index 49 in 0-based)
-        p95 = quantiles[94]  # 95th percentile
-        p99 = quantiles[98] if len(quantiles) > 98 else latencies[-1]
-    elif len(latencies) == 1:
-        p50 = p95 = p99 = latencies[0]
-    else:
-        p50 = p95 = p99 = 0.0
+    p50 = percentile(latencies, 50)
+    p95 = percentile(latencies, 95)
+    p99 = percentile(latencies, 99)
 
     # Compute breakdown metrics
     by_category = compute_category_metrics(queries, results)
@@ -443,8 +453,7 @@ def run_evaluation(
         mean_reciprocal_rank=mean_rr,
         within_max_rank_path_accuracy=within_max_acc,
         include_stress=(
-            stress_only
-            or (include_stress and any(q.stress_set for q in queries))
+            stress_only or (include_stress and any(q.stress_set for q in queries))
         ),
         stress_only=stress_only,
         strict_keywords=strict_keywords,
