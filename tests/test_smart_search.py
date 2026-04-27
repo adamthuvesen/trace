@@ -129,6 +129,73 @@ def test_default_search_tool_uses_smart_registry_path(tmp_path):
     assert "**Selected:** keyword" in rendered
 
 
+def test_multi_collection_smart_search_batches_neighbor_fetches(tmp_path):
+    """Multi-collection smart search should issue one ChromaDB get() per collection,
+    not one per hit."""
+    from trace_search.search import SmartSearchResult
+    from trace_search.server_app import CollectionRegistry
+
+    kb1 = tmp_path / "kb1"
+    kb1.mkdir()
+    kb2 = tmp_path / "kb2"
+    kb2.mkdir()
+
+    registry = CollectionRegistry({"kb1": kb1, "kb2": kb2})
+    registry._backend = MagicMock()
+    registry._warmed = True
+
+    def make_hits(prefix, n=5):
+        return [
+            {
+                "id": f"{prefix}/doc{i}.md::1",
+                "path": f"{prefix}/doc{i}.md",
+                "title": f"Doc {i}",
+                "folder": prefix,
+                "content": f"Content {i}",
+                "score": 3.0 - i * 0.1,
+                "source": "keyword",
+                "chunk_index": 1,
+                "chunk_count": 3,
+                "breadcrumb": f"{prefix} > Doc {i}",
+            }
+            for i in range(n)
+        ]
+
+    hits_by_col = {"kb1": make_hits("kb1"), "kb2": make_hits("kb2")}
+
+    for name, col in registry.collections.items():
+        smart = MagicMock()
+        smart.search.return_value = SmartSearchResult(
+            hits=hits_by_col[name],
+            route=SearchRoute(
+                strategy="keyword",
+                reason="test route",
+                fallback_used=False,
+            ),
+        )
+        col._smart = smart
+
+        indexer = MagicMock()
+        indexer.collection.get.return_value = {
+            "ids": [f"{name}/doc0.md::0"],
+            "documents": ["neighbor chunk content"],
+        }
+        col._indexer = indexer
+
+    result = registry.search_smart("query", top_k=10, collection=None)
+
+    assert len(result.hits) == 10
+    assert {h["collection"] for h in result.hits} == {"kb1", "kb2"}
+
+    kb1_get = registry.collections["kb1"]._indexer.collection.get
+    kb2_get = registry.collections["kb2"]._indexer.collection.get
+    assert kb1_get.call_count == 1
+    assert kb2_get.call_count == 1
+
+    kb1_call_ids = kb1_get.call_args.kwargs["ids"]
+    assert len(kb1_call_ids) == 10  # 5 hits × 2 neighbors each
+
+
 def test_specialist_keyword_tool_bypasses_smart_registry_path(tmp_path):
     from trace_search.server_app import CollectionRegistry, build_multi_mcp
 
