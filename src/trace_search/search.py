@@ -97,7 +97,7 @@ class SemanticSearch:
 
         hits = []
         for i, doc_id in enumerate(results["ids"][0]):
-            # ChromaDB returns cosine distance, convert to similarity
+            # ChromaDB returns cosine distance; convert to similarity.
             distance = results["distances"][0][i]
             similarity = 1 - distance
             metadata = results["metadatas"][0][i]
@@ -214,7 +214,6 @@ class HybridSearch:
 
     @classmethod
     def _get_reranker(cls) -> CrossEncoder | None:
-        """Lazy load reranker model."""
         if not settings.reranker_enabled:
             return None
         if cls._reranker is None:
@@ -263,7 +262,6 @@ class HybridSearch:
             return []
         top_k = _clamp_top_k(top_k)
 
-        # Auto-detect semantic weight based on query type if not provided
         query_type: str | None = None
         if semantic_weight is None:
             query_type, semantic_weight = self._classify_query(query)
@@ -271,42 +269,36 @@ class HybridSearch:
                 "Query classified as '%s', weight=%s", query_type, semantic_weight
             )
 
-        # Determine if reranking should be used
         use_rerank = rerank if rerank is not None else settings.reranker_enabled
 
-        # Get more candidates if reranking
+        # Reranking benefits from a wider candidate pool.
         candidate_multiplier = 3 if use_rerank else 2
         n_candidates = top_k * candidate_multiplier
 
-        # Get results from both methods
         semantic_results = self.semantic.search(query, top_k=n_candidates)
         keyword_results = self.keyword.search(query, max_results=n_candidates)
 
-        # Calculate RRF scores
         rrf_scores: dict[str, float] = defaultdict(float)
         doc_data: dict[str, dict] = {}
         k = 60  # RRF constant
 
-        # Process semantic results (dedup by chunk ID, not file path)
+        # Dedup by chunk ID, not file path, so multiple chunks of one doc can co-rank.
         for rank, hit in enumerate(semantic_results):
             chunk_id = hit["id"]
             rrf_scores[chunk_id] += semantic_weight * (1 / (k + rank + 1))
             if chunk_id not in doc_data:
                 doc_data[chunk_id] = hit
 
-        # Process keyword results
         for rank, hit in enumerate(keyword_results):
             chunk_id = hit["id"]
             rrf_scores[chunk_id] += (1 - semantic_weight) * (1 / (k + rank + 1))
             if chunk_id not in doc_data:
                 doc_data[chunk_id] = hit
 
-        # Sort by RRF score
         ranked_ids = sorted(
             rrf_scores.keys(), key=lambda cid: rrf_scores[cid], reverse=True
         )
 
-        # Build candidate results
         candidates = []
         for chunk_id in ranked_ids[: top_k * candidate_multiplier]:
             result = doc_data[chunk_id].copy()
@@ -314,7 +306,6 @@ class HybridSearch:
             result["source"] = "hybrid"
             candidates.append(result)
 
-        # Optional reranking with cross-encoder
         if use_rerank and candidates:
             reranker = self._get_reranker()
             if reranker is not None:

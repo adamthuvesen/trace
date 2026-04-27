@@ -25,6 +25,7 @@ def _hit(path="doc.md", score=2.0, source="keyword", content="BM25 ranking docs"
 
 
 def test_smart_search_keeps_strong_keyword_results():
+    """Strong BM25 hits should short-circuit before hybrid is consulted."""
     smart = SmartSearch.__new__(SmartSearch)
     smart.keyword = MagicMock()
     smart.hybrid = MagicMock()
@@ -39,6 +40,7 @@ def test_smart_search_keeps_strong_keyword_results():
 
 
 def test_smart_search_falls_back_for_weak_keyword_results():
+    """Empty BM25 results should trigger hybrid fallback."""
     smart = SmartSearch.__new__(SmartSearch)
     smart.keyword = MagicMock()
     smart.hybrid = MagicMock()

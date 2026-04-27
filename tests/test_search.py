@@ -8,14 +8,10 @@ from trace_search.search import (
 
 
 class TestHybridSearchQueryClassification:
-    """Tests for HybridSearch query classification.
-
-    Uses HybridSearch._classify_query directly to ensure tests exercise production code.
-    """
+    """Exercises HybridSearch._classify_query directly via a minimal stub."""
 
     @staticmethod
     def _classify(query: str) -> tuple[str, float]:
-        """Call the real _classify_query via a minimal stub."""
         import types
 
         stub = types.SimpleNamespace(
@@ -25,7 +21,6 @@ class TestHybridSearchQueryClassification:
         return HybridSearch._classify_query(stub, query)
 
     def test_question_classified_as_question(self):
-        """Question queries should be classified as 'question'."""
         query_type, weight = self._classify("What is BM25?")
         assert query_type == "question"
         assert weight == HybridSearch.WEIGHT_QUESTION
@@ -34,7 +29,6 @@ class TestHybridSearchQueryClassification:
         assert query_type == "question"
 
     def test_short_keyword_query_classified_as_keyword(self):
-        """Short queries should be classified as 'keyword'."""
         query_type, weight = self._classify("frontmatter")
         assert query_type == "keyword"
         assert weight == HybridSearch.WEIGHT_KEYWORD
@@ -43,13 +37,12 @@ class TestHybridSearchQueryClassification:
         assert query_type == "keyword"
 
     def test_short_acronym_query_classified_as_keyword(self):
-        """Short queries with acronyms are classified as 'keyword' (no acronym expansion)."""
+        """Acronyms should not trigger expansion; routed as plain keyword."""
         query_type, weight = self._classify("RRF")
         assert query_type == "keyword"
         assert weight == HybridSearch.WEIGHT_KEYWORD
 
     def test_long_query_classified_as_default(self):
-        """Longer queries should be classified as 'default' with question weight."""
         query_type, weight = self._classify(
             "compare semantic and keyword search behavior"
         )
@@ -57,21 +50,17 @@ class TestHybridSearchQueryClassification:
         assert weight == HybridSearch.WEIGHT_QUESTION
 
     def test_weight_constants_defined(self):
-        """Weight constants should be defined."""
         assert hasattr(HybridSearch, "WEIGHT_KEYWORD")
         assert hasattr(HybridSearch, "WEIGHT_QUESTION")
         assert not hasattr(HybridSearch, "WEIGHT_ACRONYM")
 
     def test_question_weight_favors_semantic(self):
-        """Question weight should favor semantic (higher weight)."""
         assert HybridSearch.WEIGHT_QUESTION > 0.5
 
     def test_keyword_weight_favors_bm25(self):
-        """Short keyword weight should favor BM25."""
         assert HybridSearch.WEIGHT_KEYWORD < 0.5
 
     def test_weights_in_valid_range(self):
-        """All weights should be between 0 and 1."""
         weights = [
             HybridSearch.WEIGHT_KEYWORD,
             HybridSearch.WEIGHT_QUESTION,
@@ -81,8 +70,6 @@ class TestHybridSearchQueryClassification:
 
 
 class TestEmptyCorpusSearch:
-    """Test KeywordSearch.search with empty corpus."""
-
     def test_empty_corpus_returns_empty_list(self):
         from unittest.mock import MagicMock, PropertyMock
 
@@ -98,17 +85,12 @@ class TestEmptyCorpusSearch:
 
 
 class TestBM25Parameters:
-    """Tests for BM25 parameter configuration."""
-
     def test_bm25_params_in_settings(self):
-        """BM25 parameters should be configured in settings."""
         assert settings.bm25_k1 == 1.2
         assert settings.bm25_b == 0.5
 
 
 class TestHybridSearchFusion:
-    """Tests for hybrid search using both engines."""
-
     def test_short_query_uses_semantic_and_keyword_results(self):
         from unittest.mock import MagicMock
 
@@ -147,17 +129,13 @@ class TestHybridSearchFusion:
 
 
 class TestFormatResults:
-    """Tests for format_results edge cases."""
-
     def test_format_results_empty_list(self):
-        """format_results handles empty list."""
         from trace_search.search import format_results
 
         result = format_results([])
         assert result == "No results found."
 
     def test_format_results_minimal_hit(self):
-        """format_results handles hits with minimal fields."""
         from trace_search.search import format_results
 
         hits = [
@@ -168,7 +146,6 @@ class TestFormatResults:
         assert "test.md" in result
 
     def test_format_results_with_score(self):
-        """format_results shows scores correctly."""
         from trace_search.search import format_results
 
         hits = [
@@ -186,7 +163,6 @@ class TestFormatResults:
         assert "Similarity" in result
 
     def test_format_results_hybrid_with_rrf(self):
-        """format_results shows RRF score for hybrid results."""
         from trace_search.search import format_results
 
         hits = [
@@ -205,18 +181,15 @@ class TestFormatResults:
         assert "0.0123" in result
 
     def test_format_results_truncates_long_content(self):
-        """format_results truncates content over 500 chars."""
         from trace_search.search import format_results
 
         long_content = "x" * 600
         hits = [{"title": "T", "path": "t.md", "folder": "", "content": long_content}]
         result = format_results(hits)
         assert "..." in result
-        # Full content should not appear
         assert long_content not in result
 
     def test_format_results_without_content(self):
-        """format_results can exclude content."""
         from trace_search.search import format_results
 
         hits = [{"title": "T", "path": "t.md", "folder": "", "content": "secret"}]
@@ -225,10 +198,7 @@ class TestFormatResults:
 
 
 class TestSemanticSearchCacheStats:
-    """Tests for SemanticSearch cache stats structure."""
-
     def test_cache_stats_structure(self):
-        """get_cache_stats returns expected fields."""
         from trace_search.search import SemanticSearch
 
         stats = SemanticSearch.get_cache_stats()
@@ -239,7 +209,6 @@ class TestSemanticSearchCacheStats:
         assert "cache_hit_rate" in stats
 
     def test_cache_stats_types(self):
-        """get_cache_stats returns correct types."""
         from trace_search.search import SemanticSearch
 
         stats = SemanticSearch.get_cache_stats()
@@ -251,8 +220,6 @@ class TestSemanticSearchCacheStats:
 
 
 class TestFormatResultsPreviewTruncation:
-    """Tests for word-boundary truncation in format_results."""
-
     def test_preview_ends_on_word_boundary(self):
         """Content over 500 chars should be cut at the last space before 500."""
         from trace_search.search import format_results
@@ -280,7 +247,6 @@ class TestFormatResultsPreviewTruncation:
         assert " " not in body[-5:] or body[-1] != " "
 
     def test_content_under_500_not_truncated(self):
-        """Content at or under 500 chars should not be truncated."""
         from trace_search.search import format_results
 
         content = "short content"
@@ -298,8 +264,6 @@ class TestFormatResultsPreviewTruncation:
 
 
 class TestSemanticSearchCacheIsolation:
-    """Tests for embedding cache isolation across models."""
-
     def test_cache_key_includes_model_slug(self):
         """Cache entries must be keyed by (model_slug, query), not just query."""
         from unittest.mock import MagicMock
@@ -337,7 +301,6 @@ class TestSemanticSearchCacheIsolation:
         assert ("model_b", "frontmatter") in SemanticSearch._embedding_cache
 
     def test_same_model_reuses_cached_embedding(self):
-        """Same model slug + query should hit the cache on second call."""
         from unittest.mock import MagicMock
         from trace_search.search import SemanticSearch
 
@@ -364,28 +327,20 @@ class TestSemanticSearchCacheIsolation:
 
 
 class TestTopKBounds:
-    """Tests for top_k bounds validation via the real _clamp_top_k function."""
-
     def test_caps_top_k_at_max(self):
-        """_clamp_top_k should cap at 100."""
         assert _clamp_top_k(200) == 100
 
     def test_default_when_zero(self):
-        """_clamp_top_k defaults to 10 when zero."""
         assert _clamp_top_k(0) == 10
 
     def test_default_when_negative(self):
-        """_clamp_top_k defaults to 10 when negative."""
         assert _clamp_top_k(-5) == 10
 
     def test_passthrough_valid_value(self):
-        """_clamp_top_k passes through valid values."""
         assert _clamp_top_k(50) == 50
 
     def test_custom_default(self):
-        """_clamp_top_k respects custom default."""
         assert _clamp_top_k(0, default=20) == 20
 
     def test_custom_max(self):
-        """_clamp_top_k respects custom max."""
         assert _clamp_top_k(200, max_val=50) == 50

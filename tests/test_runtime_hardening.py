@@ -406,8 +406,6 @@ def test_load_documents_single_rglob_walk(
 
 
 class TestExcludePatternMatching:
-    """Tests for WikiIndexer._should_exclude path-component matching."""
-
     def _make_indexer(self, kb_path, patched_indexer_runtime, monkeypatch):
         from trace_search.config import get_settings
 
@@ -463,8 +461,6 @@ class TestExcludePatternMatching:
 
 
 class TestAtomicChromaReset:
-    """Tests for _clear_chroma_collection atomicity."""
-
     def test_count_is_zero_after_reset(
         self, tmp_path, monkeypatch, patched_indexer_runtime
     ):

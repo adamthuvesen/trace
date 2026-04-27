@@ -17,37 +17,27 @@ def get_status_indicator(
 ) -> str:
     """Get a status indicator based on thresholds (higher value is better)."""
     if value >= target:
-        return "✓"  # Green/pass
+        return "✓"
     elif value >= warning:
-        return "~"  # Yellow/warning
+        return "~"
     elif value >= critical:
-        return "!"  # Orange/attention
+        return "!"
     else:
-        return "✗"  # Red/fail
+        return "✗"
 
 
 def get_latency_status(
     latency_ms: float, target: float, warning: float, critical: float
 ) -> str:
-    """Get a status indicator for latency (lower is better).
-
-    Args:
-        latency_ms: The measured latency in milliseconds.
-        target: Target latency threshold (pass if latency <= target).
-        warning: Warning latency threshold.
-        critical: Critical latency threshold (fail if latency > critical).
-
-    Returns:
-        Status indicator character.
-    """
+    """Get a status indicator for latency (lower is better)."""
     if latency_ms <= target:
-        return "✓"  # Green/pass
+        return "✓"
     elif latency_ms <= warning:
-        return "~"  # Yellow/warning
+        return "~"
     elif latency_ms <= critical:
-        return "!"  # Orange/attention
+        return "!"
     else:
-        return "✗"  # Red/fail
+        return "✗"
 
 
 def generate_json_report(report: EvaluationReport) -> str:
@@ -73,7 +63,6 @@ def generate_markdown_report(report: EvaluationReport) -> str:
         "",
     ]
 
-    # Overall metrics
     t1_path_status = get_status_indicator(
         report.top_1_path_accuracy,
         path_thresh["top_1"]["target"],
@@ -137,7 +126,6 @@ def generate_markdown_report(report: EvaluationReport) -> str:
         ]
     )
 
-    # Category breakdown
     lines.extend(
         [
             "## By Category",
@@ -157,7 +145,6 @@ def generate_markdown_report(report: EvaluationReport) -> str:
 
     lines.append("")
 
-    # File type breakdown
     lines.extend(
         [
             "## By File Type",
@@ -177,7 +164,6 @@ def generate_markdown_report(report: EvaluationReport) -> str:
 
     lines.append("")
 
-    # Regression report if present
     if report.regression:
         reg = report.regression
         lines.extend(
@@ -220,7 +206,6 @@ def generate_markdown_report(report: EvaluationReport) -> str:
                 lines.append(f"- **{q.query_id}**: {q.query}")
             lines.append("")
 
-    # Failed queries
     failed = [r for r in report.results if not r.top_1_path_hit]
     if failed:
         lines.extend(
@@ -231,7 +216,7 @@ def generate_markdown_report(report: EvaluationReport) -> str:
                 "|----------|-------|----------------|",
             ]
         )
-        for r in failed[:20]:  # Limit to 20
+        for r in failed[:20]:
             query_short = r.query[:40] + "..." if len(r.query) > 40 else r.query
             path_short = (
                 r.retrieved_path[:50] + "..."
@@ -275,7 +260,6 @@ def generate_console_report(report: EvaluationReport) -> str:
         lines.append(f"Keyword mode:    strict{scope}")
     lines.append("")
 
-    # Overall metrics with status
     def status_str(value: float, target: float, warning: float, critical: float) -> str:
         indicator = get_status_indicator(value, target, warning, critical)
         if indicator == "✓":
@@ -315,7 +299,6 @@ def generate_console_report(report: EvaluationReport) -> str:
         ]
     )
 
-    # Category breakdown
     lines.extend(
         [
             "-" * 40,
@@ -334,7 +317,6 @@ def generate_console_report(report: EvaluationReport) -> str:
 
     lines.append("")
 
-    # File type breakdown
     lines.extend(
         [
             "-" * 40,
@@ -353,7 +335,6 @@ def generate_console_report(report: EvaluationReport) -> str:
 
     lines.append("")
 
-    # Regression summary
     if report.regression:
         reg = report.regression
         lines.extend(
@@ -400,7 +381,6 @@ def save_report(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Generate timestamp-based filename
     ts = report.timestamp.replace(":", "-").replace("+", "_")
     base_name = f"eval_{report.search_mode}_{ts}"
 

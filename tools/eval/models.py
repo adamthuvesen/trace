@@ -27,7 +27,6 @@ class GoldenQuery:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> GoldenQuery:
-        """Create GoldenQuery from dictionary."""
         return cls(
             id=data["id"],
             query=data["query"],
@@ -45,7 +44,6 @@ class GoldenQuery:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
         return {
             "id": self.id,
             "query": self.query,
@@ -64,14 +62,12 @@ class GoldenQuery:
 
     def matches_path(self, retrieved_path: str) -> bool:
         """Check if the retrieved path matches expected or alternate paths."""
-        # Normalize paths for comparison
         retrieved_normalized = Path(retrieved_path).as_posix().lower()
         expected_normalized = Path(self.expected_path).as_posix().lower()
 
         if retrieved_normalized == expected_normalized:
             return True
 
-        # Check alternate paths
         for alt_path in self.alternate_paths:
             alt_normalized = Path(alt_path).as_posix().lower()
             if retrieved_normalized == alt_normalized:
@@ -100,7 +96,6 @@ class QueryResult:
     path_hit_within_max_rank: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
         return {
             "query_id": self.query_id,
             "query": self.query,
@@ -133,30 +128,25 @@ class CategoryMetrics:
 
     @property
     def top_1_path_accuracy(self) -> float:
-        """Calculate Top-1 path accuracy."""
         return self.top_1_path_hits / self.query_count if self.query_count > 0 else 0.0
 
     @property
     def top_5_path_accuracy(self) -> float:
-        """Calculate Top-5 path accuracy."""
         return self.top_5_path_hits / self.query_count if self.query_count > 0 else 0.0
 
     @property
     def top_1_keyword_accuracy(self) -> float:
-        """Calculate Top-1 keyword accuracy."""
         return (
             self.top_1_keyword_hits / self.query_count if self.query_count > 0 else 0.0
         )
 
     @property
     def top_5_keyword_accuracy(self) -> float:
-        """Calculate Top-5 keyword accuracy."""
         return (
             self.top_5_keyword_hits / self.query_count if self.query_count > 0 else 0.0
         )
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
         return {
             "category": self.category,
             "query_count": self.query_count,
@@ -184,16 +174,13 @@ class FileTypeMetrics:
 
     @property
     def top_1_accuracy(self) -> float:
-        """Calculate Top-1 accuracy."""
         return self.top_1_path_hits / self.query_count if self.query_count > 0 else 0.0
 
     @property
     def top_5_accuracy(self) -> float:
-        """Calculate Top-5 accuracy."""
         return self.top_5_path_hits / self.query_count if self.query_count > 0 else 0.0
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
         return {
             "file_type": self.file_type,
             "query_count": self.query_count,
@@ -217,7 +204,6 @@ class QueryRegression:
     current_path: str
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
         return {
             "query_id": self.query_id,
             "query": self.query,
@@ -248,7 +234,6 @@ class RegressionReport:
     improved_queries: list[QueryRegression] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
         return {
             "baseline_timestamp": self.baseline_timestamp,
             "current_timestamp": self.current_timestamp,
@@ -307,7 +292,6 @@ class EvaluationReport:
     strict_keywords_top1: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
         return {
             "timestamp": self.timestamp,
             "search_mode": self.search_mode,
@@ -337,7 +321,6 @@ class EvaluationReport:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> EvaluationReport:
         """Create EvaluationReport from dictionary (for loading baselines)."""
-        # Reconstruct CategoryMetrics
         by_category = {}
         for cat_name, cat_data in data.get("by_category", {}).items():
             query_count = cat_data.get("query_count", 0)
@@ -364,7 +347,6 @@ class EvaluationReport:
                 avg_latency_ms=cat_data.get("avg_latency_ms", 0.0),
             )
 
-        # Reconstruct FileTypeMetrics
         by_file_type = {}
         for ft_name, ft_data in data.get("by_file_type", {}).items():
             query_count = ft_data.get("query_count", 0)
@@ -383,7 +365,6 @@ class EvaluationReport:
                 avg_latency_ms=ft_data.get("avg_latency_ms", 0.0),
             )
 
-        # Reconstruct QueryResults
         results = []
         for r in data.get("results", []):
             results.append(
@@ -424,7 +405,7 @@ class EvaluationReport:
             by_category=by_category,
             by_file_type=by_file_type,
             results=results,
-            regression=None,  # Regression is computed fresh
+            regression=None,
             include_stress=data.get("include_stress", False),
             stress_only=data.get("stress_only", False),
             strict_keywords=data.get("strict_keywords", False),

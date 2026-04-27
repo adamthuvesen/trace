@@ -47,7 +47,6 @@ from pathlib import Path
 
 import click
 
-# Add src directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from tools.eval.evaluator import load_golden_queries, run_evaluation
@@ -192,11 +191,9 @@ def main(
     ab: bool,
 ) -> None:
     """Run wiki search evaluation suite."""
-    # Set log level
     if verbose:
         logging.getLogger("tools.eval").setLevel(logging.DEBUG)
 
-    # Validate mutually exclusive flags
     if quick and full:
         raise click.UsageError("Cannot specify both --quick and --full")
     if stress and include_stress:
@@ -215,11 +212,9 @@ def main(
         ci_stress=ci_stress,
     )
 
-    # Convert category and file_type tuples to lists
     categories = list(category) if category else None
     file_types = list(file_type) if file_type else None
 
-    # Show query count
     queries = load_golden_queries(
         quick_only=quick_only,
         categories=categories,
@@ -249,7 +244,6 @@ def main(
 
     indexer = WikiIndexer()
 
-    # Ensure index exists
     if indexer.collection.count() == 0:
         click.echo("Building index (first time)...")
         indexer.build_index()
@@ -265,7 +259,6 @@ def main(
 
     click.echo()
 
-    # Run evaluation
     click.echo("Running evaluation...")
     report = run_evaluation(
         indexer=indexer,
@@ -279,13 +272,11 @@ def main(
         strict_keywords_top1=strict_keywords_top1,
     )
 
-    # Compare to baseline if specified
     if baseline:
         click.echo(f"Loading baseline: {baseline}")
         baseline_report = load_baseline(baseline)
         report.regression = compare_results(report, baseline_report)
     elif ci_mode:
-        # In CI mode, try to find latest baseline automatically
         latest = get_latest_baseline(search_mode=search)
         if latest:
             click.echo(f"Using latest baseline: {latest}")
@@ -294,21 +285,17 @@ def main(
         else:
             click.echo("No baseline found, skipping regression check")
 
-    # Print console report
     click.echo(generate_console_report(report))
 
-    # Save reports
     saved = save_report(report, output_dir, formats=["json", "md"])
     click.echo("Results saved to:")
     for fmt, path in saved.items():
         click.echo(f"  {fmt}: {path}")
 
-    # Promote to baseline if requested
     if promote:
         baseline_path = promote_to_baseline(report)
         click.echo(f"Promoted to baseline: {baseline_path}")
 
-    # CI mode: check thresholds and exit code
     if ci_mode:
         passed, failures = check_ci_thresholds(report, stress_subset=ci_stress)
         if not passed:

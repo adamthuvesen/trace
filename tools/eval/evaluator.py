@@ -115,7 +115,6 @@ def create_searcher(
     indexer: WikiIndexer,
     search_mode: str,
 ) -> SemanticSearch | KeywordSearch | HybridSearch:
-    """Create a searcher based on the mode."""
     from trace_search.search import HybridSearch, KeywordSearch, SemanticSearch
 
     if search_mode == "semantic":
@@ -194,7 +193,6 @@ def evaluate_query(
     """
     need = _effective_min_keywords(query, min_keywords, strict_keywords)
 
-    # Run search with timing
     start = time.perf_counter()
     if search_mode == "bm25":
         hits = searcher.search(query.query, max_results=top_k)
@@ -232,11 +230,9 @@ def evaluate_query(
         path_first_hit_rank is not None and path_first_hit_rank <= max_rank
     )
 
-    # Check path match at top-1
     top_1_path = hits[0]["path"]
     top_1_path_hit = query.matches_path(top_1_path)
 
-    # Check path match in top-5
     top_5_path_hit = any(query.matches_path(h["path"]) for h in hits[:5])
 
     top_1_content, scope_content = _keyword_scope_content(
@@ -273,7 +269,6 @@ def compute_category_metrics(
     results: list[QueryResult],
 ) -> dict[str, CategoryMetrics]:
     """Compute metrics grouped by category."""
-    # Group results by category
     by_category: dict[str, list[tuple[GoldenQuery, QueryResult]]] = defaultdict(list)
     query_map = {q.id: q for q in queries}
 
@@ -282,7 +277,6 @@ def compute_category_metrics(
         if query:
             by_category[query.category].append((query, result))
 
-    # Compute metrics for each category
     metrics = {}
     for category, items in by_category.items():
         query_count = len(items)
@@ -310,7 +304,6 @@ def compute_file_type_metrics(
     results: list[QueryResult],
 ) -> dict[str, FileTypeMetrics]:
     """Compute metrics grouped by file type."""
-    # Group results by file type
     by_type: dict[str, list[tuple[GoldenQuery, QueryResult]]] = defaultdict(list)
     query_map = {q.id: q for q in queries}
 
@@ -319,7 +312,6 @@ def compute_file_type_metrics(
         if query:
             by_type[query.file_type].append((query, result))
 
-    # Compute metrics for each file type
     metrics = {}
     for file_type, items in by_type.items():
         query_count = len(items)
@@ -356,11 +348,9 @@ def run_evaluation(
 
     from tools.eval import load_thresholds
 
-    # Load configuration
     thresholds = load_thresholds()
     min_keywords = thresholds.get("keyword_match", {}).get("min_keywords", 2)
 
-    # Load queries
     queries = load_golden_queries(
         quick_only=quick_only,
         categories=categories,
@@ -376,13 +366,11 @@ def run_evaluation(
         "Running evaluation with %d queries (mode: %s)", len(queries), search_mode
     )
 
-    # Create searcher
     searcher = create_searcher(indexer, search_mode)
 
-    # Clear embedding cache for consistent timing
+    # Clear embedding cache for consistent per-query timing
     SemanticSearch._embedding_cache.clear()
 
-    # Run evaluation
     results: list[QueryResult] = []
     for i, query in enumerate(queries, 1):
         result = evaluate_query(
@@ -410,7 +398,6 @@ def run_evaluation(
             result.retrieved_path[:50],
         )
 
-    # Compute overall metrics
     total = len(results)
     top_1_path_hits = sum(1 for r in results if r.top_1_path_hit)
     top_5_path_hits = sum(1 for r in results if r.top_5_path_hit)
@@ -428,7 +415,6 @@ def run_evaluation(
     p95 = percentile(latencies, 95)
     p99 = percentile(latencies, 99)
 
-    # Compute breakdown metrics
     by_category = compute_category_metrics(queries, results)
     by_file_type = compute_file_type_metrics(queries, results)
 

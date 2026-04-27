@@ -32,7 +32,6 @@ from rich.progress import (
     TaskProgressColumn,
 )
 
-# Configure logging
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 console = Console()
@@ -40,8 +39,6 @@ console = Console()
 
 @dataclass
 class ConversionStats:
-    """Track conversion statistics."""
-
     converted: int = 0
     copied: int = 0
     skipped: int = 0
@@ -53,7 +50,6 @@ class ConversionStats:
         return self.converted + self.copied + self.skipped + self.failed
 
 
-# File extensions to process
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".csv", ".xlsx", ".md", ".txt"}
 SKIP_EXTENSIONS = {
     ".png",
@@ -67,7 +63,6 @@ SKIP_EXTENSIONS = {
     ".mp4",
 }
 
-# Directories to exclude
 EXCLUDE_PATTERNS = {
     "node_modules",
     ".venv",
@@ -82,7 +77,6 @@ EXCLUDE_PATTERNS = {
 
 
 def convert_with_markitdown(input_path: Path, output_path: Path) -> None:
-    """Convert supported documents to markdown using MarkItDown."""
     from markitdown import MarkItDown
 
     md = MarkItDown()
@@ -91,7 +85,6 @@ def convert_with_markitdown(input_path: Path, output_path: Path) -> None:
 
 
 def convert_csv_to_markdown(input_path: Path, output_path: Path) -> None:
-    """Convert CSV to markdown table using pandas."""
     import pandas as pd
 
     df = pd.read_csv(input_path, encoding="utf-8", on_bad_lines="skip")
@@ -100,7 +93,7 @@ def convert_csv_to_markdown(input_path: Path, output_path: Path) -> None:
 
 
 def convert_excel_to_markdown(input_path: Path, output_path: Path) -> None:
-    """Convert Excel to markdown tables (one section per sheet)."""
+    """One section per sheet."""
     import pandas as pd
 
     sheets = pd.read_excel(input_path, sheet_name=None)
@@ -113,17 +106,14 @@ def convert_excel_to_markdown(input_path: Path, output_path: Path) -> None:
 
 
 def copy_file(input_path: Path, output_path: Path) -> None:
-    """Copy file as-is (for markdown files)."""
     shutil.copy2(input_path, output_path)
 
 
 def copy_as_markdown(input_path: Path, output_path: Path) -> None:
-    """Copy text file with .md extension."""
     content = input_path.read_text(encoding="utf-8", errors="replace")
     output_path.write_text(content, encoding="utf-8")
 
 
-# Map extensions to converter functions
 CONVERTERS: dict[str, Callable[[Path, Path], None]] = {
     ".pdf": convert_with_markitdown,
     ".docx": convert_with_markitdown,
@@ -136,7 +126,6 @@ CONVERTERS: dict[str, Callable[[Path, Path], None]] = {
 
 
 def should_exclude(path: Path) -> bool:
-    """Check if path should be excluded."""
     return any(part.startswith(".") or part in EXCLUDE_PATTERNS for part in path.parts)
 
 
@@ -144,7 +133,6 @@ def collect_files(
     wiki_path: Path,
     types_filter: set[str] | None = None,
 ) -> list[Path]:
-    """Collect all files to process."""
     files = []
 
     for path in wiki_path.rglob("*"):
@@ -167,7 +155,7 @@ def collect_files(
 
 
 def get_output_path(input_path: Path, wiki_path: Path, output_dir: Path) -> Path:
-    """Calculate output path, preserving directory structure."""
+    """Preserve directory structure under output_dir."""
     relative = input_path.relative_to(wiki_path)
     output_path = output_dir / relative
 
@@ -215,7 +203,6 @@ def process_files(
     force: bool,
     dry_run: bool,
 ) -> ConversionStats:
-    """Process files sequentially with progress bar."""
     stats = ConversionStats()
 
     if dry_run:
@@ -272,7 +259,6 @@ def process_files(
 
 
 def write_error_log(output_dir: Path, errors: list[tuple[Path, str]]) -> None:
-    """Write conversion errors to log file."""
     log_path = output_dir / ".errors.log"
     with log_path.open("w", encoding="utf-8") as f:
         f.write("# Conversion Errors\n\n")

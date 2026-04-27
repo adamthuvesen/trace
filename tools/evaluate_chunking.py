@@ -50,7 +50,6 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Add src directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from trace_search.config import settings
@@ -68,11 +67,9 @@ SEED = 42
 
 @dataclass
 class TestQuery:
-    """A test query with expected answer location."""
-
     query: str
-    expected_keywords: list[str]  # Keywords that should appear in top result
-    expected_paths: list[str] = field(default_factory=list)  # Optional: exact paths
+    expected_keywords: list[str]
+    expected_paths: list[str] = field(default_factory=list)
     description: str = ""
 
 
@@ -220,8 +217,6 @@ TEST_QUERIES = [
 
 @dataclass
 class RetrievalResult:
-    """Result of a single retrieval test."""
-
     query: str
     top_1_hit: bool
     top_5_hit: bool
@@ -266,12 +261,10 @@ def run_retrieval_quality_test(indexer: WikiIndexer, top_k: int = 5) -> dict[str
             logger.info("  MISS: No results returned")
             continue
 
-        # Check top-1
         top_content = hits[0]["content"].lower()
         top_1_keywords = [k for k in tq.expected_keywords if k.lower() in top_content]
-        top_1_hit = len(top_1_keywords) >= 2  # At least 2 keywords
+        top_1_hit = len(top_1_keywords) >= 2
 
-        # Check top-5
         all_content = " ".join(h["content"].lower() for h in hits[:5])
         top_5_keywords = [k for k in tq.expected_keywords if k.lower() in all_content]
         top_5_hit = len(top_5_keywords) >= 2
@@ -295,7 +288,6 @@ def run_retrieval_quality_test(indexer: WikiIndexer, top_k: int = 5) -> dict[str
         if result.keywords_missing:
             logger.info(f"  Keywords missing: {result.keywords_missing}")
 
-    # Calculate metrics
     top_1_rate = sum(1 for r in results if r.top_1_hit) / len(results)
     top_5_rate = sum(1 for r in results if r.top_5_hit) / len(results)
 
@@ -346,7 +338,6 @@ def run_chunk_size_analysis(
     logger.info("TEST 2: Chunk Size Distribution")
     logger.info("=" * 60)
 
-    # Get all chunks from ChromaDB
     all_data = indexer.collection.get(include=["documents"])
     chunks = all_data["documents"]
 
@@ -354,10 +345,8 @@ def run_chunk_size_analysis(
         logger.warning("No chunks found in index")
         return {"error": "No chunks in index"}
 
-    # Calculate sizes
     sizes = [len(c) for c in chunks]
 
-    # Statistics
     stats = {
         "count": len(sizes),
         "mean": statistics.mean(sizes),
@@ -378,7 +367,6 @@ def run_chunk_size_analysis(
     logger.info(f"25th/75th percentile: {stats['p25']:.0f} / {stats['p75']:.0f} chars")
     logger.info(f"95th percentile: {stats['p95']:.0f} chars")
 
-    # Check for skewness
     skewness = (
         (stats["mean"] - stats["median"]) / stats["stdev"] if stats["stdev"] > 0 else 0
     )
@@ -389,7 +377,6 @@ def run_chunk_size_analysis(
     logger.info(f"\nSkewness indicator: {skewness:.2f}")
     logger.info(f"Coefficient of variation: {coefficient_of_variation:.2f}")
 
-    # Recommendations
     recommendations = []
 
     if stats["max"] > 4000:
@@ -413,7 +400,6 @@ def run_chunk_size_analysis(
             f"Distribution is skewed {direction}. May affect retrieval consistency."
         )
 
-    # Size buckets for analysis
     buckets = {
         "tiny (<200)": sum(1 for s in sizes if s < 200),
         "small (200-500)": sum(1 for s in sizes if 200 <= s < 500),
@@ -435,14 +421,12 @@ def run_chunk_size_analysis(
     else:
         logger.info("\n  Distribution looks balanced.")
 
-    # Save plot
     if save_plot:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         plot_path = OUTPUT_DIR / "chunk_size_distribution.png"
 
         fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
-        # Histogram
         axes[0].hist(sizes, bins=50, edgecolor="black", alpha=0.7)
         axes[0].axvline(
             stats["mean"], color="r", linestyle="--", label=f"Mean: {stats['mean']:.0f}"
@@ -458,7 +442,6 @@ def run_chunk_size_analysis(
         axes[0].set_title("Chunk Size Distribution")
         axes[0].legend()
 
-        # Box plot
         axes[1].boxplot(sizes, vert=True)
         axes[1].set_ylabel("Chunk Size (chars)")
         axes[1].set_title("Chunk Size Box Plot")
@@ -493,24 +476,21 @@ def run_semantic_coherence_inspection(
     logger.info("TEST 3: Semantic Coherence Inspection")
     logger.info("=" * 60)
 
-    # Load raw documents
     docs = indexer.load_documents()
 
     if not docs:
         return {"error": "No documents found"}
 
-    # Select diverse sample (different folders)
+    # Diverse sample: one doc per folder, then fill with random picks
     np.random.seed(SEED)
     folders = list({d["folder"] for d in docs if d["folder"]})
     sample_docs = []
 
-    # Try to get one doc from each folder
     for folder in folders[:sample_size]:
         folder_docs = [d for d in docs if d["folder"] == folder]
         if folder_docs:
             sample_docs.append(np.random.choice(folder_docs))
 
-    # Fill remaining with random docs
     while len(sample_docs) < sample_size and len(sample_docs) < len(docs):
         doc = np.random.choice(docs)
         if doc not in sample_docs:
@@ -529,14 +509,12 @@ def run_semantic_coherence_inspection(
 
         logger.info(f"Number of chunks: {len(chunks)}")
 
-        # Analyze each chunk
         chunk_analysis = []
         for i, chunk in enumerate(chunks):
-            # Extract headings in chunk
             headings = re.findall(r"^(#{1,3})\s+(.+)$", chunk, re.MULTILINE)
             heading_levels = [(len(h[0]), h[1]) for h in headings]
 
-            # Check for mixed heading levels (potential coherence issue)
+            # Mixed heading levels often signal unrelated sections combined
             levels = [h[0] for h in heading_levels]
             has_mixed_levels = len(set(levels)) > 1 if levels else False
 
@@ -557,22 +535,18 @@ def run_semantic_coherence_inspection(
                     "    WARNING: Mixed heading levels (may combine unrelated sections)"
                 )
 
-        # Check for issues
         issues = []
 
-        # Issue: Very small chunks (context loss)
         tiny_chunks = [c for c in chunk_analysis if c["size"] < 200]
         if tiny_chunks:
             issues.append(
                 f"Found {len(tiny_chunks)} tiny chunks (<200 chars) - may lose context"
             )
 
-        # Issue: Mixed heading levels
         mixed_chunks = [c for c in chunk_analysis if c["has_mixed_levels"]]
         if mixed_chunks:
             issues.append(f"Found {len(mixed_chunks)} chunks with mixed heading levels")
 
-        # Issue: Single chunk (not split at all)
         if len(chunks) == 1 and len(doc["content"]) > 2000:
             issues.append("Large document not split - may overwhelm retrieval")
 
@@ -595,7 +569,6 @@ def run_semantic_coherence_inspection(
         else:
             logger.info("\n  No coherence issues detected")
 
-    # Summary
     total_issues = sum(len(r["issues"]) for r in results)
     docs_with_issues = sum(1 for r in results if r["issues"])
 
@@ -650,17 +623,14 @@ def create_temp_index(
     ) -> list[str]:
         return original_chunk(content, max_chunk_chars=max_chunk_chars_override)
 
-    # Create indexer with temp paths
     indexer = WikiIndexer(kb_path, str(chroma_path), str(bm25_path))
 
-    # Override chunking function temporarily
     original_func = indexer_module.chunk_by_headings
     indexer_module.chunk_by_headings = patched_chunk
 
     try:
         chunk_count = indexer.build_index(force=True)
     finally:
-        # Restore original
         indexer_module.chunk_by_headings = original_func
 
     return indexer, chunk_count
@@ -709,10 +679,8 @@ def run_chunk_strategy_comparison(
             )
             logger.info(f"Created index with {chunk_count} chunks")
 
-            # Run retrieval test
             retrieval_results = run_retrieval_quality_test(indexer, top_k=5)
 
-            # Get size stats
             all_data = indexer.collection.get(include=["documents"])
             sizes = [len(c) for c in all_data["documents"]]
 
@@ -729,14 +697,12 @@ def run_chunk_strategy_comparison(
             logger.error(f"Failed to test strategy {strategy_name}: {e}")
             results[strategy_name] = {"error": str(e)}
 
-    # Clean up temp directories
     for temp_dir in temp_dirs:
         try:
             shutil.rmtree(temp_dir)
         except Exception as e:
             logger.warning(f"Failed to clean up {temp_dir}: {e}")
 
-    # Summary
     logger.info("\n" + "-" * 40)
     logger.info("STRATEGY COMPARISON SUMMARY")
     logger.info("-" * 40)
@@ -751,7 +717,6 @@ def run_chunk_strategy_comparison(
             logger.info(f"  Top-5 hit rate: {data['top_5_hit_rate']:.1%}")
             logger.info(f"  Mean size: {data['mean_chunk_size']:.0f} chars")
 
-    # Find best strategy
     valid_results = {k: v for k, v in results.items() if "error" not in v}
     if valid_results:
         best_top1 = max(
@@ -946,7 +911,6 @@ def main() -> None:
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
 
-    # Initialize indexer
     logger.info(f"Loading index from {settings.kb_path}...")
     indexer = WikiIndexer()
     indexer.build_index()  # Ensure index exists

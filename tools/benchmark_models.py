@@ -34,7 +34,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-# Add src directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -46,8 +45,6 @@ if TYPE_CHECKING:
 
 SEED = 42
 
-
-# Generic benchmark queries across search and documentation concepts
 
 # === CORE SEARCH CONCEPTS ===
 QUERIES_CORE = [
@@ -281,7 +278,6 @@ QUERIES_GOVERNANCE = [
     ("Audit logging requirements", ["audit", "logging", "monitoring"]),
 ]
 
-# Combine all queries
 TEST_QUERIES_FULL = (
     QUERIES_CORE
     + QUERIES_INDEXING
@@ -330,8 +326,6 @@ TEST_QUERIES_QUICK = [
 
 @dataclass
 class FileTypeCoverage:
-    """Coverage statistics for each file type."""
-
     extension: str
     file_count: int
     chunk_count: int
@@ -340,8 +334,6 @@ class FileTypeCoverage:
 
 @dataclass
 class BenchmarkResult:
-    """Results from benchmarking a single model."""
-
     model_name: str
     chunk_count: int
     top_1_accuracy: float
@@ -355,7 +347,6 @@ class BenchmarkResult:
 
 
 def get_dir_size_mb(path: Path) -> float:
-    """Get directory size in MB."""
     if not path.exists():
         return 0.0
     total = sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
@@ -369,11 +360,9 @@ def analyze_file_type_coverage(
     search_mode: str = "semantic",
 ) -> dict[str, FileTypeCoverage]:
     """Analyze which file types are indexed and retrieved."""
-    # Get all chunks with metadata
     all_data = indexer.collection.get(include=["metadatas"])
     metadatas = all_data["metadatas"]
 
-    # Count files and chunks per extension
     ext_file_count: dict[str, set[str]] = defaultdict(set)
     ext_chunk_count: dict[str, int] = defaultdict(int)
 
@@ -384,7 +373,6 @@ def analyze_file_type_coverage(
             ext_file_count[ext].add(path)
             ext_chunk_count[ext] += 1
 
-    # Run queries and track which file types are retrieved
     ext_hits: dict[str, int] = defaultdict(int)
     total_queries = len(test_queries)
 
@@ -400,7 +388,6 @@ def analyze_file_type_coverage(
                 ext_hits[ext] += 1
                 seen_exts.add(ext)
 
-    # Build coverage result
     coverage = {}
     all_exts = set(ext_chunk_count.keys()) | set(ext_hits.keys())
 
@@ -446,7 +433,6 @@ def benchmark_model(
     logger.info(f"Benchmarking: {model_name}{mode_suffix}")
     logger.info("=" * 60)
 
-    # Validate model
     if model_name not in SUPPORTED_MODELS:
         raise ValueError(f"Unknown model: {model_name}")
 
@@ -458,7 +444,6 @@ def benchmark_model(
     logger.info(f"ChromaDB: {indexer.chroma_path}")
     logger.info(f"BM25: {indexer.bm25_path}")
 
-    # Check if index exists, build if needed
     if indexer.collection.count() == 0:
         logger.info("\nBuilding index (first time)...")
         build_start = time.perf_counter()
@@ -470,7 +455,6 @@ def benchmark_model(
         build_time = 0.0
         logger.info(f"Using existing index: {chunk_count} chunks")
 
-    # Calculate index size
     chroma_size = get_dir_size_mb(indexer.chroma_path)
     bm25_size = get_dir_size_mb(indexer.bm25_path)
     total_size = chroma_size + bm25_size
@@ -478,10 +462,8 @@ def benchmark_model(
         f"Index size: {total_size:.1f} MB (ChromaDB: {chroma_size:.1f}, BM25: {bm25_size:.1f})"
     )
 
-    # Run retrieval quality test
     logger.info(f"\nTesting retrieval accuracy (mode: {search_mode})...")
 
-    # Create searcher based on mode
     if search_mode == "semantic":
         searcher = SemanticSearch(indexer.collection, indexer.backend)
         SemanticSearch._embedding_cache.clear()
@@ -504,12 +486,10 @@ def benchmark_model(
             hits = searcher.search(query, top_k=5)
 
         if hits:
-            # Check top-1
             top_content = hits[0]["content"].lower()
             if sum(1 for k in expected_keywords if k.lower() in top_content) >= 2:
                 top_1_hits += 1
 
-            # Check top-5
             all_content = " ".join(h["content"].lower() for h in hits[:5])
             if sum(1 for k in expected_keywords if k.lower() in all_content) >= 2:
                 top_5_hits += 1
@@ -520,11 +500,9 @@ def benchmark_model(
     logger.info(f"Top-1 accuracy: {top_1_accuracy:.1%}")
     logger.info(f"Top-5 accuracy: {top_5_accuracy:.1%}")
 
-    # Run latency test
     logger.info(f"\nMeasuring query latency ({latency_iterations} iterations)...")
     latencies = []
 
-    # Clear any cached embeddings
     SemanticSearch._embedding_cache.clear()
 
     for _ in range(latency_iterations):
@@ -553,13 +531,11 @@ def benchmark_model(
     logger.info(f"Latency p95: {latency_p95:.1f}ms")
     logger.info(f"Latency p99: {latency_p99:.1f}ms")
 
-    # Analyze file type coverage
     logger.info("\nAnalyzing file type coverage...")
     file_type_coverage = analyze_file_type_coverage(
         indexer, searcher, test_queries, search_mode
     )
 
-    # Log file type stats
     logger.info("\nFile type coverage:")
     for ext, cov in file_type_coverage.items():
         logger.info(
@@ -569,7 +545,6 @@ def benchmark_model(
 
     gc.collect()
 
-    # Include search mode in model name for comparison tables
     display_name = (
         f"{model_name} ({search_mode})" if search_mode != "semantic" else model_name
     )
@@ -589,12 +564,10 @@ def benchmark_model(
 
 
 def print_comparison_table(results: list[BenchmarkResult]) -> None:
-    """Print comparison table of benchmark results."""
     logger.info("\n" + "=" * 80)
     logger.info("MODEL COMPARISON RESULTS")
     logger.info("=" * 80)
 
-    # Header
     header = (
         f"{'Model':<30} | {'Top-1':>6} | {'Top-5':>6} | "
         f"{'p50 (ms)':>8} | {'p95 (ms)':>8} | {'Size (MB)':>9} | {'Build (s)':>9}"
@@ -602,7 +575,6 @@ def print_comparison_table(results: list[BenchmarkResult]) -> None:
     logger.info(header)
     logger.info("-" * 80)
 
-    # Rows
     for r in results:
         row = (
             f"{r.model_name:<30} | {r.top_1_accuracy:>5.1%} | {r.top_5_accuracy:>5.1%} | "
@@ -613,7 +585,6 @@ def print_comparison_table(results: list[BenchmarkResult]) -> None:
 
     logger.info("-" * 80)
 
-    # Find best model for each metric
     if len(results) > 1:
         best_top1 = max(results, key=lambda r: r.top_1_accuracy)
         best_top5 = max(results, key=lambda r: r.top_5_accuracy)
@@ -634,7 +605,6 @@ def print_comparison_table(results: list[BenchmarkResult]) -> None:
             f"  Index size:     {best_size.model_name} ({best_size.index_size_mb:.1f}MB)"
         )
 
-        # Recommendation
         logger.info("\n" + "-" * 40)
         logger.info("RECOMMENDATION:")
 
@@ -650,13 +620,11 @@ def print_comparison_table(results: list[BenchmarkResult]) -> None:
         else:
             logger.info(f"  Use {best_top1.model_name} - prioritize accuracy")
 
-    # Print file type coverage summary
     if results and results[0].file_type_coverage:
         print_file_type_coverage(results[0])
 
 
 def print_file_type_coverage(result: BenchmarkResult) -> None:
-    """Print file type coverage analysis."""
     if not result.file_type_coverage:
         return
 
@@ -666,11 +634,9 @@ def print_file_type_coverage(result: BenchmarkResult) -> None:
 
     coverage = result.file_type_coverage
 
-    # Expected wiki file types
     wiki_types = {".md", ".pdf", ".docx", ".pptx"}
     code_types = {".sql", ".py", ".yml", ".yaml", ".ipynb", ".ts", ".tsx"}
 
-    # Header
     header = f"{'Extension':<10} | {'Files':>6} | {'Chunks':>7} | {'Hit Rate':>9} | {'Status':<15}"
     logger.info(header)
     logger.info("-" * 60)
@@ -691,7 +657,6 @@ def print_file_type_coverage(result: BenchmarkResult) -> None:
             row = f"{ext:<10} | {0:>6} | {0:>7} | {'N/A':>9} | {status:<15}"
         logger.info(row)
 
-    # Additional types found in index
     extra_types = set(coverage.keys()) - wiki_types - code_types
     if extra_types:
         logger.info("\nAdditional file types in index:")
@@ -699,7 +664,6 @@ def print_file_type_coverage(result: BenchmarkResult) -> None:
             cov = coverage[ext]
             logger.info(f"  {ext}: {cov.file_count} files, {cov.chunk_count} chunks")
 
-    # Warnings
     logger.info("\n" + "-" * 40)
     if missing_types:
         logger.info(
@@ -710,7 +674,6 @@ def print_file_type_coverage(result: BenchmarkResult) -> None:
             f"WARNING: File types with 0% hit rate: {', '.join(sorted(low_coverage_types))}"
         )
 
-    # Overall coverage score
     wiki_indexed = sum(
         1 for t in wiki_types if t in coverage and coverage[t].chunk_count > 0
     )
@@ -746,12 +709,10 @@ def main() -> None:
     models_to_test = [args.model] if args.model else list(SUPPORTED_MODELS.keys())
     test_queries = TEST_QUERIES_QUICK if args.quick else TEST_QUERIES_FULL
 
-    # Determine search modes to test
-    search_mode = getattr(args, "search_mode", "semantic")
-    if search_mode == "all":
+    if args.search_mode == "all":
         search_modes = ["semantic", "bm25", "hybrid"]
     else:
-        search_modes = [search_mode]
+        search_modes = [args.search_mode]
 
     logger.info("Wiki Search Model Benchmark")
     logger.info(f"Knowledge base: {settings.kb_path}")

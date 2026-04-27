@@ -18,8 +18,6 @@ from trace_search.indexer import (
 
 
 class TestSupportedExtensions:
-    """Test supported file extensions."""
-
     # Document types
     def test_md_supported(self):
         assert ".md" in SUPPORTED_EXTENSIONS
@@ -64,8 +62,6 @@ class TestSupportedExtensions:
 
 
 class TestExtractTitle:
-    """Test title extraction for different file types."""
-
     def test_markdown_heading(self):
         content = "# My Document Title\n\nSome content here."
         path = Path("test.md")
@@ -97,14 +93,11 @@ class TestExtractTitle:
         assert extract_title(content, path) == "Document Title Here"
 
     def test_csv_extracts_first_row(self):
-        # CSV content starts with "Row N:" format, which is a valid title
         content = "Row 1: Name: John | Age: 30\nRow 2: Name: Jane | Age: 25"
         path = Path("meeting-notes.csv")
-        # First substantial line is used as title
         assert extract_title(content, path) == "Row 1: Name: John | Age: 30"
 
     def test_csv_fallback_to_filename(self):
-        # Short lines fall back to filename
         content = "Short\nAlso short"
         path = Path("meeting-notes.csv")
         assert extract_title(content, path) == "meeting-notes"
@@ -114,7 +107,6 @@ class TestExtractTitle:
         path = Path("empty-document.pdf")
         assert extract_title(content, path) == "empty-document"
 
-    # Code file title extraction tests
     def test_sql_uses_filename_with_extension(self):
         content = "SELECT * FROM users;"
         path = Path("schema_parser.sql")
@@ -152,8 +144,6 @@ class TestExtractTitle:
 
 
 class TestExtractCSVContent:
-    """Test CSV content extraction."""
-
     def test_basic_csv(self, tmp_path: Path):
         csv_file = tmp_path / "test.csv"
         csv_file.write_text("Name,Age,City\nJohn,30,New York\nJane,25,Boston\n")
@@ -198,8 +188,6 @@ class TestExtractPptxContent:
 
 
 class TestExtractCodeContent:
-    """Test code file content extraction."""
-
     def test_code_extraction_exists(self):
         assert callable(extract_code_content)
 
@@ -261,8 +249,6 @@ class TestExtractCodeContent:
 
 
 class TestExtractNotebookContent:
-    """Test Jupyter notebook content extraction."""
-
     def test_notebook_extraction_exists(self):
         assert callable(extract_notebook_content)
 
@@ -287,9 +273,10 @@ class TestExtractNotebookContent:
         assert "import pandas" in content
 
     def test_notebook_with_empty_cells(self, tmp_path: Path):
+        """Empty cells should be skipped, not labeled."""
         notebook = {
             "cells": [
-                {"cell_type": "code", "source": []},  # Empty cell
+                {"cell_type": "code", "source": []},
                 {"cell_type": "code", "source": ["print('hello')"]},
             ]
         }
@@ -298,7 +285,6 @@ class TestExtractNotebookContent:
 
         content = extract_notebook_content(nb_file)
 
-        # Empty cells should be skipped
         assert "[CODE CELL 1]" not in content
         assert "[CODE CELL 2]" in content
         assert "print('hello')" in content
@@ -338,15 +324,9 @@ class TestExtractNotebookContent:
 
 @pytest.mark.slow
 class TestIntegrationWithRealFiles:
-    """Integration tests using actual files from the knowledge base.
-
-    These tests use real files from the wiki to verify extraction works.
-    They're marked with skip conditions for when files aren't available.
-    """
+    """Integration tests using actual wiki files; skip when fixtures aren't available."""
 
     def test_pdf_from_wiki(self, wiki_path):
-        """Test extraction from a real PDF in the wiki."""
-        # Find first PDF
         pdfs = list(wiki_path.rglob("*.pdf"))
         if not pdfs:
             pytest.skip("No PDF files found in wiki")
@@ -354,14 +334,12 @@ class TestIntegrationWithRealFiles:
         pdf_path = pdfs[0]
         content = extract_pdf_content(pdf_path)
 
-        # Should return some content
         assert isinstance(content, str)
         # Content should be non-trivial (some PDFs may be scanned/images)
         if content.strip():
             assert len(content) > 10
 
     def test_docx_from_wiki(self, wiki_path):
-        """Test extraction from a real DOCX in the wiki."""
         docx_files = list(wiki_path.rglob("*.docx"))
         if not docx_files:
             pytest.skip("No DOCX files found in wiki")
@@ -370,11 +348,9 @@ class TestIntegrationWithRealFiles:
         content = extract_docx_content(docx_path)
 
         assert isinstance(content, str)
-        # DOCX should have content
         assert len(content) > 0
 
     def test_pptx_from_wiki(self, wiki_path):
-        """Test extraction from a real PPTX in the wiki."""
         pptx_files = list(wiki_path.rglob("*.pptx"))
         if not pptx_files:
             pytest.skip("No PPTX files found in wiki")
@@ -383,11 +359,9 @@ class TestIntegrationWithRealFiles:
         content = extract_pptx_content(pptx_path)
 
         assert isinstance(content, str)
-        # Should have slide markers
         assert "[Slide" in content
 
     def test_csv_from_wiki(self, wiki_path):
-        """Test extraction from a real CSV in the wiki."""
         csv_files = list(wiki_path.rglob("*.csv"))
         if not csv_files:
             pytest.skip("No CSV files found in wiki")
@@ -397,5 +371,5 @@ class TestIntegrationWithRealFiles:
             content = extract_csv_content(csv_path)
             assert isinstance(content, str)
         except Exception:
-            # Some CSVs might have encoding issues
+            # Some CSVs may have encoding issues; skip rather than fail
             pytest.skip(f"Could not parse CSV: {csv_path}")

@@ -6,8 +6,6 @@ from trace_search.config import Settings
 
 
 class TestKBCollectionsParsing:
-    """Test KB_COLLECTIONS config parsing."""
-
     def test_parse_two_collections(self, tmp_path, monkeypatch):
         monkeypatch.delenv("KB_PATH", raising=False)
         kb1 = tmp_path / "wiki"
@@ -82,8 +80,6 @@ class TestKBCollectionsParsing:
 
 
 class TestCollectionRegistry:
-    """Test CollectionRegistry initialization and routing."""
-
     def test_collection_names_sorted(self, tmp_path):
         from trace_search.server_app import CollectionRegistry
 
@@ -149,8 +145,6 @@ class TestCollectionRegistry:
 
 
 class TestCollectionReset:
-    """Test Collection.reset() clears all cached slots."""
-
     def test_reset_clears_all_slots(self, tmp_path):
         from unittest.mock import MagicMock
 
@@ -171,8 +165,6 @@ class TestCollectionReset:
 
 
 class TestListDocumentsLimit:
-    """Test list_documents honors limit as the sole bound."""
-
     def test_limit_respected_single_folder(self, tmp_path):
         from trace_search.server_app import CollectionRegistry
 
@@ -185,7 +177,6 @@ class TestListDocumentsLimit:
 
         reg = CollectionRegistry({"docs": kb})
         result = reg.list_documents(folder=None, limit=10, collection=None)
-        # Count listed docs (lines starting with "- **")
         listed = [line for line in result.splitlines() if line.startswith("- **")]
         assert len(listed) == 10
 
@@ -206,8 +197,6 @@ class TestListDocumentsLimit:
 
 
 class TestGetDocumentWarning:
-    """Test get_document emits warning on traversal rejection."""
-
     def test_traversal_rejection_emits_warning(self, tmp_path, caplog):
         import logging
 
@@ -249,8 +238,6 @@ class TestGetDocumentWarning:
 
 
 class TestBuildMultiMcp:
-    """Test build_multi_mcp creates server with collection-aware tools."""
-
     def test_tools_have_collection_param(self, tmp_path):
         from trace_search.server_app import build_multi_mcp
 
@@ -281,8 +268,6 @@ class TestBuildMultiMcp:
 
 
 class TestMergeResults:
-    """Test result merging across collections."""
-
     def test_merge_interleaves_by_score(self):
         from trace_search.server_app import CollectionRegistry
 
@@ -320,8 +305,6 @@ class TestMergeResults:
 
 
 class TestResolveAllCaseInsensitive:
-    """Tests for case-insensitive 'all' handling in _resolve."""
-
     def _make_registry(self, tmp_path):
         from trace_search.server_app import CollectionRegistry
 
@@ -364,8 +347,6 @@ class TestResolveAllCaseInsensitive:
 
 
 class TestTraceServerImport:
-    """Test that trace_server module can be imported without KB env vars."""
-
     def test_import_succeeds(self):
         import trace_search.trace_server as ks
 

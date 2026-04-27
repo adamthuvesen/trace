@@ -214,12 +214,10 @@ def extract_docx_content(path: Path) -> str:
     doc = Document(path)
     texts = []
 
-    # Extract paragraphs
     for para in doc.paragraphs:
         if para.text.strip():
             texts.append(para.text)
 
-    # Extract tables
     for table in doc.tables:
         for row in table.rows:
             row_text = " | ".join(
@@ -241,7 +239,6 @@ def extract_pptx_content(path: Path) -> str:
     for slide_num, slide in enumerate(prs.slides, 1):
         slide_texts = [f"[Slide {slide_num}]"]
 
-        # Extract text from shapes
         for shape in slide.shapes:
             if shape.has_text_frame:
                 for para in shape.text_frame.paragraphs:
@@ -255,7 +252,6 @@ def extract_pptx_content(path: Path) -> str:
                     if row_text:
                         slide_texts.append(row_text)
 
-        # Extract speaker notes
         if slide.has_notes_slide:
             notes_text = slide.notes_slide.notes_text_frame.text.strip()
             if notes_text:
@@ -355,7 +351,6 @@ def _get_overlap_text(chunk: str, overlap_size: int, use_tokens: bool) -> str:
         return ""
     if use_tokens:
         return _get_token_counter().get_last_n_tokens(chunk, overlap_size)
-    # Character-based: take last N chars
     return chunk[-overlap_size:] if len(chunk) > overlap_size else chunk
 
 
@@ -839,38 +834,31 @@ class WikiIndexer:
         logger.info("ChromaDB path: %s", self.chroma_path)
         logger.info("BM25 path: %s", self.bm25_path)
 
-        # Initialize ChromaDB with persistence
         self.client = chromadb.PersistentClient(
             path=str(self.chroma_path),
             settings=ChromaSettings(anonymized_telemetry=False),
         )
 
-        # Embedding backend: reuse shared instance or construct default
         self.backend: EmbeddingBackend = backend or build_embedding_backend()
 
-        # Get or create collection
         self.collection = self.client.get_or_create_collection(
             name="wiki_docs",
             metadata={"hnsw:space": "cosine"},
         )
 
-        # BM25 index (lazy loaded)
         self._bm25: bm25s.BM25 | None = None
-        self._bm25_corpus: list[dict] | None = None  # metadata for each doc
+        self._bm25_corpus: list[dict] | None = None
         self._stemmer = Stemmer.Stemmer("english")
 
     def _get_relative_path(self, path: Path) -> str:
-        """Get path relative to knowledge base."""
         return str(path.relative_to(self.kb_path))
 
     def _get_folder(self, path: Path) -> str:
-        """Get top-level folder name."""
         rel = path.relative_to(self.kb_path)
         parts = rel.parts
         return parts[0] if len(parts) > 1 else ""
 
     def _should_exclude(self, path: Path) -> bool:
-        """Check if path should be excluded based on patterns (exact part match)."""
         return should_exclude_path(path, self.kb_path)
 
     def load_documents(self) -> list[dict[str, str]]:

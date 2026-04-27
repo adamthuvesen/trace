@@ -98,7 +98,6 @@ class Settings(BaseSettings):
     @field_validator("kb_path")
     @classmethod
     def validate_kb_path(cls, v: Path | None) -> Path | None:
-        """Validate that knowledge base path exists."""
         if v is None:
             return None
         if not v.exists():
@@ -110,7 +109,6 @@ class Settings(BaseSettings):
     @field_validator("embedding_model")
     @classmethod
     def validate_embedding_model(cls, v: str) -> str:
-        """Validate embedding model is supported."""
         if v not in SUPPORTED_MODELS:
             raise ValueError(
                 f"Unknown embedding model: {v}. "
@@ -121,7 +119,6 @@ class Settings(BaseSettings):
     @field_validator("char_chunk_size")
     @classmethod
     def warn_large_char_chunk(cls, v: int) -> int:
-        """Warn if chunk size is very large."""
         if v > 5000:
             logging.getLogger(__name__).warning(
                 "char_chunk_size=%d may exceed embedding model context", v
@@ -130,22 +127,19 @@ class Settings(BaseSettings):
 
     @property
     def embedding_dims(self) -> int:
-        """Get embedding dimensions for current model."""
         return SUPPORTED_MODELS[self.embedding_model]["dims"]
 
     @property
     def embedding_pooling(self) -> str:
-        """Get pooling method for current model."""
         return SUPPORTED_MODELS[self.embedding_model]["pooling"]
 
     @property
     def model_slug(self) -> str:
-        """Get filesystem-safe model name slug."""
+        """Filesystem-safe model name slug."""
         return self.embedding_model.replace("/", "_").replace("-", "_").lower()
 
     @property
     def exclude_patterns_list(self) -> list[str]:
-        """Get list of exclude patterns."""
         return [p.strip() for p in self.exclude_patterns.split(",") if p.strip()]
 
     @property
@@ -200,7 +194,6 @@ class Settings(BaseSettings):
 
     @property
     def tokenizer_model(self) -> str:
-        """Get tokenizer model for current embedding model."""
         tokenizer_map = {
             "all-MiniLM-L6-v2": "sentence-transformers/all-MiniLM-L6-v2",
         }
@@ -209,7 +202,6 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Get cached settings instance."""
     return Settings()
 
 
@@ -220,12 +212,10 @@ class _LazySettingsProxy:
         return getattr(get_settings(), name)
 
 
-# Module-level lazy proxy for convenience
 settings = _LazySettingsProxy()
 
 
 def configure_logging() -> None:
-    """Configure logging based on settings."""
     log_level = get_settings().log_level
     logging.basicConfig(
         level=getattr(logging, log_level.upper()),

@@ -26,7 +26,6 @@ from pathlib import Path
 import click
 import yaml
 
-# Add src directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from tools.eval.evaluator import get_golden_queries_path, load_golden_queries
@@ -60,18 +59,12 @@ class PathFix:
 def extract_path_keywords(path: str) -> set[str]:
     """Extract meaningful keywords from a file path.
 
-    Normalizes and extracts words from path components, ignoring:
-    - Hex suffixes from some wiki exports (32+ char hex strings)
-    - Common structural words (e.g., 'of', 'the', 'and')
-    - Very short words (< 3 chars)
+    Strips file extension, Notion-style hex IDs (24+ chars), short words (< 3),
+    and common stopwords.
     """
-    # Remove file extension
     path_no_ext = re.sub(r"\.[a-z]+$", "", path, flags=re.IGNORECASE)
-
-    # Split on path separators and various delimiters
     parts = re.split(r"[/\\_\-\s]+", path_no_ext)
 
-    # Filter and normalize
     keywords = set()
     stopwords = {
         "of",
@@ -89,20 +82,13 @@ def extract_path_keywords(path: str) -> set[str]:
     }
 
     for part in parts:
-        # Skip Notion-style IDs (32 char hex)
         if re.match(r"^[0-9a-f]{24,}$", part, re.IGNORECASE):
             continue
-
-        # Skip very short words
         if len(part) < 3:
             continue
-
         word = part.lower()
-
-        # Skip stopwords
         if word in stopwords:
             continue
-
         keywords.add(word)
 
     return keywords
@@ -126,7 +112,6 @@ def calculate_keyword_overlap(
 
     for keyword in expected_keywords:
         keyword_lower = keyword.lower()
-        # Check if keyword appears in path (allowing for word boundaries)
         if keyword_lower in path_lower:
             matched.append(keyword)
         else:
@@ -159,15 +144,12 @@ def determine_confidence(
     if not new_path_exists:
         return "low"
 
-    # Very high keyword match - almost certainly correct
     if keyword_overlap >= 0.90:
         return "high"
 
-    # Good keyword match with supporting evidence
     if keyword_overlap >= 0.75 and (not old_path_exists or category_matches):
         return "high"
 
-    # Moderate keyword match
     if keyword_overlap >= 0.50:
         return "medium"
 
@@ -190,11 +172,9 @@ def analyze_queries(
     from trace_search.indexer import WikiIndexer
     from trace_search.search import HybridSearch, KeywordSearch, SemanticSearch
 
-    # Load all queries (not just quick set), including stress_set entries
     queries = load_golden_queries(quick_only=False, include_stress=True)
     logger.info("Analyzing %d golden queries...", len(queries))
 
-    # Initialize indexer
     indexer = WikiIndexer()
     if indexer.collection.count() == 0:
         logger.info("Building index...")
@@ -202,7 +182,6 @@ def analyze_queries(
     else:
         logger.info("Using existing index: %d chunks", indexer.collection.count())
 
-    # Create searcher
     if search_mode == "semantic":
         searcher = SemanticSearch(indexer.collection, indexer.backend)
     elif search_mode == "bm25":
@@ -215,7 +194,6 @@ def analyze_queries(
     for i, query in enumerate(queries, 1):
         logger.debug("[%d/%d] Analyzing: %s", i, len(queries), query.query[:50])
 
-        # Run search
         if search_mode == "bm25":
             hits = searcher.search(query.query, max_results=5)
         else:
@@ -225,29 +203,23 @@ def analyze_queries(
             logger.warning("No results for query: %s", query.id)
             continue
 
-        # Get top result
         retrieved_path = hits[0]["path"]
 
-        # Check if already matching
         if query.matches_path(retrieved_path):
-            continue  # No fix needed
+            continue
 
-        # Calculate keyword overlap for retrieved path
         overlap, matched, missing = calculate_keyword_overlap(
             query.expected_keywords,
             retrieved_path,
         )
 
-        # Check if paths exist
         old_full_path = kb_path / query.expected_path
         new_full_path = kb_path / retrieved_path
         old_exists = old_full_path.exists()
         new_exists = new_full_path.exists()
 
-        # Check category match (retrieved path folder vs query category)
         category_matches = _path_matches_category(retrieved_path, query.category)
 
-        # Determine confidence
         confidence = determine_confidence(
             keyword_overlap=overlap,
             old_path_exists=old_exists,
@@ -255,7 +227,6 @@ def analyze_queries(
             category_matches=category_matches,
         )
 
-        # Create reason
         reasons = []
         if not old_exists:
             reasons.append("old path doesn't exist")
@@ -291,7 +262,6 @@ def _path_matches_category(path: str, category: str) -> bool:
     path_lower = path.lower()
     category_lower = category.lower()
 
-    # Map categories to expected path patterns
     category_patterns = {
         "concepts": ["glossary", "search"],
         "indexing": ["indexing", "extract", "format"],
@@ -325,7 +295,6 @@ def apply_fixes(
     Returns:
         Number of fixes applied.
     """
-    # Filter by confidence threshold
     confidence_order = {"high": 3, "medium": 2, "low": 1}
     min_confidence = confidence_order[confidence_threshold]
     applicable = [f for f in fixes if confidence_order[f.confidence] >= min_confidence]
@@ -334,14 +303,11 @@ def apply_fixes(
         logger.info("No fixes to apply at confidence level: %s", confidence_threshold)
         return 0
 
-    # Load existing file
     with open(get_golden_queries_path()) as f:
         data = yaml.safe_load(f)
 
-    # Build lookup of fixes by query_id
     fix_map = {f.query_id: f for f in applicable}
 
-    # Apply fixes
     applied = 0
     for query in data.get("queries", []):
         query_id = query.get("id")
@@ -350,7 +316,6 @@ def apply_fixes(
             old_path = query["expected_path"]
             query["expected_path"] = fix.new_path
 
-            # Update file_type if extension changed
             old_ext = Path(old_path).suffix
             new_ext = Path(fix.new_path).suffix
             if old_ext != new_ext:
@@ -361,7 +326,6 @@ def apply_fixes(
             )
             applied += 1
 
-    # Save updated file
     with open(get_golden_queries_path(), "w") as f:
         yaml.dump(
             data,
@@ -384,7 +348,6 @@ def generate_report(fixes: list[PathFix], verbose: bool = False) -> str:
     lines.append("=" * 80)
     lines.append("")
 
-    # Count by confidence
     by_confidence = {"high": [], "medium": [], "low": []}
     for fix in fixes:
         by_confidence[fix.confidence].append(fix)
@@ -397,7 +360,6 @@ def generate_report(fixes: list[PathFix], verbose: bool = False) -> str:
     lines.append(f"  Low confidence:    {len(by_confidence['low'])}")
     lines.append("")
 
-    # Detailed breakdown by confidence level
     for level in ["high", "medium", "low"]:
         level_fixes = by_confidence[level]
         if not level_fixes:
@@ -467,14 +429,12 @@ def main(
     verbose: bool,
 ) -> None:
     """Verify and fix expected paths in golden queries."""
-    # Default to dry-run if neither specified
     if not apply:
         dry_run = True
 
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    # Get KB path from settings
     from trace_search.config import settings
 
     kb_path = Path(settings.kb_path)
@@ -483,18 +443,15 @@ def main(
     click.echo(f"Search mode: {search}")
     click.echo()
 
-    # Analyze queries
     fixes = analyze_queries(kb_path, search_mode=search)
 
     if not fixes:
         click.echo("All queries already have correct expected paths!")
         return
 
-    # Generate and print report
     report = generate_report(fixes, verbose=verbose)
     click.echo(report)
 
-    # Apply fixes if requested
     if apply and not dry_run:
         click.echo("=" * 80)
         click.echo(f"APPLYING FIXES (confidence >= {confidence})")

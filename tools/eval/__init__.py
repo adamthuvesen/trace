@@ -18,14 +18,7 @@ THRESHOLDS_PATH = EVAL_DIR / "thresholds.yaml"
 
 
 def load_thresholds() -> dict:
-    """Load evaluation thresholds from YAML.
-
-    Returns:
-        Dictionary containing threshold configuration.
-
-    Raises:
-        ValueError: If the YAML file is invalid or missing.
-    """
+    """Load evaluation thresholds from YAML."""
     try:
         with open(THRESHOLDS_PATH) as f:
             data = yaml.safe_load(f)

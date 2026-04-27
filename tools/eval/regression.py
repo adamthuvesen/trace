@@ -27,14 +27,12 @@ def get_latest_baseline(search_mode: str | None = None) -> Path | None:
     if not baselines:
         return None
 
-    # Filter by search mode if specified
     if search_mode:
         baselines = [b for b in baselines if search_mode in b.stem]
 
     if not baselines:
         return None
 
-    # Sort by modification time, newest first
     baselines.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     return baselines[0]
 
@@ -47,11 +45,9 @@ def compare_results(
     thresholds = load_thresholds()
     reg_thresh = thresholds["regression"]
 
-    # Calculate deltas
     top_1_delta = current.top_1_path_accuracy - baseline.top_1_path_accuracy
     top_5_delta = current.top_5_path_accuracy - baseline.top_5_path_accuracy
 
-    # Calculate latency delta (percentage increase)
     if baseline.latency_p95_ms > 0:
         latency_delta_pct = (
             current.latency_p95_ms - baseline.latency_p95_ms
@@ -59,11 +55,9 @@ def compare_results(
     else:
         latency_delta_pct = 0.0
 
-    # Build result maps for comparison
     current_results = {r.query_id: r for r in current.results}
     baseline_results = {r.query_id: r for r in baseline.results}
 
-    # Find regressed and improved queries
     regressed_queries = []
     improved_queries = []
 
@@ -71,7 +65,6 @@ def compare_results(
         curr = current_results[query_id]
         base = baseline_results[query_id]
 
-        # Check for regression (pass -> fail)
         if base.top_1_path_hit and not curr.top_1_path_hit:
             regressed_queries.append(
                 QueryRegression(
@@ -84,7 +77,6 @@ def compare_results(
                 )
             )
 
-        # Check for improvement (fail -> pass)
         elif not base.top_1_path_hit and curr.top_1_path_hit:
             improved_queries.append(
                 QueryRegression(
@@ -97,14 +89,10 @@ def compare_results(
                 )
             )
 
-    # Determine if regression is significant
     has_regression = (
-        # Accuracy dropped significantly
         top_1_delta < -reg_thresh["top_1_drop_threshold"]
         or top_5_delta < -reg_thresh["top_5_drop_threshold"]
-        # Latency increased significantly
         or latency_delta_pct > reg_thresh["latency_increase_threshold"]
-        # Enough individual queries regressed
         or len(regressed_queries) >= reg_thresh["min_regressed_queries"]
     )
 
@@ -158,21 +146,18 @@ def check_ci_thresholds(
     prefix = "[stress] " if stress_subset else ""
     fail_on = ci_config.get("fail_on", [])
 
-    # Check Top-1 accuracy
     if "top_1_below_critical" in fail_on:
         if report.top_1_path_accuracy < path_thresh["top_1"]["critical"]:
             failures.append(
                 f"{prefix}Top-1 path accuracy ({report.top_1_path_accuracy:.1%}) below critical threshold ({path_thresh['top_1']['critical']:.0%})"
             )
 
-    # Check Top-5 accuracy
     if "top_5_below_critical" in fail_on:
         if report.top_5_path_accuracy < path_thresh["top_5"]["critical"]:
             failures.append(
                 f"{prefix}Top-5 path accuracy ({report.top_5_path_accuracy:.1%}) below critical threshold ({path_thresh['top_5']['critical']:.0%})"
             )
 
-    # Check keyword accuracy (optional in CI config)
     if "top_1_keyword_below_critical" in fail_on:
         crit = keyword_thresh["top_1"]["critical"]
         if report.top_1_keyword_accuracy < crit:
@@ -193,14 +178,12 @@ def check_ci_thresholds(
                 f"{prefix}Mean reciprocal rank ({report.mean_reciprocal_rank:.3f}) below critical threshold ({crit:.3f})"
             )
 
-    # Check latency
     if "latency_above_critical" in fail_on:
         if report.latency_p95_ms > latency_thresh["p95"]["critical"]:
             failures.append(
                 f"{prefix}Latency p95 ({report.latency_p95_ms:.1f}ms) above critical threshold ({latency_thresh['p95']['critical']}ms)"
             )
 
-    # Check regression
     if "regression_detected" in fail_on:
         if report.regression and report.regression.has_regression:
             failures.append(
