@@ -130,24 +130,57 @@ class Collection:
         backend: EmbeddingBackend | None = None,
     ) -> str | None:
         """Fetch bounded neighboring chunk content for richer context packets."""
-        if chunk_index is None or chunk_count is None or chunk_count <= 1:
-            return None
-        neighbor_ids = [
-            f"{path}::{i}"
-            for i in (chunk_index - 1, chunk_index + 1)
-            if 0 <= i < chunk_count
-        ]
-        if not neighbor_ids:
-            return None
+        return self.get_neighbor_contents_batch(
+            [(path, chunk_index, chunk_count)],
+            backend,
+        )[0]
+
+    def get_neighbor_contents_batch(
+        self,
+        requests: list[tuple[str, int | None, int | None]],
+        backend: EmbeddingBackend | None = None,
+    ) -> list[str | None]:
+        """Batch-fetch neighbor content for many `(path, chunk_index, chunk_count)`
+        triples in a single ChromaDB `get()` call.
+
+        Returns a list aligned with `requests`; entries are `None` when a hit has no
+        valid neighbors or none could be found.
+        """
+        request_ids: list[list[str]] = []
+        all_ids: set[str] = set()
+        for path, chunk_index, chunk_count in requests:
+            if chunk_index is None or chunk_count is None or chunk_count <= 1:
+                request_ids.append([])
+                continue
+            ids = [
+                f"{path}::{i}"
+                for i in (chunk_index - 1, chunk_index + 1)
+                if 0 <= i < chunk_count
+            ]
+            request_ids.append(ids)
+            all_ids.update(ids)
+
+        if not all_ids:
+            return [None] * len(requests)
+
         indexer = self.ensure_index(backend)
         results = indexer.collection.get(
-            ids=neighbor_ids,
+            ids=list(all_ids),
             include=["documents", "metadatas"],
         )
-        docs = results.get("documents") or []
-        if not docs:
-            return None
-        return "\n\n".join(str(doc) for doc in docs if doc)
+        id_to_doc: dict[str, str] = {}
+        for chunk_id, doc in zip(
+            results.get("ids") or [],
+            results.get("documents") or [],
+        ):
+            if doc:
+                id_to_doc[chunk_id] = str(doc)
+
+        output: list[str | None] = []
+        for ids in request_ids:
+            docs = [id_to_doc[cid] for cid in ids if cid in id_to_doc]
+            output.append("\n\n".join(docs) if docs else None)
+        return output
 
     def rebuild(self, backend: EmbeddingBackend | None = None) -> int:
         """Clear caches, force-rebuild the index, and return the new chunk count."""
@@ -256,20 +289,12 @@ class CollectionRegistry:
             return SmartSearchResult(hits=hits, route=result.route)
 
         results = [c.get_smart(self.backend).search(query, top_k) for c in cols]
-        tagged_lists: list[list[dict]] = []
-        for result, col in zip(results, cols):
-            tagged_hits = []
-            for hit in result.hits:
-                hit = self._with_neighbor_context(col, hit)
-                hit["collection"] = col.name
-                tagged_hits.append(hit)
-            tagged_lists.append(tagged_hits)
-
         merged_hits = self._merge_results(
-            tagged_lists,
+            [result.hits for result in results],
             top_k,
             [c.name for c in cols],
         )
+        self._attach_neighbors_batched(merged_hits, cols)
         fallback_used = any(result.route.fallback_used for result in results)
         strategy = "hybrid" if fallback_used else "keyword"
         reasons = sorted({result.route.reason for result in results})
@@ -309,6 +334,35 @@ class CollectionRegistry:
                 self.backend,
             )
         return enriched
+
+    def _attach_neighbors_batched(
+        self, hits: list[dict], cols: list[Collection]
+    ) -> None:
+        """Group `hits` by their `collection` tag and issue one batched neighbor
+        fetch per collection. Mutates each hit in place to set `neighbor_content`.
+        """
+        col_by_name = {c.name: c for c in cols}
+        by_collection: dict[str, list[dict]] = defaultdict(list)
+        for hit in hits:
+            if "neighbor_content" in hit:
+                continue
+            col_name = hit.get("collection")
+            if col_name in col_by_name:
+                by_collection[col_name].append(hit)
+
+        for col_name, col_hits in by_collection.items():
+            col = col_by_name[col_name]
+            requests = [
+                (
+                    str(h.get("path", "")),
+                    h.get("chunk_index"),
+                    h.get("chunk_count"),
+                )
+                for h in col_hits
+            ]
+            neighbors = col.get_neighbor_contents_batch(requests, self.backend)
+            for hit, neighbor in zip(col_hits, neighbors):
+                hit["neighbor_content"] = neighbor
 
     @staticmethod
     def _merge_results(
