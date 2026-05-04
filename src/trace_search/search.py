@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import heapq
 import logging
 import re
 from collections import OrderedDict, defaultdict
@@ -33,7 +34,7 @@ class SemanticSearch:
     """Vector-based semantic search using ChromaDB."""
 
     # Class-level LRU cache keyed by (model_slug, query) to prevent cross-model collisions
-    _embedding_cache: ClassVar[OrderedDict[tuple[str, str], tuple[float, ...]]] = (
+    _embedding_cache: ClassVar[OrderedDict[tuple[str, str], list[float]]] = (
         OrderedDict()
     )
     _cache_hits: ClassVar[int] = 0
@@ -54,13 +55,14 @@ class SemanticSearch:
     def _get_query_embedding(self, query: str) -> list[float]:
         """Get embedding for query, using LRU cache keyed by (model_slug, query)."""
         cache_key = (self._model_slug, query)
-        if cache_key in self._embedding_cache:
+        cached = self._embedding_cache.get(cache_key)
+        if cached is not None:
             SemanticSearch._cache_hits += 1
             self._embedding_cache.move_to_end(cache_key)
-            return list(self._embedding_cache[cache_key])
+            return list(cached)
 
         SemanticSearch._cache_misses += 1
-        embedding = tuple(self.backend.encode_one(query).tolist())
+        embedding = self.backend.encode_one(query).tolist()
 
         if len(self._embedding_cache) >= self._cache_maxsize:
             self._embedding_cache.popitem(last=False)
@@ -141,9 +143,7 @@ class KeywordSearch:
         bm25 = self.indexer.bm25
         metadata_list = self.indexer.bm25_corpus
 
-        if bm25 is None or metadata_list is None:
-            return []
-        if not metadata_list:
+        if bm25 is None or not metadata_list:
             return []
 
         query_tokens = bm25s.tokenize(
@@ -295,12 +295,12 @@ class HybridSearch:
             if chunk_id not in doc_data:
                 doc_data[chunk_id] = hit
 
-        ranked_ids = sorted(
-            rrf_scores.keys(), key=lambda cid: rrf_scores[cid], reverse=True
+        ranked_ids = heapq.nlargest(
+            top_k * candidate_multiplier, rrf_scores, key=rrf_scores.__getitem__
         )
 
         candidates = []
-        for chunk_id in ranked_ids[: top_k * candidate_multiplier]:
+        for chunk_id in ranked_ids:
             result = doc_data[chunk_id].copy()
             result["rrf_score"] = rrf_scores[chunk_id]
             result["source"] = "hybrid"
@@ -342,9 +342,7 @@ NeighborLookup = Callable[[str, int, int], list[dict[str, Any]]]
 def _query_terms(query: str) -> list[str]:
     """Extract meaningful lowercase terms for hints and snippets."""
     return [
-        term
-        for term in re.findall(r"[A-Za-z0-9_/-]+", query.lower())
-        if len(term) > 1
+        term for term in re.findall(r"[A-Za-z0-9_/-]+", query.lower()) if len(term) > 1
     ]
 
 
@@ -623,7 +621,9 @@ def format_context_packets(
 
             neighbor = hit.get("neighbor_content")
             if neighbor:
-                lines.append(f"- **Nearby context:** {_trim_at_boundary(str(neighbor), 220)}")
+                lines.append(
+                    f"- **Nearby context:** {_trim_at_boundary(str(neighbor), 220)}"
+                )
 
             snippets_added += 1
             if snippets_added >= max_snippets_per_document:
@@ -676,10 +676,7 @@ def format_results(hits: list[dict[str, Any]], include_content: bool = True) -> 
                 lines.append(f"**RRF Score:** {rrf:.4f}")
 
         if include_content:
-            content = hit.get("content", "")
-            if len(content) > 500:
-                cut = content.rfind(" ", 0, 500)
-                content = content[: cut if cut > 0 else 500] + "..."
+            content = _trim_at_boundary(hit.get("content", ""), 500)
             lines.append(f"\n**Preview:**\n{content}\n")
 
     return "\n".join(lines)
