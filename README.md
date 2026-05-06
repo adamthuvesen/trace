@@ -1,15 +1,13 @@
 # Trace
 
-Local retrieval for file-backed knowledge bases.
+Local retrieval for file-backed knowledge bases. Indexes documents on disk and exposes search, document, index, and diagnostic operations through a CLI or MCP server. 
 
-Trace indexes documents on disk and exposes the same search, document, index,
-and diagnostic operations through two equal interfaces: a CLI for humans and MCP
-for agents. Search combines BM25 keyword matching, vector semantic search, and a
-smart default route that starts lexical and falls back to hybrid search when
-results look weak.
+Search modes:
+- BM25 keyword matching
+- Vector semantic search
+- Smart (default): starts lexical, falls back to hybrid when results look weak
 
-Supported files: Markdown, PDF, Word, PowerPoint, CSV, SQL, Python, YAML,
-TypeScript, and Jupyter notebooks.
+Supported formats: Markdown, PDF, Word, PowerPoint, CSV, SQL, Python, YAML, TypeScript, Jupyter notebooks.
 
 ## What Trace Does
 
