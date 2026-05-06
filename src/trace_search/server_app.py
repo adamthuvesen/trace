@@ -27,8 +27,6 @@ from trace_search.search import (
     SemanticSearch,
     SmartSearch,
     SmartSearchResult,
-    format_results,
-    format_smart_search,
 )
 
 configure_logging()
@@ -607,7 +605,10 @@ def build_multi_mcp(
             inside each KB under .mcp-search/indexes/.
         instructions: Custom server instructions. Auto-generated if None.
     """
+    from trace_search.operations import TraceOperations
+
     registry = CollectionRegistry(collections, index_root)
+    operations = TraceOperations(registry)
 
     if instructions is None:
         instructions = _build_multi_instructions(registry.collection_names)
@@ -621,8 +622,7 @@ def build_multi_mcp(
         Starts with fast BM25 keyword matching, then falls back when results are weak.
         Set `collection` to target a specific knowledge base, or omit to search all.
         """
-        result = registry.search_smart(query, top_k, collection)
-        return format_smart_search(result, query)
+        return operations.search(query, top_k, collection)
 
     @mcp.tool()
     def semantic_search(
@@ -633,29 +633,26 @@ def build_multi_mcp(
         Use when `search` doesn't find what you need, especially for vague
         conceptual questions. Set `collection` to target a specific knowledge base.
         """
-        results = registry.search_semantic(query, top_k, collection)
-        return format_results(results)
+        return operations.semantic_search(query, top_k, collection)
 
     @mcp.tool()
     def keyword_search(
         keyword: str, max_results: int = 20, collection: str | None = None
     ) -> str:
         """Alias for `search`. Use `search` instead - it's the same BM25 engine."""
-        results = registry.search_keyword(keyword, max_results, collection)
-        return format_results(results)
+        return operations.keyword_search(keyword, max_results, collection)
 
     @mcp.tool()
     def search_hybrid(
         query: str, top_k: int = 10, collection: str | None = None
     ) -> str:
         """Combined semantic + keyword search. Use as fallback if `search` fails."""
-        results = registry.search_hybrid(query, top_k, collection)
-        return format_results(results)
+        return operations.search_hybrid(query, top_k, collection)
 
     @mcp.tool()
     def get_document(path: str, collection: str | None = None) -> str:
         """Retrieve full content of a document. Set `collection` to disambiguate."""
-        return registry.get_document(path, collection)
+        return operations.get_document(path, collection)
 
     @mcp.tool()
     def list_documents(
@@ -664,12 +661,12 @@ def build_multi_mcp(
         collection: str | None = None,
     ) -> str:
         """List available documents. Set `collection` to filter by knowledge base."""
-        return registry.list_documents(folder, limit, collection)
+        return operations.list_documents(folder, limit, collection)
 
     @mcp.tool()
     def index_stats(collection: str | None = None) -> str:
         """Get statistics about search indexes. Set `collection` for a specific one."""
-        return registry.index_stats(collection)
+        return operations.index_stats(collection)
 
     @mcp.tool()
     def reindex(collection: str | None = None) -> str:
@@ -677,7 +674,7 @@ def build_multi_mcp(
 
         Set `collection` to reindex a specific knowledge base, or omit to reindex all.
         """
-        return registry.reindex(collection)
+        return operations.reindex(collection)
 
     @mcp.tool()
     def doctor(
@@ -685,7 +682,7 @@ def build_multi_mcp(
         collection: str | None = None,
     ) -> str:
         """Diagnose Trace configuration, corpus visibility, index health, and queries."""
-        return registry.doctor(sample_query=sample_query, collection=collection)
+        return operations.doctor(sample_query=sample_query, collection=collection)
 
     return mcp, {
         "search": search,
