@@ -343,3 +343,19 @@ class TestListDocumentsDeterminism:
 
         assert "`docs/intro.md`" in result
         assert "node_modules" not in result
+
+    def test_list_documents_skips_outside_symlink(self, tmp_path):
+        kb = tmp_path / "kb"
+        outside = tmp_path / "outside"
+        kb.mkdir()
+        outside.mkdir()
+        (kb / "intro.md").write_text("# Intro\n\nContent", encoding="utf-8")
+        target = outside / "secret.md"
+        target.write_text("# Secret\n\nShould not list", encoding="utf-8")
+        (kb / "secret-link.md").symlink_to(target)
+
+        _, tools = build_multi_mcp("symlink-test", {"docs": kb})
+        result = tools["list_documents"].fn(limit=50)
+
+        assert "`intro.md`" in result
+        assert "secret-link.md" not in result

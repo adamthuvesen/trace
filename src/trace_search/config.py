@@ -1,6 +1,7 @@
 """Configuration management using pydantic-settings."""
 
 import logging
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
@@ -13,6 +14,17 @@ SUPPORTED_MODELS = {
     "all-MiniLM-L6-v2": {"dims": 384, "pooling": "mean"},
     "BAAI/bge-base-en-v1.5": {"dims": 768, "pooling": "cls"},
 }
+COLLECTION_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def validate_collection_name(name: str) -> str:
+    """Validate a collection name before using it as a selector and path segment."""
+    if not COLLECTION_NAME_PATTERN.fullmatch(name):
+        raise ValueError(
+            f"Invalid collection name '{name}'. "
+            "Use only letters, numbers, underscores, and hyphens."
+        )
+    return name
 
 
 class Settings(BaseSettings):
@@ -175,6 +187,9 @@ class Settings(BaseSettings):
                     )
                 name, path_str = entry.split(":", 1)
                 name = name.strip()
+                validate_collection_name(name)
+                if name in collections:
+                    raise ValueError(f"Duplicate collection name: {name}")
                 path = Path(path_str.strip())
                 if not path.exists():
                     raise ValueError(f"Collection '{name}' path does not exist: {path}")

@@ -11,6 +11,7 @@ from pathlib import Path
 import bm25s
 import chromadb
 import Stemmer
+from chromadb.errors import NotFoundError
 from chromadb.config import Settings as ChromaSettings
 
 from trace_search.config import settings
@@ -143,13 +144,25 @@ def _relative_parts(kb_path: Path, path: Path) -> tuple[str, ...]:
         return path.resolve().relative_to(kb_path.resolve()).parts
 
 
+def _is_within_root(path: Path, root: Path) -> bool:
+    """Return whether the resolved path stays under the resolved root."""
+    try:
+        return path.resolve().is_relative_to(root.resolve())
+    except OSError:
+        return False
+
+
 def should_exclude_path(
     path: Path,
     kb_path: Path,
     exclude_patterns: list[str] | None = None,
 ) -> bool:
     """Return whether a KB-relative path should be skipped."""
-    exclude = set(exclude_patterns or settings.exclude_patterns_list)
+    if not _is_within_root(path, kb_path):
+        return True
+    exclude = set(
+        exclude_patterns if exclude_patterns is not None else settings.exclude_patterns_list
+    )
     return any(
         part.startswith(".") or part in exclude
         for part in _relative_parts(kb_path, path)
@@ -1057,8 +1070,11 @@ class WikiIndexer:
         """Drop and recreate the Chroma collection atomically without materializing ids."""
         try:
             self.client.delete_collection("wiki_docs")
-        except Exception:
-            pass
+        except NotFoundError:
+            logger.debug("Chroma collection did not exist before rebuild")
+        except Exception as exc:
+            logger.warning("Failed to delete Chroma collection before rebuild: %s", exc)
+            raise
         self.collection = self.client.get_or_create_collection(
             name="wiki_docs",
             metadata={"hnsw:space": "cosine"},

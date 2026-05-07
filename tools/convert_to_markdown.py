@@ -125,8 +125,9 @@ CONVERTERS: dict[str, Callable[[Path, Path], None]] = {
 }
 
 
-def should_exclude(path: Path) -> bool:
-    return any(part.startswith(".") or part in EXCLUDE_PATTERNS for part in path.parts)
+def should_exclude(path: Path, wiki_path: Path) -> bool:
+    rel_parts = path.relative_to(wiki_path).parts
+    return any(part.startswith(".") or part in EXCLUDE_PATTERNS for part in rel_parts)
 
 
 def collect_files(
@@ -139,7 +140,7 @@ def collect_files(
         if not path.is_file():
             continue
 
-        if should_exclude(path):
+        if should_exclude(path, wiki_path):
             continue
 
         ext = path.suffix.lower()
