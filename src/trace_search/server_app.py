@@ -31,6 +31,8 @@ from trace_search.search import (
 
 configure_logging()
 logger = logging.getLogger(__name__)
+DEFAULT_LIST_LIMIT = 50
+MAX_LIST_LIMIT = 500
 
 # Varying-length English sentences used to trigger PyTorch kernel compilation
 # across the token-length distribution seen in real queries. Discarded after encode.
@@ -404,7 +406,7 @@ class CollectionRegistry:
                         path,
                         exc,
                     )
-                    return f"Error reading document: {exc}"
+                    return f"Error reading document: {path}"
                 folder = path.split("/")[0] if "/" in path else ""
                 col_label = (
                     f"**Collection:** {col.name}\n" if len(self.collections) > 1 else ""
@@ -418,6 +420,9 @@ class CollectionRegistry:
         limit: int,
         collection: str | None,
     ) -> str:
+        if limit < 1:
+            limit = DEFAULT_LIST_LIMIT
+        limit = min(limit, MAX_LIST_LIMIT)
         cols = self._resolve(collection)
         all_docs: list[dict[str, str]] = []
 

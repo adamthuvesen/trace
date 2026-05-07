@@ -459,6 +459,50 @@ class TestExcludePatternMatching:
         indexer = self._make_indexer(kb, patched_indexer_runtime, monkeypatch)
         assert not indexer._should_exclude(kb / "intro.md")
 
+    def test_symlink_to_outside_kb_is_excluded(
+        self, tmp_path, monkeypatch, patched_indexer_runtime
+    ):
+        """Resolved paths must stay inside the KB root."""
+        kb = tmp_path / "kb"
+        outside = tmp_path / "outside"
+        kb.mkdir()
+        outside.mkdir()
+        target = outside / "secret.md"
+        target.write_text("# Secret\n\nDo not index", encoding="utf-8")
+        link = kb / "secret-link.md"
+        link.symlink_to(target)
+
+        indexer = self._make_indexer(kb, patched_indexer_runtime, monkeypatch)
+
+        assert indexer._should_exclude(link)
+
+    def test_load_documents_skips_outside_symlink_but_keeps_inside_symlink(
+        self, tmp_path, monkeypatch, patched_indexer_runtime
+    ):
+        from trace_search.config import get_settings
+
+        kb = tmp_path / "kb"
+        outside = tmp_path / "outside"
+        kb.mkdir()
+        outside.mkdir()
+        (kb / "real.md").write_text("# Real\n\nInside", encoding="utf-8")
+        (outside / "secret.md").write_text("# Secret\n\nOutside", encoding="utf-8")
+        (kb / "inside-link.md").symlink_to(kb / "real.md")
+        (kb / "outside-link.md").symlink_to(outside / "secret.md")
+
+        monkeypatch.setenv("KB_PATH", str(kb))
+        get_settings.cache_clear()
+        try:
+            indexer = patched_indexer_runtime.WikiIndexer()
+            docs = indexer.load_documents()
+        finally:
+            get_settings.cache_clear()
+
+        paths = {doc["path"] for doc in docs}
+        assert "real.md" in paths
+        assert "inside-link.md" in paths
+        assert "outside-link.md" not in paths
+
 
 class TestAtomicChromaReset:
     def test_count_is_zero_after_reset(
@@ -508,5 +552,49 @@ class TestAtomicChromaReset:
                 ],
             )
             assert indexer.collection.count() == 1
+        finally:
+            get_settings.cache_clear()
+
+    def test_missing_collection_delete_is_tolerated(
+        self, tmp_path, monkeypatch, patched_indexer_runtime
+    ):
+        from chromadb.errors import NotFoundError
+        from trace_search.config import get_settings
+
+        monkeypatch.setenv("KB_PATH", str(tmp_path))
+        get_settings.cache_clear()
+        try:
+            indexer = patched_indexer_runtime.WikiIndexer()
+
+            def raise_missing(name: str) -> None:
+                raise NotFoundError(f"Collection [{name}] does not exist")
+
+            indexer.client.delete_collection = raise_missing
+
+            indexer._clear_chroma_collection()
+
+            assert indexer.collection.count() == 0
+        finally:
+            get_settings.cache_clear()
+
+    def test_unexpected_collection_delete_failure_stops_rebuild(
+        self, tmp_path, monkeypatch, patched_indexer_runtime
+    ):
+        from trace_search.config import get_settings
+
+        monkeypatch.setenv("KB_PATH", str(tmp_path))
+        get_settings.cache_clear()
+        try:
+            indexer = patched_indexer_runtime.WikiIndexer()
+            monkeypatch.setattr(
+                indexer.client,
+                "delete_collection",
+                lambda name: (_ for _ in ()).throw(RuntimeError("database locked")),
+            )
+
+            with pytest.raises(RuntimeError, match="database locked"):
+                indexer.build_index(force=True)
+
+            assert not indexer.bm25_path.exists()
         finally:
             get_settings.cache_clear()

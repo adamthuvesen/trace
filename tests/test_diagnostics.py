@@ -46,6 +46,23 @@ def test_scan_corpus_counts_visible_and_excluded_paths(tmp_path):
     assert scan.excluded_by_reason["hidden path"] >= 1
 
 
+def test_scan_corpus_excludes_outside_symlink(tmp_path):
+    kb = tmp_path / "kb"
+    outside = tmp_path / "outside"
+    kb.mkdir()
+    outside.mkdir()
+    (kb / "intro.md").write_text("# Intro", encoding="utf-8")
+    target = outside / "secret.md"
+    target.write_text("# Secret", encoding="utf-8")
+    (kb / "secret-link.md").symlink_to(target)
+
+    scan = scan_corpus(kb)
+
+    assert scan.visible_total == 1
+    assert scan.visible_by_extension[".md"] == 1
+    assert scan.excluded_by_reason["excluded"] >= 1
+
+
 def test_diagnose_index_reports_missing_indexes(tmp_path):
     kb = tmp_path / "kb"
     kb.mkdir()

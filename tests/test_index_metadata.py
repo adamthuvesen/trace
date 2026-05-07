@@ -4,6 +4,7 @@ import os
 
 from trace_search.index_metadata import (
     build_index_metadata,
+    collect_source_files,
     metadata_matches_active_model,
     read_index_metadata,
     stale_source_paths,
@@ -78,3 +79,18 @@ def test_stale_source_paths_detects_changed_files(tmp_path):
     os.utime(doc, None)
 
     assert stale_source_paths(kb, metadata) == ["intro.md"]
+
+
+def test_collect_source_files_skips_outside_symlink(tmp_path):
+    kb = tmp_path / "kb"
+    outside = tmp_path / "outside"
+    kb.mkdir()
+    outside.mkdir()
+    (kb / "intro.md").write_text("# Intro", encoding="utf-8")
+    target = outside / "secret.md"
+    target.write_text("# Secret", encoding="utf-8")
+    (kb / "secret-link.md").symlink_to(target)
+
+    records = collect_source_files(kb)
+
+    assert [record.path for record in records] == ["intro.md"]

@@ -78,6 +78,37 @@ class TestKBCollectionsParsing:
         with pytest.raises(ValueError, match="not a directory"):
             _ = s.parsed_collections
 
+    @pytest.mark.parametrize("name", ["docs", "team_docs", "team-docs", "docs2"])
+    def test_valid_collection_name_slugs(self, tmp_path, monkeypatch, name):
+        monkeypatch.delenv("KB_PATH", raising=False)
+        kb = tmp_path / "kb"
+        kb.mkdir()
+        s = Settings(kb_collections=f"{name}:{kb}")
+
+        assert s.parsed_collections == {name: kb}
+
+    @pytest.mark.parametrize(
+        "name",
+        ["../escape", "foo/bar", "", "   ", "team docs"],
+    )
+    def test_invalid_collection_names_raise(self, tmp_path, monkeypatch, name):
+        monkeypatch.delenv("KB_PATH", raising=False)
+        kb = tmp_path / "kb"
+        kb.mkdir()
+        s = Settings(kb_collections=f"{name}:{kb}")
+
+        with pytest.raises(ValueError, match="Invalid collection name"):
+            _ = s.parsed_collections
+
+    def test_duplicate_collection_names_raise(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("KB_PATH", raising=False)
+        kb = tmp_path / "kb"
+        kb.mkdir()
+        s = Settings(kb_collections=f"docs:{kb},docs:{kb}")
+
+        with pytest.raises(ValueError, match="Duplicate collection name"):
+            _ = s.parsed_collections
+
 
 class TestCollectionRegistry:
     def test_collection_names_sorted(self, tmp_path):
@@ -195,6 +226,33 @@ class TestListDocumentsLimit:
         listed = [line for line in result.splitlines() if line.startswith("- **")]
         assert len(listed) == 5
 
+    @pytest.mark.parametrize("limit", [0, -10])
+    def test_invalid_limit_defaults_to_50(self, tmp_path, limit):
+        from trace_search.server_app import CollectionRegistry
+
+        kb = tmp_path / "docs"
+        kb.mkdir()
+        for i in range(60):
+            (kb / f"doc_{i:02d}.md").write_text(f"# Doc {i}\n\nContent.")
+
+        reg = CollectionRegistry({"docs": kb})
+        result = reg.list_documents(folder=None, limit=limit, collection=None)
+        listed = [line for line in result.splitlines() if line.startswith("- **")]
+        assert len(listed) == 50
+
+    def test_large_limit_caps_at_500(self, tmp_path):
+        from trace_search.server_app import CollectionRegistry
+
+        kb = tmp_path / "docs"
+        kb.mkdir()
+        for i in range(520):
+            (kb / f"doc_{i:03d}.md").write_text(f"# Doc {i}\n\nContent.")
+
+        reg = CollectionRegistry({"docs": kb})
+        result = reg.list_documents(folder=None, limit=10_000, collection=None)
+        listed = [line for line in result.splitlines() if line.startswith("- **")]
+        assert len(listed) == 500
+
 
 class TestGetDocumentWarning:
     def test_traversal_rejection_emits_warning(self, tmp_path, caplog):
@@ -234,7 +292,8 @@ class TestGetDocumentWarning:
         assert "extraction failed" in caplog.text
         assert "broken.md" in caplog.text
         assert "disk read failed" in caplog.text
-        assert result.startswith("Error reading document:")
+        assert result == "Error reading document: broken.md"
+        assert "disk read failed" not in result
 
 
 class TestBuildMultiMcp:
