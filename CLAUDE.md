@@ -12,8 +12,10 @@ Start here:
 
 - Default entrypoint: `uv run trace`
 - Local inspector: `KB_PATH=/path/to/your/docs uv run fastmcp dev src/trace_search/trace_server.py`
-- Core files: `config.py`, `server_app.py`, `trace_server.py`, `search.py`, `indexer.py`
+- Core files: `config.py`, `server_app.py`, `trace_server.py`, `search.py`, `indexer.py`, `index_metadata.py`
 - Indexes live under the KB root unless `INDEX_PATH` is set
+- `reindex` is incremental by default (skips unchanged files); pass `--force` / `force=true` to rebuild from scratch
+- All search tools and `list_documents` accept `path_prefix`, `extensions`, and `since` filters
 
 ## Commands
 

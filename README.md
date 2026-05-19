@@ -63,12 +63,14 @@ Bare `uv run trace` still starts the MCP server for backward compatibility.
 | `trace list-documents` | List documents, optionally by folder |
 | `trace index-stats` | Show index status |
 | `trace doctor "sample query"` | Diagnose config, visible docs, exclusions, indexes, and sample queries |
-| `trace reindex` | Rebuild indexes |
+| `trace reindex` | Update indexes incrementally; `--force` to rebuild from scratch |
 | `trace serve` | Start the MCP server |
 
 Collection-aware commands accept `--collection docs`. Search commands accept
 `--top-k`; `keyword-search` uses `--max-results`; `list-documents` supports
-`--folder` and `--limit`.
+`--folder` and `--limit`. All search commands and `list-documents` also accept
+`--path-prefix` (repeatable), `--extensions` (e.g. `.md,.py`), and `--since`
+(ISO 8601 datetime) to scope results.
 
 ## Connect An Agent
 
@@ -122,7 +124,7 @@ These map directly to the CLI commands above.
 | `list_documents`  | List documents, optionally by folder                                   |
 | `index_stats`     | Show index status                                                      |
 | `doctor`          | Diagnose config, visible docs, exclusions, indexes, and sample queries |
-| `reindex`         | Rebuild indexes                                                        |
+| `reindex`         | Update indexes incrementally; pass `force=true` to rebuild from scratch |
 
 In multi-collection mode, search and document tools accept an optional `collection` parameter.
 
@@ -132,6 +134,45 @@ evidence, and suggests useful `get_document(path=...)` follow-ups.
 
 Use `keyword_search`, `semantic_search`, or `search_hybrid` when you want a
 specific retrieval mode for debugging, evaluation, or deterministic comparisons.
+
+## Reindexing
+
+`reindex` is incremental by default. Trace fingerprints each source file with a
+SHA-256 hash plus mtime and size, so unchanged files are skipped — only added,
+changed, and removed files are reprocessed. Run `trace reindex --force`
+(`force=true` in MCP) to drop both indexes and rebuild every file from scratch
+after a model change or to recover from corruption.
+
+`doctor` reports the next-reindex plan and a categorized change summary:
+
+```text
+- Index status: stale
+  - 1 added, 2 changed, 1 removed since last index.
+  - Next `reindex` will run incrementally on changed files.
+- Source changes since last index: unchanged=27, added=1, changed=2, removed=1
+```
+
+## Filtering Searches
+
+All four search tools and `list_documents` accept three optional filters that
+scope results before ranking:
+
+```bash
+# Only docs under architecture/, only Markdown, only files modified in 2026
+trace search "router" \
+  --path-prefix architecture/ \
+  --extensions .md \
+  --since 2026-01-01T00:00:00Z
+```
+
+| Parameter | CLI flag | Accepts |
+| --- | --- | --- |
+| `path_prefix` | `--path-prefix` (repeatable) | string or list — OR-matched against the start of the relative path |
+| `extensions` | `--extensions` | list of `.md`/`.py`/...; comma-separated string also works |
+| `since` | `--since` | ISO 8601 datetime; matches files with `mtime >= since` |
+
+Filters combine with AND semantics and surface in `search` output under
+`Active filters` so you can tell why a query came back empty.
 
 ## Troubleshooting
 
@@ -148,10 +189,12 @@ Doctor checks:
 - how many supported documents are visible by extension
 - how many paths are excluded and why
 - whether ChromaDB and BM25 indexes are missing, stale, incompatible, or unknown
+- the index metadata schema version and whether the next `reindex` will be incremental or forced
+- per-collection counts of unchanged, added, changed, and removed files since the last build
 - last successful index time when metadata exists
 - optional sample query latency and top-result summary
 
-If doctor reports unknown metadata for an older index, run `reindex` once to populate model and freshness metadata.
+If doctor reports unknown metadata for an older index, run `reindex` once to populate model and freshness metadata. An older schema version (`v1`) will run as a forced rebuild on next reindex; subsequent runs are incremental.
 
 ## Index Storage
 

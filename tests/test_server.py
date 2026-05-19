@@ -317,7 +317,7 @@ class TestCollectionRebuild:
 class TestReindexForceFlag:
     def test_mcp_reindex_threads_force_into_collection(self, tmp_path):
         """The MCP reindex tool must thread `force` down to Collection.rebuild."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import patch
 
         kb = tmp_path / "kb"
         kb.mkdir()
@@ -340,7 +340,7 @@ class TestReindexForceFlag:
 
     def test_mcp_reindex_defaults_to_incremental(self, tmp_path):
         """Omitting `force` reindexes incrementally and does not advertise a rebuild."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import patch
 
         kb = tmp_path / "kb"
         kb.mkdir()

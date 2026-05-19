@@ -28,7 +28,6 @@ from trace_search.search import (
     SemanticSearch,
     SmartSearch,
     SmartSearchResult,
-    apply_filters_to_hits,
 )
 
 configure_logging()
