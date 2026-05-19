@@ -3,8 +3,26 @@
 from __future__ import annotations
 
 from trace_search.config import get_settings
-from trace_search.search import format_results, format_smart_search
+from trace_search.search import (
+    SearchFilters,
+    format_results,
+    format_smart_search,
+    parse_filters,
+)
 from trace_search.server_app import CollectionRegistry
+
+
+def _build_filters(
+    path_prefix: str | list[str] | None,
+    extensions: str | list[str] | None,
+    since: str | None,
+) -> SearchFilters:
+    """Parse user-supplied filter inputs into a `SearchFilters` instance."""
+    return parse_filters(
+        path_prefix=path_prefix,
+        extensions=extensions,
+        since=since,
+    )
 
 
 class TraceOperations:
@@ -27,8 +45,12 @@ class TraceOperations:
         query: str,
         top_k: int = 10,
         collection: str | None = None,
+        path_prefix: str | list[str] | None = None,
+        extensions: str | list[str] | None = None,
+        since: str | None = None,
     ) -> str:
-        result = self.registry.search_smart(query, top_k, collection)
+        filters = _build_filters(path_prefix, extensions, since)
+        result = self.registry.search_smart(query, top_k, collection, filters=filters)
         return format_smart_search(result, query)
 
     def semantic_search(
@@ -36,8 +58,14 @@ class TraceOperations:
         query: str,
         top_k: int = 10,
         collection: str | None = None,
+        path_prefix: str | list[str] | None = None,
+        extensions: str | list[str] | None = None,
+        since: str | None = None,
     ) -> str:
-        results = self.registry.search_semantic(query, top_k, collection)
+        filters = _build_filters(path_prefix, extensions, since)
+        results = self.registry.search_semantic(
+            query, top_k, collection, filters=filters
+        )
         return format_results(results)
 
     def keyword_search(
@@ -45,8 +73,14 @@ class TraceOperations:
         keyword: str,
         max_results: int = 20,
         collection: str | None = None,
+        path_prefix: str | list[str] | None = None,
+        extensions: str | list[str] | None = None,
+        since: str | None = None,
     ) -> str:
-        results = self.registry.search_keyword(keyword, max_results, collection)
+        filters = _build_filters(path_prefix, extensions, since)
+        results = self.registry.search_keyword(
+            keyword, max_results, collection, filters=filters
+        )
         return format_results(results)
 
     def search_hybrid(
@@ -54,8 +88,14 @@ class TraceOperations:
         query: str,
         top_k: int = 10,
         collection: str | None = None,
+        path_prefix: str | list[str] | None = None,
+        extensions: str | list[str] | None = None,
+        since: str | None = None,
     ) -> str:
-        results = self.registry.search_hybrid(query, top_k, collection)
+        filters = _build_filters(path_prefix, extensions, since)
+        results = self.registry.search_hybrid(
+            query, top_k, collection, filters=filters
+        )
         return format_results(results)
 
     def get_document(self, path: str, collection: str | None = None) -> str:
@@ -66,14 +106,18 @@ class TraceOperations:
         folder: str | None = None,
         limit: int = 50,
         collection: str | None = None,
+        path_prefix: str | list[str] | None = None,
+        extensions: str | list[str] | None = None,
+        since: str | None = None,
     ) -> str:
-        return self.registry.list_documents(folder, limit, collection)
+        filters = _build_filters(path_prefix, extensions, since)
+        return self.registry.list_documents(folder, limit, collection, filters=filters)
 
     def index_stats(self, collection: str | None = None) -> str:
         return self.registry.index_stats(collection)
 
-    def reindex(self, collection: str | None = None) -> str:
-        return self.registry.reindex(collection)
+    def reindex(self, collection: str | None = None, force: bool = False) -> str:
+        return self.registry.reindex(collection, force=force)
 
     def doctor(
         self,
