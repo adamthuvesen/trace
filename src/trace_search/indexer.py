@@ -874,76 +874,93 @@ class WikiIndexer:
     def _should_exclude(self, path: Path) -> bool:
         return should_exclude_path(path, self.kb_path)
 
-    def load_documents(self) -> list[dict[str, str]]:
+    def _load_single_document(self, file_path: Path) -> dict | None:
+        """Extract one supported file into a doc dict, or return None to skip."""
+        ext = file_path.suffix.lower()
+        if ext not in SUPPORTED_EXTENSIONS:
+            return None
+        if self._should_exclude(file_path):
+            return None
+
+        try:
+            content = extract_content(file_path)
+        except Exception as e:
+            logger.warning("Failed to extract %s: %s", file_path, e)
+            return None
+
+        if not content.strip():
+            return None
+
+        stat = file_path.stat()
+        return {
+            "path": self._get_relative_path(file_path),
+            "title": extract_title(content, file_path),
+            "folder": self._get_folder(file_path),
+            "extension": ext,
+            "mtime": stat.st_mtime,
+            "content": content,
+        }
+
+    def load_documents(self) -> list[dict]:
         """Load all supported files from knowledge base."""
-        docs = []
-
+        docs: list[dict] = []
         for file_path in self.kb_path.rglob("*"):
-            ext = file_path.suffix.lower()
-            if ext not in SUPPORTED_EXTENSIONS:
-                continue
-            if self._should_exclude(file_path):
-                continue
-
-            try:
-                content = extract_content(file_path)
-            except Exception as e:
-                logger.warning("Failed to extract %s: %s", file_path, e)
-                continue
-
-            if not content.strip():
-                continue
-
-            rel_path = self._get_relative_path(file_path)
-            title = extract_title(content, file_path)
-            folder = self._get_folder(file_path)
-
-            docs.append(
-                {
-                    "path": rel_path,
-                    "title": title,
-                    "folder": folder,
-                    "content": content,
-                }
-            )
-
+            doc = self._load_single_document(file_path)
+            if doc is not None:
+                docs.append(doc)
         docs.sort(key=lambda d: d["path"])
         return docs
 
-    def _reconcile_index_state(self, force: bool) -> bool:
-        """Check index consistency and return the effective force flag.
+    def _load_documents_subset(self, relative_paths: list[str]) -> list[dict]:
+        """Load only the listed relative paths into doc dicts."""
+        docs: list[dict] = []
+        for rel in relative_paths:
+            file_path = self.kb_path / rel
+            if not file_path.is_file():
+                continue
+            doc = self._load_single_document(file_path)
+            if doc is not None:
+                docs.append(doc)
+        docs.sort(key=lambda d: d["path"])
+        return docs
 
-        Loads the existing BM25 index when possible. Returns True if a full
-        rebuild is required (either because force=True or a consistency issue
-        was detected).
+    def _reconcile_index_state(self, force: bool) -> str:
+        """Decide whether to do a full rebuild or an incremental update.
+
+        Returns "force" when the indexes must be rebuilt from scratch (caller
+        requested it, indexes are missing or empty, or metadata is missing or
+        outdated). Returns "incremental" when the existing indexes are healthy
+        enough to update in place; BM25 may need rebuilding from Chroma but
+        chunks are preserved across the update.
         """
-        chroma_count = self.collection.count()
-        chroma_exists = chroma_count > 0
-        bm25_exists = self.bm25_path.exists()
+        from trace_search.index_metadata import read_index_metadata
 
-        if not force and chroma_exists and bm25_exists:
+        if force:
+            return "force"
+
+        chroma_count = self.collection.count()
+        if chroma_count == 0:
+            return "force"
+
+        metadata = read_index_metadata(self.bm25_path.parent)
+        if metadata is None:
+            logger.info(
+                "Index metadata missing or outdated; promoting to full rebuild"
+            )
+            return "force"
+
+        if self.bm25_path.exists():
             try:
                 self._load_bm25()
             except Exception as e:
                 logger.warning(
-                    "Failed to load BM25 index, rebuilding both indexes: %s", e
+                    "BM25 load failed; will rebuild from Chroma during incremental: %s",
+                    e,
                 )
-                return True
-            if self._bm25 is not None and self._bm25_corpus is not None:
-                logger.info("Index already exists with %s chunks", chroma_count)
-                return False
-            logger.warning("Incomplete BM25 index detected, rebuilding both indexes")
-            return True
+                self._bm25 = None
+                self._bm25_corpus = None
 
-        if not force and chroma_exists != bm25_exists:
-            logger.warning(
-                "Detected partial index state (chroma=%s, bm25=%s), rebuilding both indexes",
-                chroma_exists,
-                bm25_exists,
-            )
-            return True
-
-        return force
+        return "incremental"
 
     def _build_chunks(
         self, docs: list[dict]
@@ -956,6 +973,8 @@ class WikiIndexer:
         for doc in docs:
             chunks = chunk_by_headings(doc["content"])
             chunk_count = len(chunks)
+            extension = doc.get("extension") or Path(doc["path"]).suffix.lower()
+            source_mtime = float(doc.get("mtime") or 0.0)
             for i, chunk in enumerate(chunks):
                 all_chunks.append(
                     create_contextual_chunk(doc["title"], doc["folder"], chunk)
@@ -969,6 +988,8 @@ class WikiIndexer:
                         "chunk_index": i,
                         "chunk_count": chunk_count,
                         "breadcrumb": extract_breadcrumb(chunk, doc["title"]),
+                        "extension": extension,
+                        "source_mtime": source_mtime,
                     }
                 )
 
@@ -1013,21 +1034,86 @@ class WikiIndexer:
             json.dump(metadatas, f)
 
     def build_index(self, force: bool = False) -> int:
-        """Build or update the search index. Returns number of chunks indexed."""
+        """Build or update the search index. Returns number of chunks indexed.
+
+        Default behavior is incremental: detect added, changed, and removed
+        source files and apply only the necessary work. Pass `force=True` to
+        drop both indexes and rebuild every file from scratch.
+        """
         from trace_search.index_metadata import (
             build_index_metadata,
+            categorize_source_changes,
+            invalidate_index_metadata,
+            read_index_metadata,
             utc_now_iso,
             write_index_metadata,
         )
 
-        force = self._reconcile_index_state(force)
-        if not force:
+        mode = self._reconcile_index_state(force)
+        build_started_at = utc_now_iso()
+
+        if mode == "force":
+            return self._full_rebuild(build_started_at)
+
+        metadata = read_index_metadata(self.bm25_path.parent)
+        changes = categorize_source_changes(self.kb_path, metadata)
+
+        bm25_healthy = (
+            self.bm25_path.exists()
+            and self._bm25 is not None
+            and self._bm25_corpus is not None
+        )
+        if not changes.has_changes and bm25_healthy:
+            logger.info(
+                "Index up to date: %d unchanged files, %d chunks",
+                len(changes.unchanged),
+                self.collection.count(),
+            )
             return self.collection.count()
+
+        try:
+            self._apply_incremental_changes(changes)
+            self._rebuild_bm25_from_chroma()
+        except Exception:
+            logger.exception(
+                "Incremental reindex failed; invalidating metadata so next "
+                "reindex runs as a full rebuild"
+            )
+            invalidate_index_metadata(self.bm25_path.parent)
+            raise
+
+        chunk_count = self.collection.count()
+        new_metadata = build_index_metadata(
+            kb_path=self.kb_path,
+            build_started_at=build_started_at,
+            build_completed_at=utc_now_iso(),
+            document_count=len(changes.inventory),
+            chunk_count=chunk_count,
+            source_files=changes.inventory,
+        )
+        write_index_metadata(self.bm25_path.parent, new_metadata)
+        logger.info(
+            "Incremental reindex: +%d added, ~%d changed, -%d removed, =%d unchanged; %d chunks total",
+            len(changes.added),
+            len(changes.changed),
+            len(changes.removed),
+            len(changes.unchanged),
+            chunk_count,
+        )
+        return chunk_count
+
+    def _full_rebuild(self, build_started_at: str) -> int:
+        """Drop both indexes and reindex every visible file from scratch."""
+        from trace_search.index_metadata import (
+            build_index_metadata,
+            collect_source_files,
+            utc_now_iso,
+            write_index_metadata,
+        )
 
         self._clear_chroma_collection()
         self._clear_bm25_index()
 
-        build_started_at = utc_now_iso()
         logger.info("Loading documents...")
         docs = self.load_documents()
         logger.info("Found %s documents", len(docs))
@@ -1036,12 +1122,14 @@ class WikiIndexer:
 
         if not all_chunks:
             logger.info("No chunks to index")
+            inventory = collect_source_files(self.kb_path)
             metadata = build_index_metadata(
                 kb_path=self.kb_path,
                 build_started_at=build_started_at,
                 build_completed_at=utc_now_iso(),
                 document_count=len(docs),
                 chunk_count=0,
+                source_files=inventory,
             )
             write_index_metadata(self.bm25_path.parent, metadata)
             return 0
@@ -1052,19 +1140,50 @@ class WikiIndexer:
         self._persist_chroma(all_ids, all_chunks, embeddings, all_metadatas)
         self._persist_bm25(all_chunks, all_metadatas)
 
-        logger.info(
-            "Index complete: %s chunks (ChromaDB + BM25)",
-            self.collection.count(),
-        )
+        chunk_count = self.collection.count()
+        logger.info("Index complete: %s chunks (ChromaDB + BM25)", chunk_count)
+
+        inventory = collect_source_files(self.kb_path)
         metadata = build_index_metadata(
             kb_path=self.kb_path,
             build_started_at=build_started_at,
             build_completed_at=utc_now_iso(),
             document_count=len(docs),
-            chunk_count=self.collection.count(),
+            chunk_count=chunk_count,
+            source_files=inventory,
         )
         write_index_metadata(self.bm25_path.parent, metadata)
-        return self.collection.count()
+        return chunk_count
+
+    def _apply_incremental_changes(self, changes) -> None:
+        """Apply categorized file changes to the Chroma collection in place."""
+        for path in changes.changed + changes.removed:
+            self.collection.delete(where={"path": path})
+
+        paths_to_index = changes.added + changes.changed
+        if not paths_to_index:
+            return
+
+        docs = self._load_documents_subset(paths_to_index)
+        chunks, ids, metadatas = self._build_chunks(docs)
+        if not chunks:
+            return
+
+        embeddings = self.backend.encode(chunks)
+        self._persist_chroma(ids, chunks, embeddings, metadatas)
+
+    def _rebuild_bm25_from_chroma(self) -> None:
+        """Rebuild BM25 from the current Chroma chunk inventory."""
+        result = self.collection.get(include=["documents", "metadatas"])
+        documents = list(result.get("documents") or [])
+        metadatas = list(result.get("metadatas") or [])
+
+        self._clear_bm25_index()
+
+        if not documents:
+            return
+
+        self._persist_bm25(documents, metadatas)
 
     def _clear_chroma_collection(self) -> None:
         """Drop and recreate the Chroma collection atomically without materializing ids."""
