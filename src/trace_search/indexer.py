@@ -629,16 +629,13 @@ def chunk_by_headings(
                     use_tokens=use_tokens,
                     max_size=max_size,
                 )
-                # Prepend overlap to first sub-chunk (truncate if exceeds max_size)
                 if pending_overlap and sub_chunks:
-                    sub_chunks[0] = pending_overlap + "\n\n" + sub_chunks[0]
-                    if _get_size(sub_chunks[0], use_tokens) > max_size:
-                        if use_tokens:
-                            sub_chunks[0] = _get_token_counter().truncate_to_tokens(
-                                sub_chunks[0], max_size
-                            )
-                        else:
-                            sub_chunks[0] = sub_chunks[0][:max_size]
+                    sub_chunks[0] = _prepend_overlap_if_fits(
+                        pending_overlap,
+                        sub_chunks[0],
+                        use_tokens=use_tokens,
+                        max_size=max_size,
+                    )
                 chunks.extend(sub_chunks)
                 if sub_chunks:
                     pending_overlap = _get_overlap_text(
@@ -647,18 +644,12 @@ def chunk_by_headings(
                 current_chunk = ""
                 current_level = None
             else:
-                # Prepend overlap to new section (truncate if exceeds max_size)
-                if pending_overlap:
-                    current_chunk = pending_overlap + "\n\n" + section
-                    if _get_size(current_chunk, use_tokens) > max_size:
-                        if use_tokens:
-                            current_chunk = _get_token_counter().truncate_to_tokens(
-                                current_chunk, max_size
-                            )
-                        else:
-                            current_chunk = current_chunk[:max_size]
-                else:
-                    current_chunk = section
+                current_chunk = _prepend_overlap_if_fits(
+                    pending_overlap,
+                    section,
+                    use_tokens=use_tokens,
+                    max_size=max_size,
+                )
                 pending_overlap = ""
                 current_level = section_level
 

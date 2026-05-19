@@ -396,6 +396,17 @@ class TestEdgeCases:
         )
         assert "TAIL" in "".join(chunks)
 
+    def test_heading_overlap_never_truncates_next_section_tail(self):
+        content = "# A\n\n" + "a" * 80 + "\n\n# B\n\n" + "B" * 70 + "TAIL"
+        chunks = chunk_by_headings(
+            content,
+            max_chunk_chars=100,
+            use_tokens=False,
+            enable_overlap=True,
+            overlap_chars=30,
+        )
+        assert "TAIL" in "".join(chunks)
+
 
 class TestBackwardCompatibility:
     def test_old_api_still_works(self):

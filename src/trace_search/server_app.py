@@ -449,6 +449,13 @@ class CollectionRegistry:
                     kb,
                 )
                 continue
+            if should_exclude_path(doc_path, kb):
+                logger.warning(
+                    "get_document: rejected excluded path (path=%s, kb=%s)",
+                    path,
+                    kb,
+                )
+                continue
             if doc_path.exists() and doc_path.is_file():
                 try:
                     content = extract_content(doc_path)

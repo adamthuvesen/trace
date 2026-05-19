@@ -242,6 +242,20 @@ class TestGetDocumentErrorEnvelope:
 
         assert "**Collection:**" not in result
 
+    def test_get_document_respects_indexer_exclusions(self, tmp_path):
+        (tmp_path / "node_modules").mkdir()
+        (tmp_path / "node_modules" / "secret.md").write_text(
+            "# Secret\n\nShould not be readable",
+            encoding="utf-8",
+        )
+
+        _, tools = build_multi_mcp("excluded-doc-test", {"docs": tmp_path})
+
+        result = tools["get_document"].fn("node_modules/secret.md")
+
+        assert result == "Document not found: node_modules/secret.md"
+        assert "Should not be readable" not in result
+
 
 class TestCollectionRebuild:
     def test_rebuild_force_clears_caches_and_returns_chunk_count(self, tmp_path):

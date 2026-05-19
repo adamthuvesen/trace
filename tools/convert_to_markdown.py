@@ -127,7 +127,12 @@ CONVERTERS: dict[str, Callable[[Path, Path], None]] = {
 
 def should_exclude(path: Path, wiki_path: Path) -> bool:
     rel_parts = path.relative_to(wiki_path).parts
-    return any(part.startswith(".") or part in EXCLUDE_PATTERNS for part in rel_parts)
+    if any(part.startswith(".") or part in EXCLUDE_PATTERNS for part in rel_parts):
+        return True
+    try:
+        return not path.resolve().is_relative_to(wiki_path.resolve())
+    except OSError:
+        return True
 
 
 def collect_files(
