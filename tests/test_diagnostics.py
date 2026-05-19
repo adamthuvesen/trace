@@ -104,6 +104,109 @@ def test_diagnose_index_reports_fresh_metadata(tmp_path):
 
     assert diagnosis.status == "healthy"
     assert diagnosis.last_index_time == completed
+    assert diagnosis.next_reindex == "incremental"
+    assert diagnosis.changes is not None
+    assert len(diagnosis.changes.unchanged) == 1
+    assert diagnosis.changes.has_changes is False
+    assert diagnosis.metadata_version == diagnosis.metadata_version_current
+
+
+def test_diagnose_index_reports_categorized_changes(tmp_path):
+    kb = tmp_path / "kb"
+    kb.mkdir()
+    keep = kb / "keep.md"
+    keep.write_text("# Keep", encoding="utf-8")
+    edit = kb / "edit.md"
+    edit.write_text("# Edit\n\nold", encoding="utf-8")
+    drop = kb / "drop.md"
+    drop.write_text("# Drop", encoding="utf-8")
+    index_root = get_default_index_root(kb)
+    _create_index_dirs(index_root)
+    completed = utc_now_iso()
+    metadata = build_index_metadata(
+        kb_path=kb,
+        build_started_at=completed,
+        build_completed_at=completed,
+        document_count=3,
+        chunk_count=3,
+    )
+    write_index_metadata(index_root, metadata)
+
+    edit.write_text("# Edit\n\nupdated content here", encoding="utf-8")
+    drop.unlink()
+    (kb / "new.md").write_text("# New", encoding="utf-8")
+
+    diagnosis = diagnose_index(kb, index_root)
+    rendered = render_doctor_report(
+        diagnose_collections({"docs": kb})
+    )
+
+    assert diagnosis.status == "stale"
+    assert diagnosis.next_reindex == "incremental"
+    assert diagnosis.changes is not None
+    assert diagnosis.changes.added == ["new.md"]
+    assert diagnosis.changes.changed == ["edit.md"]
+    assert diagnosis.changes.removed == ["drop.md"]
+    assert diagnosis.changes.unchanged == ["keep.md"]
+    assert "unchanged=1" in rendered
+    assert "added=1" in rendered
+    assert "changed=1" in rendered
+    assert "removed=1" in rendered
+    assert "Next reindex" in rendered
+
+
+def test_diagnose_index_reports_outdated_metadata_as_forced_rebuild(tmp_path):
+    import json as _json
+
+    from trace_search.index_metadata import metadata_path
+
+    kb = tmp_path / "kb"
+    kb.mkdir()
+    (kb / "intro.md").write_text("# Intro", encoding="utf-8")
+    index_root = get_default_index_root(kb)
+    _create_index_dirs(index_root)
+    metadata = build_index_metadata(
+        kb_path=kb,
+        build_started_at=utc_now_iso(),
+        build_completed_at=utc_now_iso(),
+        document_count=1,
+        chunk_count=1,
+    )
+    write_index_metadata(index_root, metadata)
+    raw = _json.loads(metadata_path(index_root).read_text(encoding="utf-8"))
+    raw["version"] = 1
+    metadata_path(index_root).write_text(_json.dumps(raw), encoding="utf-8")
+
+    diagnosis = diagnose_index(kb, index_root)
+
+    assert diagnosis.status == "unknown"
+    assert diagnosis.next_reindex == "forced"
+    assert diagnosis.metadata_version == 1
+    assert any("v1" in msg for msg in diagnosis.messages)
+
+
+def test_diagnose_index_never_indexed_collection(tmp_path):
+    kb = tmp_path / "kb"
+    kb.mkdir()
+    diagnosis = diagnose_index(kb, tmp_path / "indexes")
+
+    assert diagnosis.status == "missing"
+    assert diagnosis.next_reindex == "forced"
+    assert diagnosis.changes is None
+    assert diagnosis.metadata_version is None
+
+
+def test_render_doctor_report_includes_filter_hint(tmp_path):
+    kb = tmp_path / "kb"
+    kb.mkdir()
+    (kb / "intro.md").write_text("# Intro", encoding="utf-8")
+    report = diagnose_collections({"docs": kb})
+    rendered = render_doctor_report(report)
+
+    assert "## Filters" in rendered
+    assert "path_prefix" in rendered
+    assert "extensions" in rendered
+    assert "since" in rendered
 
 
 def test_diagnose_collections_runs_sample_query_probe(tmp_path):

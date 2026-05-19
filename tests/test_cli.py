@@ -10,12 +10,27 @@ import pytest
 from trace_search.cli import run_cli
 
 
+_FILTER_KEYS = ("path_prefix", "extensions", "since")
+
+
+def _filter_tuple(kwargs: dict[str, Any]) -> tuple[Any, Any, Any]:
+    return tuple(kwargs.get(key) for key in _FILTER_KEYS)
+
+
 @dataclass
 class FakeOperations:
     calls: list[tuple[str, tuple[Any, ...]]] = field(default_factory=list)
 
-    def search(self, query: str, top_k: int = 10, collection: str | None = None) -> str:
-        self.calls.append(("search", (query, top_k, collection)))
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        collection: str | None = None,
+        **filter_kwargs: Any,
+    ) -> str:
+        self.calls.append(
+            ("search", (query, top_k, collection, *_filter_tuple(filter_kwargs)))
+        )
         return "# Search"
 
     def semantic_search(
@@ -23,8 +38,14 @@ class FakeOperations:
         query: str,
         top_k: int = 10,
         collection: str | None = None,
+        **filter_kwargs: Any,
     ) -> str:
-        self.calls.append(("semantic_search", (query, top_k, collection)))
+        self.calls.append(
+            (
+                "semantic_search",
+                (query, top_k, collection, *_filter_tuple(filter_kwargs)),
+            )
+        )
         return "# Semantic"
 
     def keyword_search(
@@ -32,8 +53,14 @@ class FakeOperations:
         keyword: str,
         max_results: int = 20,
         collection: str | None = None,
+        **filter_kwargs: Any,
     ) -> str:
-        self.calls.append(("keyword_search", (keyword, max_results, collection)))
+        self.calls.append(
+            (
+                "keyword_search",
+                (keyword, max_results, collection, *_filter_tuple(filter_kwargs)),
+            )
+        )
         return "# Keyword"
 
     def search_hybrid(
@@ -41,8 +68,14 @@ class FakeOperations:
         query: str,
         top_k: int = 10,
         collection: str | None = None,
+        **filter_kwargs: Any,
     ) -> str:
-        self.calls.append(("search_hybrid", (query, top_k, collection)))
+        self.calls.append(
+            (
+                "search_hybrid",
+                (query, top_k, collection, *_filter_tuple(filter_kwargs)),
+            )
+        )
         return "# Hybrid"
 
     def get_document(self, path: str, collection: str | None = None) -> str:
@@ -54,16 +87,22 @@ class FakeOperations:
         folder: str | None = None,
         limit: int = 50,
         collection: str | None = None,
+        **filter_kwargs: Any,
     ) -> str:
-        self.calls.append(("list_documents", (folder, limit, collection)))
+        self.calls.append(
+            (
+                "list_documents",
+                (folder, limit, collection, *_filter_tuple(filter_kwargs)),
+            )
+        )
         return "Found 1 documents"
 
     def index_stats(self, collection: str | None = None) -> str:
         self.calls.append(("index_stats", (collection,)))
         return "# Index Statistics"
 
-    def reindex(self, collection: str | None = None) -> str:
-        self.calls.append(("reindex", (collection,)))
+    def reindex(self, collection: str | None = None, force: bool = False) -> str:
+        self.calls.append(("reindex", (collection, force)))
         return "Reindex complete."
 
     def doctor(
@@ -127,22 +166,22 @@ def test_serve_subcommand_starts_server(capsys):
     [
         (
             ["search", "frontmatter", "--top-k", "3", "--collection", "docs"],
-            ("search", ("frontmatter", 3, "docs")),
+            ("search", ("frontmatter", 3, "docs", None, None, None)),
             "# Search",
         ),
         (
             ["semantic-search", "meaning", "--top-k", "4"],
-            ("semantic_search", ("meaning", 4, None)),
+            ("semantic_search", ("meaning", 4, None, None, None, None)),
             "# Semantic",
         ),
         (
             ["keyword-search", "exact", "--max-results", "7", "--collection", "wiki"],
-            ("keyword_search", ("exact", 7, "wiki")),
+            ("keyword_search", ("exact", 7, "wiki", None, None, None)),
             "# Keyword",
         ),
         (
             ["hybrid-search", "mixed", "--top-k", "5"],
-            ("search_hybrid", ("mixed", 5, None)),
+            ("search_hybrid", ("mixed", 5, None, None, None, None)),
             "# Hybrid",
         ),
         (
@@ -160,7 +199,47 @@ def test_serve_subcommand_starts_server(capsys):
                 "--collection",
                 "docs",
             ],
-            ("list_documents", ("guides", 9, "docs")),
+            ("list_documents", ("guides", 9, "docs", None, None, None)),
+            "Found 1 documents",
+        ),
+        (
+            [
+                "search",
+                "router",
+                "--path-prefix",
+                "architecture/",
+                "--path-prefix",
+                "rfcs/",
+                "--extensions",
+                ".md",
+                "--since",
+                "2026-01-01T00:00:00Z",
+            ],
+            (
+                "search",
+                (
+                    "router",
+                    10,
+                    None,
+                    ["architecture/", "rfcs/"],
+                    [".md"],
+                    "2026-01-01T00:00:00Z",
+                ),
+            ),
+            "# Search",
+        ),
+        (
+            [
+                "list-documents",
+                "--extensions",
+                ".md,.py",
+                "--since",
+                "2026-01-01T00:00:00",
+            ],
+            (
+                "list_documents",
+                (None, 50, None, None, [".md,.py"], "2026-01-01T00:00:00"),
+            ),
             "Found 1 documents",
         ),
         (
@@ -170,7 +249,12 @@ def test_serve_subcommand_starts_server(capsys):
         ),
         (
             ["reindex", "--collection", "docs"],
-            ("reindex", ("docs",)),
+            ("reindex", ("docs", False)),
+            "Reindex complete.",
+        ),
+        (
+            ["reindex", "--collection", "docs", "--force"],
+            ("reindex", ("docs", True)),
             "Reindex complete.",
         ),
         (

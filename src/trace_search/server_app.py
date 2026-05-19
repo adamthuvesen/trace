@@ -23,6 +23,7 @@ from trace_search.indexer import (
 from trace_search.search import (
     HybridSearch,
     KeywordSearch,
+    SearchFilters,
     SearchRoute,
     SemanticSearch,
     SmartSearch,
@@ -182,11 +183,23 @@ class Collection:
             output.append("\n\n".join(docs) if docs else None)
         return output
 
-    def rebuild(self, backend: EmbeddingBackend | None = None) -> int:
-        """Clear caches, force-rebuild the index, and return the new chunk count."""
-        self.reset()
+    def rebuild(
+        self,
+        backend: EmbeddingBackend | None = None,
+        *,
+        force: bool = False,
+    ) -> int:
+        """Reindex this collection and return the resulting chunk count.
+
+        Default is incremental: only added, changed, and removed files are
+        reprocessed and cached search components remain valid. Pass
+        `force=True` to drop the indexes and rebuild every file from scratch;
+        cached search components are cleared so they pick up the new state.
+        """
+        if force:
+            self.reset()
         indexer = self.ensure_index(backend, skip_build=True)
-        return indexer.build_index(force=True)
+        return indexer.build_index(force=force)
 
 
 class CollectionRegistry:
@@ -241,54 +254,94 @@ class CollectionRegistry:
         return list(self.collections.values())
 
     def search_keyword(
-        self, query: str, top_k: int, collection: str | None
+        self,
+        query: str,
+        top_k: int,
+        collection: str | None,
+        filters: SearchFilters | None = None,
     ) -> list[dict]:
+        filters = filters or SearchFilters()
         cols = self._resolve(collection)
         if len(cols) == 1:
-            return cols[0].get_keyword(self.backend).search(query, top_k)
+            return cols[0].get_keyword(self.backend).search(
+                query, top_k, filters=filters
+            )
         return self._merge_results(
-            [c.get_keyword(self.backend).search(query, top_k) for c in cols],
+            [
+                c.get_keyword(self.backend).search(query, top_k, filters=filters)
+                for c in cols
+            ],
             top_k,
             [c.name for c in cols],
         )
 
     def search_semantic(
-        self, query: str, top_k: int, collection: str | None
+        self,
+        query: str,
+        top_k: int,
+        collection: str | None,
+        filters: SearchFilters | None = None,
     ) -> list[dict]:
+        filters = filters or SearchFilters()
         cols = self._resolve(collection)
         if len(cols) == 1:
-            return cols[0].get_semantic(self.backend).search(query, top_k)
+            return cols[0].get_semantic(self.backend).search(
+                query, top_k, filters=filters
+            )
         return self._merge_results(
-            [c.get_semantic(self.backend).search(query, top_k) for c in cols],
+            [
+                c.get_semantic(self.backend).search(query, top_k, filters=filters)
+                for c in cols
+            ],
             top_k,
             [c.name for c in cols],
         )
 
     def search_hybrid(
-        self, query: str, top_k: int, collection: str | None
+        self,
+        query: str,
+        top_k: int,
+        collection: str | None,
+        filters: SearchFilters | None = None,
     ) -> list[dict]:
+        filters = filters or SearchFilters()
         cols = self._resolve(collection)
         if len(cols) == 1:
-            return cols[0].get_hybrid(self.backend).search(query, top_k)
+            return cols[0].get_hybrid(self.backend).search(
+                query, top_k, filters=filters
+            )
         return self._merge_results(
-            [c.get_hybrid(self.backend).search(query, top_k) for c in cols],
+            [
+                c.get_hybrid(self.backend).search(query, top_k, filters=filters)
+                for c in cols
+            ],
             top_k,
             [c.name for c in cols],
         )
 
     def search_smart(
-        self, query: str, top_k: int, collection: str | None
+        self,
+        query: str,
+        top_k: int,
+        collection: str | None,
+        filters: SearchFilters | None = None,
     ) -> SmartSearchResult:
+        filters = filters or SearchFilters()
         cols = self._resolve(collection)
         if len(cols) == 1:
-            result = cols[0].get_smart(self.backend).search(query, top_k)
+            result = cols[0].get_smart(self.backend).search(
+                query, top_k, filters=filters
+            )
             hits = [
                 self._with_neighbor_context(cols[0], hit)
                 for hit in result.hits
             ]
             return SmartSearchResult(hits=hits, route=result.route)
 
-        results = [c.get_smart(self.backend).search(query, top_k) for c in cols]
+        results = [
+            c.get_smart(self.backend).search(query, top_k, filters=filters)
+            for c in cols
+        ]
         merged_hits = self._merge_results(
             [result.hits for result in results],
             top_k,
@@ -304,6 +357,7 @@ class CollectionRegistry:
                 strategy=strategy,
                 reason="; ".join(reasons),
                 fallback_used=fallback_used,
+                filters=filters,
             ),
         )
 
@@ -419,10 +473,17 @@ class CollectionRegistry:
         folder: str | None,
         limit: int,
         collection: str | None,
+        filters: SearchFilters | None = None,
     ) -> str:
         if limit < 1:
             limit = DEFAULT_LIST_LIMIT
         limit = min(limit, MAX_LIST_LIMIT)
+        filters = filters or SearchFilters()
+        since_epoch = (
+            filters.since.timestamp() if filters.since is not None else None
+        )
+        extensions_filter = set(filters.extensions)
+        prefixes = filters.path_prefix
         cols = self._resolve(collection)
         all_docs: list[dict[str, str]] = []
 
@@ -454,6 +515,18 @@ class CollectionRegistry:
                 if should_exclude_path(file_path, kb):
                     continue
                 rel_path = str(file_path.relative_to(kb))
+                if extensions_filter and ext not in extensions_filter:
+                    continue
+                if prefixes and not any(
+                    rel_path.startswith(prefix) for prefix in prefixes
+                ):
+                    continue
+                if since_epoch is not None:
+                    try:
+                        if file_path.stat().st_mtime < since_epoch:
+                            continue
+                    except OSError:
+                        continue
                 if ext == ".md":
                     try:
                         content = file_path.read_text(encoding="utf-8")
@@ -500,13 +573,14 @@ class CollectionRegistry:
 
         return "\n".join(lines)
 
-    def reindex(self, collection: str | None) -> str:
-        """Rebuild indexes for the given collection(s)."""
+    def reindex(self, collection: str | None, force: bool = False) -> str:
+        """Reindex the given collection(s); incremental by default."""
         cols = self._resolve(collection)
         results = []
         for col in cols:
-            chunks = col.rebuild(self.backend)
-            results.append(f"**{col.name}**: {chunks} chunks indexed")
+            chunks = col.rebuild(self.backend, force=force)
+            suffix = " (forced rebuild)" if force else ""
+            results.append(f"**{col.name}**: {chunks} chunks indexed{suffix}")
         return "Reindex complete.\n\n" + "\n".join(results)
 
     def doctor(
@@ -585,7 +659,7 @@ Use these tools to search across knowledge bases:
 - get_document: Retrieve full document content
 - list_documents: Browse available documents by folder
 - doctor: Diagnose configuration, visible documents, index health, and sample queries
-- reindex: Rebuild indexes after adding or updating documents
+- reindex: Update indexes after adding or changing documents (incremental; pass force=true to rebuild)
 
 All search tools accept an optional `collection` parameter to target a specific
 knowledge base. Omit it or pass "all" to search across all collections.
@@ -620,39 +694,107 @@ def build_multi_mcp(
 
     mcp = FastMCP(server_name, instructions=instructions)
 
+    _FILTER_HELP = (
+        "Optional filters scope results before ranking: `path_prefix` (string "
+        "or list of relative-path prefixes), `extensions` (list of suffixes "
+        "like `.md` or `.py`), and `since` (ISO 8601 datetime; only files "
+        "modified at or after this time)."
+    )
+
     @mcp.tool()
-    def search(query: str, top_k: int = 10, collection: str | None = None) -> str:
+    def search(
+        query: str,
+        top_k: int = 10,
+        collection: str | None = None,
+        path_prefix: list[str] | None = None,
+        extensions: list[str] | None = None,
+        since: str | None = None,
+    ) -> str:
         """Search knowledge bases. This is the default and recommended search tool.
 
         Starts with fast BM25 keyword matching, then falls back when results are weak.
         Set `collection` to target a specific knowledge base, or omit to search all.
+        Optional filters scope results before ranking:
+        - `path_prefix`: list of relative-path prefixes (e.g. ["architecture/"]).
+        - `extensions`: list of file suffixes like [".md", ".py"].
+        - `since`: ISO 8601 datetime; only files modified at or after this time.
         """
-        return operations.search(query, top_k, collection)
+        return operations.search(
+            query,
+            top_k,
+            collection,
+            path_prefix=path_prefix,
+            extensions=extensions,
+            since=since,
+        )
 
     @mcp.tool()
     def semantic_search(
-        query: str, top_k: int = 10, collection: str | None = None
+        query: str,
+        top_k: int = 10,
+        collection: str | None = None,
+        path_prefix: list[str] | None = None,
+        extensions: list[str] | None = None,
+        since: str | None = None,
     ) -> str:
         """Search knowledge bases by semantic similarity.
 
         Use when `search` doesn't find what you need, especially for vague
         conceptual questions. Set `collection` to target a specific knowledge base.
+        Same `path_prefix` / `extensions` / `since` filters as `search`.
         """
-        return operations.semantic_search(query, top_k, collection)
+        return operations.semantic_search(
+            query,
+            top_k,
+            collection,
+            path_prefix=path_prefix,
+            extensions=extensions,
+            since=since,
+        )
 
     @mcp.tool()
     def keyword_search(
-        keyword: str, max_results: int = 20, collection: str | None = None
+        keyword: str,
+        max_results: int = 20,
+        collection: str | None = None,
+        path_prefix: list[str] | None = None,
+        extensions: list[str] | None = None,
+        since: str | None = None,
     ) -> str:
-        """Alias for `search`. Use `search` instead - it's the same BM25 engine."""
-        return operations.keyword_search(keyword, max_results, collection)
+        """Alias for `search`. Use `search` instead — it's the same BM25 engine.
+
+        Same `path_prefix` / `extensions` / `since` filters as `search`.
+        """
+        return operations.keyword_search(
+            keyword,
+            max_results,
+            collection,
+            path_prefix=path_prefix,
+            extensions=extensions,
+            since=since,
+        )
 
     @mcp.tool()
     def search_hybrid(
-        query: str, top_k: int = 10, collection: str | None = None
+        query: str,
+        top_k: int = 10,
+        collection: str | None = None,
+        path_prefix: list[str] | None = None,
+        extensions: list[str] | None = None,
+        since: str | None = None,
     ) -> str:
-        """Combined semantic + keyword search. Use as fallback if `search` fails."""
-        return operations.search_hybrid(query, top_k, collection)
+        """Combined semantic + keyword search. Use as fallback if `search` fails.
+
+        Same `path_prefix` / `extensions` / `since` filters as `search`.
+        """
+        return operations.search_hybrid(
+            query,
+            top_k,
+            collection,
+            path_prefix=path_prefix,
+            extensions=extensions,
+            since=since,
+        )
 
     @mcp.tool()
     def get_document(path: str, collection: str | None = None) -> str:
@@ -664,9 +806,23 @@ def build_multi_mcp(
         folder: str | None = None,
         limit: int = 50,
         collection: str | None = None,
+        path_prefix: list[str] | None = None,
+        extensions: list[str] | None = None,
+        since: str | None = None,
     ) -> str:
-        """List available documents. Set `collection` to filter by knowledge base."""
-        return operations.list_documents(folder, limit, collection)
+        """List available documents. Set `collection` to filter by knowledge base.
+
+        Same `path_prefix` / `extensions` / `since` filters as the search tools;
+        `since` only matches if the file's mtime is at or after the given ISO 8601 datetime.
+        """
+        return operations.list_documents(
+            folder,
+            limit,
+            collection,
+            path_prefix=path_prefix,
+            extensions=extensions,
+            since=since,
+        )
 
     @mcp.tool()
     def index_stats(collection: str | None = None) -> str:
@@ -674,12 +830,16 @@ def build_multi_mcp(
         return operations.index_stats(collection)
 
     @mcp.tool()
-    def reindex(collection: str | None = None) -> str:
-        """Rebuild search indexes after adding or updating documents.
+    def reindex(collection: str | None = None, force: bool = False) -> str:
+        """Update search indexes after adding or changing documents.
 
-        Set `collection` to reindex a specific knowledge base, or omit to reindex all.
+        Default is incremental: only added, changed, and removed files are
+        reprocessed; unchanged files are skipped entirely. Pass `force=True`
+        to drop both indexes and rebuild every file from scratch (slower,
+        useful after upgrading models or recovering from corruption). Set
+        `collection` to reindex a specific knowledge base, or omit for all.
         """
-        return operations.reindex(collection)
+        return operations.reindex(collection, force=force)
 
     @mcp.tool()
     def doctor(

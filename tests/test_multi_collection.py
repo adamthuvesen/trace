@@ -317,6 +317,83 @@ class TestBuildMultiMcp:
             "doctor",
         }
 
+
+class TestMultiCollectionFilters:
+    """End-to-end filter behavior across multiple knowledge bases."""
+
+    def _make_registry(self, tmp_path):
+        from tests.test_runtime_hardening import FakeBackend
+        from trace_search.server_app import CollectionRegistry
+
+        wiki = tmp_path / "wiki"
+        brain = tmp_path / "brain"
+        wiki.mkdir()
+        brain.mkdir()
+        (wiki / "architecture").mkdir()
+        (wiki / "rfcs").mkdir()
+        (brain / "architecture").mkdir()
+        (wiki / "architecture" / "intro.md").write_text(
+            "# wiki arch\n\nrouter design", encoding="utf-8"
+        )
+        (wiki / "rfcs" / "001.md").write_text(
+            "# RFC 001\n\nrouter behavior", encoding="utf-8"
+        )
+        (brain / "architecture" / "notes.md").write_text(
+            "# brain arch\n\nrouter scaling", encoding="utf-8"
+        )
+
+        registry = CollectionRegistry({"wiki": wiki, "brain": brain})
+        registry._backend = FakeBackend()
+        registry._warmed = True
+        for col in registry.collections.values():
+            col.ensure_index(registry.backend)
+        return registry
+
+    def test_smart_search_path_prefix_scopes_each_collection(self, tmp_path):
+        from trace_search.search import parse_filters
+
+        registry = self._make_registry(tmp_path)
+        result = registry.search_smart(
+            "router",
+            top_k=5,
+            collection=None,
+            filters=parse_filters(path_prefix="architecture/"),
+        )
+        assert result.hits
+        for hit in result.hits:
+            assert hit["path"].startswith("architecture/")
+            assert hit.get("collection") in {"wiki", "brain"}
+        assert {hit.get("collection") for hit in result.hits} == {"wiki", "brain"}
+        assert result.route.filters.path_prefix == ("architecture/",)
+
+    def test_keyword_search_filters_respect_explicit_collection(self, tmp_path):
+        from trace_search.search import parse_filters
+
+        registry = self._make_registry(tmp_path)
+        results = registry.search_keyword(
+            "router",
+            top_k=5,
+            collection="brain",
+            filters=parse_filters(path_prefix="architecture/"),
+        )
+        assert results
+        for hit in results:
+            assert hit["path"].startswith("architecture/")
+
+    def test_list_documents_path_prefix_scopes_each_collection(self, tmp_path):
+        from trace_search.search import parse_filters
+
+        registry = self._make_registry(tmp_path)
+        rendered = registry.list_documents(
+            folder=None,
+            limit=50,
+            collection=None,
+            filters=parse_filters(path_prefix="rfcs/"),
+        )
+        assert "rfcs/001.md" in rendered
+        assert "intro.md" not in rendered
+        assert "notes.md" not in rendered
+
     def test_instructions_list_collections(self, tmp_path):
         from trace_search.server_app import _build_multi_instructions
 

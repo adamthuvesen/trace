@@ -7,7 +7,9 @@ import logging
 import re
 from collections import OrderedDict, defaultdict
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path as _Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import bm25s
@@ -22,12 +24,175 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Cap how many candidates a single retrieval call may over-fetch when filters
+# are active. Keeps per-query latency bounded even on very large corpora.
+_FILTER_OVERSAMPLE = 5
+_MAX_OVERSAMPLE_FETCH = 500
+
 
 def _clamp_top_k(top_k: int, default: int = 10, max_val: int = 100) -> int:
     """Clamp top_k to valid range [1, max_val]."""
     if top_k < 1:
         return default
     return min(top_k, max_val)
+
+
+@dataclass(frozen=True)
+class SearchFilters:
+    """Optional scope filters applied across all search modes.
+
+    Filters are evaluated pre-ranking: vector and metadata-aware stores push
+    them down at fetch time; BM25 over-fetches and applies them to candidates
+    before truncation. The empty `SearchFilters()` is a no-op.
+    """
+
+    path_prefix: tuple[str, ...] = ()
+    extensions: tuple[str, ...] = ()
+    since: datetime | None = None
+
+    @property
+    def is_empty(self) -> bool:
+        return (
+            not self.path_prefix and not self.extensions and self.since is None
+        )
+
+    def describe(self) -> str:
+        """Human-readable summary of active filters; empty string if none."""
+        parts: list[str] = []
+        if self.path_prefix:
+            joined = ", ".join(self.path_prefix)
+            parts.append(f"path_prefix={joined}")
+        if self.extensions:
+            parts.append(f"extensions={', '.join(self.extensions)}")
+        if self.since is not None:
+            parts.append(f"since={self.since.isoformat()}")
+        return "; ".join(parts)
+
+
+def _normalize_extension(value: str) -> str:
+    """Lowercase and ensure leading dot. Raises ValueError on empty input."""
+    cleaned = value.strip().lower()
+    if not cleaned:
+        raise ValueError("Extension must be non-empty, e.g. '.md'")
+    return cleaned if cleaned.startswith(".") else f".{cleaned}"
+
+
+def parse_filters(
+    path_prefix: str | list[str] | tuple[str, ...] | None = None,
+    extensions: str | list[str] | tuple[str, ...] | None = None,
+    since: str | datetime | None = None,
+) -> SearchFilters:
+    """Normalize and validate filter inputs.
+
+    - `path_prefix` accepts a string or a list/tuple of strings.
+    - `extensions` accepts a list/tuple, or a comma-separated string for CLI use.
+      Entries are lowercased and gain a leading dot if missing.
+    - `since` accepts an ISO 8601 datetime string or a `datetime`. Naive
+      datetimes are assumed to be UTC. Invalid input raises ``ValueError``.
+    """
+    if path_prefix is None or path_prefix == "":
+        prefixes: tuple[str, ...] = ()
+    elif isinstance(path_prefix, str):
+        prefixes = (path_prefix,)
+    else:
+        prefixes = tuple(p for p in path_prefix if p)
+
+    if extensions is None or extensions == "":
+        exts: tuple[str, ...] = ()
+    elif isinstance(extensions, str):
+        raw = [item.strip() for item in extensions.split(",") if item.strip()]
+        exts = tuple(_normalize_extension(item) for item in raw)
+    else:
+        exts = tuple(_normalize_extension(item) for item in extensions if item)
+
+    parsed_since: datetime | None = None
+    if since is not None and since != "":
+        if isinstance(since, datetime):
+            parsed_since = since
+        elif isinstance(since, str):
+            try:
+                parsed_since = datetime.fromisoformat(since)
+            except ValueError as exc:
+                raise ValueError(
+                    f"Invalid `since` value {since!r}: expected ISO 8601 "
+                    "datetime (e.g. 2026-01-01T00:00:00Z)"
+                ) from exc
+        else:
+            raise ValueError(
+                f"Invalid `since` value: expected ISO 8601 string or datetime, "
+                f"got {type(since).__name__}"
+            )
+        if parsed_since.tzinfo is None:
+            parsed_since = parsed_since.replace(tzinfo=UTC)
+
+    return SearchFilters(
+        path_prefix=prefixes,
+        extensions=exts,
+        since=parsed_since,
+    )
+
+
+def filters_to_chroma_where(filters: SearchFilters) -> dict | None:
+    """Build a Chroma `where` clause from filters, or None if no push-down applies.
+
+    Chroma metadata filtering supports equality, `$in`, `$gte`, `$lte`, `$and`,
+    and `$or`, but no prefix-matching on string fields. So `extension` and
+    `since` push down; `path_prefix` is applied post-fetch.
+    """
+    clauses: list[dict] = []
+
+    if filters.extensions:
+        if len(filters.extensions) == 1:
+            clauses.append({"extension": filters.extensions[0]})
+        else:
+            clauses.append({"extension": {"$in": list(filters.extensions)}})
+
+    if filters.since is not None:
+        clauses.append({"source_mtime": {"$gte": filters.since.timestamp()}})
+
+    if not clauses:
+        return None
+    if len(clauses) == 1:
+        return clauses[0]
+    return {"$and": clauses}
+
+
+def apply_filters_to_hits(
+    hits: list[dict[str, Any]],
+    filters: SearchFilters,
+) -> list[dict[str, Any]]:
+    """Return hits that satisfy every supplied filter."""
+    if filters.is_empty:
+        return hits
+
+    since_epoch = filters.since.timestamp() if filters.since is not None else None
+    extensions = set(filters.extensions)
+    prefixes = filters.path_prefix
+
+    kept: list[dict[str, Any]] = []
+    for hit in hits:
+        path = str(hit.get("path", ""))
+        if prefixes and not any(path.startswith(prefix) for prefix in prefixes):
+            continue
+        if extensions:
+            ext = hit.get("extension")
+            if not ext:
+                ext = _Path(path).suffix.lower()
+            if ext not in extensions:
+                continue
+        if since_epoch is not None:
+            mtime = hit.get("source_mtime")
+            if mtime is None or float(mtime) < since_epoch:
+                continue
+        kept.append(hit)
+    return kept
+
+
+def _candidate_fetch_size(top_k: int, filters: SearchFilters) -> int:
+    """Decide how many candidates to fetch when filters may discard some."""
+    if filters.is_empty:
+        return top_k
+    return min(top_k * _FILTER_OVERSAMPLE, _MAX_OVERSAMPLE_FETCH)
 
 
 class SemanticSearch:
@@ -83,23 +248,33 @@ class SemanticSearch:
             "cache_hit_rate": f"{hit_rate:.1%}",
         }
 
-    def search(self, query: str, top_k: int = 10) -> list[dict]:
-        """Search by semantic similarity."""
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        filters: SearchFilters | None = None,
+    ) -> list[dict]:
+        """Search by semantic similarity, optionally scoped by filters."""
         if not query or not query.strip():
             return []
         top_k = _clamp_top_k(top_k)
+        filters = filters or SearchFilters()
 
         query_embedding = self._get_query_embedding(query)
+        n_results = _candidate_fetch_size(top_k, filters)
+        where = filters_to_chroma_where(filters)
 
-        results = self.collection.query(
-            query_embeddings=[query_embedding],
-            n_results=top_k,
-            include=["documents", "metadatas", "distances"],
-        )
+        query_kwargs: dict[str, Any] = {
+            "query_embeddings": [query_embedding],
+            "n_results": n_results,
+            "include": ["documents", "metadatas", "distances"],
+        }
+        if where is not None:
+            query_kwargs["where"] = where
+        results = self.collection.query(**query_kwargs)
 
-        hits = []
+        hits: list[dict] = []
         for i, doc_id in enumerate(results["ids"][0]):
-            # ChromaDB returns cosine distance; convert to similarity.
             distance = results["distances"][0][i]
             similarity = 1 - distance
             metadata = results["metadatas"][0][i]
@@ -113,13 +288,16 @@ class SemanticSearch:
                     "chunk_index": metadata.get("chunk_index"),
                     "chunk_count": metadata.get("chunk_count"),
                     "breadcrumb": metadata.get("breadcrumb"),
+                    "extension": metadata.get("extension"),
+                    "source_mtime": metadata.get("source_mtime"),
                     "content": results["documents"][0][i],
                     "score": similarity,
                     "source": "semantic",
                 }
             )
 
-        return hits
+        hits = apply_filters_to_hits(hits, filters)
+        return hits[:top_k]
 
 
 class KeywordSearch:
@@ -134,11 +312,17 @@ class KeywordSearch:
         self.indexer = indexer
         self._stemmer = Stemmer.Stemmer("english")
 
-    def search(self, keyword: str, max_results: int = 20) -> list[dict]:
-        """Search using BM25 for fast keyword matching."""
+    def search(
+        self,
+        keyword: str,
+        max_results: int = 20,
+        filters: SearchFilters | None = None,
+    ) -> list[dict]:
+        """Search using BM25 for fast keyword matching, optionally filtered."""
         if not keyword or not keyword.strip():
             return []
         max_results = _clamp_top_k(max_results, default=20)
+        filters = filters or SearchFilters()
 
         bm25 = self.indexer.bm25
         metadata_list = self.indexer.bm25_corpus
@@ -152,8 +336,11 @@ class KeywordSearch:
             stemmer=self._stemmer,
         )
 
-        # When corpus is loaded, results are dicts with 'id' (index) and 'text' (content)
-        results, scores = bm25.retrieve(query_tokens, k=max_results)
+        # Over-fetch when filters are active so we can return `max_results`
+        # in-scope hits after dropping out-of-scope ones.
+        fetch_n = _candidate_fetch_size(max_results, filters)
+        fetch_n = min(fetch_n, len(metadata_list))
+        results, scores = bm25.retrieve(query_tokens, k=fetch_n)
 
         hits = []
         for i, result in enumerate(results[0]):
@@ -161,7 +348,6 @@ class KeywordSearch:
             if score <= 0:
                 continue
 
-            # Handle both dict format (with corpus) and int format (without corpus loaded)
             if isinstance(result, dict):
                 doc_idx = result.get("id", -1)
                 doc_content = result.get("text", "")
@@ -183,13 +369,16 @@ class KeywordSearch:
                     "chunk_index": metadata.get("chunk_index"),
                     "chunk_count": metadata.get("chunk_count"),
                     "breadcrumb": metadata.get("breadcrumb"),
+                    "extension": metadata.get("extension"),
+                    "source_mtime": metadata.get("source_mtime"),
                     "content": doc_content,
                     "score": score,
                     "source": "keyword",
                 }
             )
 
-        return hits
+        hits = apply_filters_to_hits(hits, filters)
+        return hits[:max_results]
 
 
 class HybridSearch:
@@ -249,6 +438,7 @@ class HybridSearch:
         top_k: int = 10,
         semantic_weight: float | None = None,
         rerank: bool | None = None,
+        filters: SearchFilters | None = None,
     ) -> list[dict]:
         """Hybrid search using RRF with optional cross-encoder reranking.
 
@@ -257,10 +447,12 @@ class HybridSearch:
             top_k: Number of results to return
             semantic_weight: Weight for semantic vs keyword (0-1). If None, auto-detected.
             rerank: Override reranking setting (None uses RERANKER_ENABLED env var)
+            filters: Optional filters; applied within both underlying searches.
         """
         if not query or not query.strip():
             return []
         top_k = _clamp_top_k(top_k)
+        filters = filters or SearchFilters()
 
         query_type: str | None = None
         if semantic_weight is None:
@@ -275,8 +467,12 @@ class HybridSearch:
         candidate_multiplier = 3 if use_rerank else 2
         n_candidates = top_k * candidate_multiplier
 
-        semantic_results = self.semantic.search(query, top_k=n_candidates)
-        keyword_results = self.keyword.search(query, max_results=n_candidates)
+        semantic_results = self.semantic.search(
+            query, top_k=n_candidates, filters=filters
+        )
+        keyword_results = self.keyword.search(
+            query, max_results=n_candidates, filters=filters
+        )
 
         rrf_scores: dict[str, float] = defaultdict(float)
         doc_data: dict[str, dict] = {}
@@ -326,6 +522,7 @@ class SearchRoute:
     strategy: str
     reason: str
     fallback_used: bool
+    filters: SearchFilters = field(default_factory=SearchFilters)
 
 
 @dataclass(frozen=True)
@@ -427,8 +624,14 @@ class SmartSearch:
 
         return True, "BM25 returned strong exact-match results"
 
-    def search(self, query: str, top_k: int = 10) -> SmartSearchResult:
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        filters: SearchFilters | None = None,
+    ) -> SmartSearchResult:
         """Run BM25 first, then fall back to hybrid retrieval when needed."""
+        filters = filters or SearchFilters()
         if not query or not query.strip():
             return SmartSearchResult(
                 hits=[],
@@ -436,11 +639,14 @@ class SmartSearch:
                     strategy="keyword",
                     reason="empty query",
                     fallback_used=False,
+                    filters=filters,
                 ),
             )
 
         top_k = _clamp_top_k(top_k)
-        keyword_hits = self.keyword.search(query, max_results=top_k)
+        keyword_hits = self.keyword.search(
+            query, max_results=top_k, filters=filters
+        )
         strong, reason = self._keyword_strength(query, keyword_hits, top_k)
 
         if strong:
@@ -450,16 +656,18 @@ class SmartSearch:
                     strategy="keyword",
                     reason=reason,
                     fallback_used=False,
+                    filters=filters,
                 ),
             )
 
-        hybrid_hits = self.hybrid.search(query, top_k=top_k)
+        hybrid_hits = self.hybrid.search(query, top_k=top_k, filters=filters)
         return SmartSearchResult(
             hits=add_match_hints(query, hybrid_hits),
             route=SearchRoute(
                 strategy="hybrid",
                 reason=reason,
                 fallback_used=True,
+                filters=filters,
             ),
         )
 
@@ -541,11 +749,15 @@ def format_context_packets(
     if not hits:
         if route is None:
             return "No results found."
-        return (
-            "No results found.\n\n"
-            f"**Strategy:** {route.strategy}\n"
-            f"**Reason:** {route.reason}"
-        )
+        empty_lines = [
+            "No results found.",
+            "",
+            f"**Strategy:** {route.strategy}",
+            f"**Reason:** {route.reason}",
+        ]
+        if not route.filters.is_empty:
+            empty_lines.append(f"**Active filters:** {route.filters.describe()}")
+        return "\n".join(empty_lines)
 
     sorted_hits = sorted(hits, key=_score_for_sort, reverse=True)
     lines = [f"Found {len(hits)} results"]
@@ -561,6 +773,8 @@ def format_context_packets(
                 f"- **Reason:** {route.reason}",
             ]
         )
+        if not route.filters.is_empty:
+            lines.append(f"- **Active filters:** {route.filters.describe()}")
 
     grouped: dict[tuple[str | None, str], list[dict[str, Any]]] = defaultdict(list)
     for hit in sorted_hits:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from collections import Counter
 from collections.abc import Callable
@@ -11,9 +12,12 @@ from typing import Any
 
 from trace_search.config import settings
 from trace_search.index_metadata import (
+    INDEX_METADATA_VERSION,
+    SourceChangeSet,
+    categorize_source_changes,
     metadata_matches_active_model,
+    metadata_path,
     read_index_metadata,
-    stale_source_paths,
 )
 from trace_search.indexer import (
     SUPPORTED_EXTENSIONS,
@@ -43,6 +47,10 @@ class IndexDiagnosis:
     status: str
     messages: list[str]
     last_index_time: str | None
+    metadata_version: int | None = None
+    metadata_version_current: int = INDEX_METADATA_VERSION
+    next_reindex: str = "forced"
+    changes: SourceChangeSet | None = None
 
 
 @dataclass
@@ -117,6 +125,18 @@ def scan_corpus(kb_path: Path) -> CorpusScan:
     return scan
 
 
+def _read_metadata_version(index_path: Path) -> int | None:
+    """Best-effort raw read of the persisted metadata schema version."""
+    path = metadata_path(index_path)
+    if not path.exists():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return int(raw.get("version", 0))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return None
+
+
 def diagnose_index(kb_path: Path, index_path: Path) -> IndexDiagnosis:
     """Diagnose index presence, compatibility, freshness, and last build time."""
     model_slug = settings.model_slug
@@ -139,17 +159,30 @@ def diagnose_index(kb_path: Path, index_path: Path) -> IndexDiagnosis:
                 "Run `reindex` after confirming the corpus path.",
             ],
             last_index_time=None,
+            metadata_version=_read_metadata_version(index_path),
+            next_reindex="forced",
+            changes=None,
         )
 
+    raw_version = _read_metadata_version(index_path)
     metadata = read_index_metadata(index_path)
     if metadata is None:
+        if raw_version is not None and raw_version != INDEX_METADATA_VERSION:
+            reason_msg = (
+                f"Index metadata is at schema v{raw_version}; "
+                f"current schema is v{INDEX_METADATA_VERSION}."
+            )
+            next_msg = "Next `reindex` will be forced (schema upgrade)."
+        else:
+            reason_msg = "Index exists but has no readable Trace metadata."
+            next_msg = "Next `reindex` will be forced (no metadata)."
         return IndexDiagnosis(
             status="unknown",
-            messages=[
-                "Index exists but has no readable Trace metadata.",
-                "Run `reindex` to record model and freshness metadata.",
-            ],
+            messages=[reason_msg, next_msg],
             last_index_time=None,
+            metadata_version=raw_version,
+            next_reindex="forced",
+            changes=None,
         )
 
     if not metadata_matches_active_model(metadata):
@@ -158,18 +191,30 @@ def diagnose_index(kb_path: Path, index_path: Path) -> IndexDiagnosis:
             "Index metadata does not match the active embedding model/backend."
         )
 
-    stale = stale_source_paths(kb_path, metadata)
-    if stale:
+    changes = categorize_source_changes(kb_path, metadata)
+    if changes.has_changes:
         status = "stale" if status == "healthy" else status
-        messages.append(f"{len(stale)} source file(s) changed since last index.")
-
-    if not messages:
-        messages.append("Indexes are present, compatible, and fresh.")
+        messages.append(
+            f"{len(changes.added)} added, {len(changes.changed)} changed, "
+            f"{len(changes.removed)} removed since last index."
+        )
+        messages.append("Next `reindex` will run incrementally on changed files.")
+        next_reindex = "incremental"
+    else:
+        if status == "incompatible":
+            messages.append("Next `reindex` will run, but model mismatch forces a rebuild.")
+            next_reindex = "forced"
+        else:
+            messages.append("Indexes are present, compatible, and fresh.")
+            next_reindex = "incremental"
 
     return IndexDiagnosis(
         status=status,
         messages=messages,
         last_index_time=metadata.build_completed_at or None,
+        metadata_version=metadata.version,
+        next_reindex=next_reindex,
+        changes=changes,
     )
 
 
@@ -292,6 +337,35 @@ def render_doctor_report(report: DoctorReport) -> str:
             lines.append(f"  - {message}")
         last_index_time = collection.index.last_index_time or "unknown"
         lines.append(f"- **Last index time:** {last_index_time}")
+
+        version = collection.index.metadata_version
+        version_current = collection.index.metadata_version_current
+        if version is None:
+            version_label = "none"
+        elif version == version_current:
+            version_label = f"v{version}"
+        else:
+            version_label = f"v{version} (current: v{version_current})"
+        lines.append(f"- **Metadata schema:** {version_label}")
+        lines.append(f"- **Next reindex:** {collection.index.next_reindex}")
+
+        changes = collection.index.changes
+        if changes is not None:
+            lines.append(
+                "- **Source changes since last index:** "
+                f"unchanged={len(changes.unchanged)}, "
+                f"added={len(changes.added)}, "
+                f"changed={len(changes.changed)}, "
+                f"removed={len(changes.removed)}"
+            )
+
+    lines.append("")
+    lines.append("## Filters")
+    lines.append(
+        "- Scope any search or `list_documents` call with `path_prefix`, "
+        "`extensions`, or `since` (ISO 8601 datetime). "
+        "Example: `search('router', path_prefix='architecture/', extensions=['.md'])`."
+    )
 
     if report.probe is not None:
         lines.append("")

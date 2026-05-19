@@ -244,8 +244,8 @@ class TestGetDocumentErrorEnvelope:
 
 
 class TestCollectionRebuild:
-    def test_rebuild_clears_caches_and_returns_chunk_count(self, tmp_path):
-        """rebuild() must clear all four caches and return the new chunk count."""
+    def test_rebuild_force_clears_caches_and_returns_chunk_count(self, tmp_path):
+        """rebuild(force=True) must clear all four caches and return the new chunk count."""
         from unittest.mock import MagicMock, patch
 
         from trace_search.server_app import Collection
@@ -268,7 +268,7 @@ class TestCollectionRebuild:
         fake_indexer.build_index.return_value = 3
 
         with patch.object(col, "ensure_index", return_value=fake_indexer):
-            result = col.rebuild()
+            result = col.rebuild(force=True)
 
         assert col._indexer is None
         assert col._semantic is None
@@ -276,6 +276,89 @@ class TestCollectionRebuild:
         assert col._hybrid is None
         fake_indexer.build_index.assert_called_once_with(force=True)
         assert result == 3
+
+    def test_rebuild_incremental_keeps_caches_and_calls_build_without_force(
+        self, tmp_path
+    ):
+        """rebuild() defaults to incremental and preserves cached search components."""
+        from unittest.mock import MagicMock, patch
+
+        from trace_search.server_app import Collection
+
+        kb = tmp_path / "kb"
+        kb.mkdir()
+        (kb / "doc.md").write_text("# Doc\n\ncontent", encoding="utf-8")
+
+        col = Collection(
+            name="test",
+            kb_path=kb,
+            index_path=tmp_path / "idx",
+        )
+        semantic_marker = MagicMock()
+        keyword_marker = MagicMock()
+        hybrid_marker = MagicMock()
+        col._semantic = semantic_marker
+        col._keyword = keyword_marker
+        col._hybrid = hybrid_marker
+
+        fake_indexer = MagicMock()
+        fake_indexer.build_index.return_value = 5
+
+        with patch.object(col, "ensure_index", return_value=fake_indexer):
+            result = col.rebuild()
+
+        assert col._semantic is semantic_marker
+        assert col._keyword is keyword_marker
+        assert col._hybrid is hybrid_marker
+        fake_indexer.build_index.assert_called_once_with(force=False)
+        assert result == 5
+
+
+class TestReindexForceFlag:
+    def test_mcp_reindex_threads_force_into_collection(self, tmp_path):
+        """The MCP reindex tool must thread `force` down to Collection.rebuild."""
+        from unittest.mock import patch
+
+        kb = tmp_path / "kb"
+        kb.mkdir()
+        (kb / "doc.md").write_text("# Doc\n\ncontent", encoding="utf-8")
+
+        _, tools = build_multi_mcp("force-test", {"docs": kb})
+
+        with patch(
+            "trace_search.server_app.Collection.rebuild",
+            return_value=7,
+            autospec=True,
+        ) as rebuild_mock:
+            result = tools["reindex"].fn(force=True)
+
+        assert "(forced rebuild)" in result
+        assert "7 chunks indexed" in result
+        rebuild_mock.assert_called_once()
+        _, kwargs = rebuild_mock.call_args[0], rebuild_mock.call_args.kwargs
+        assert kwargs.get("force") is True
+
+    def test_mcp_reindex_defaults_to_incremental(self, tmp_path):
+        """Omitting `force` reindexes incrementally and does not advertise a rebuild."""
+        from unittest.mock import patch
+
+        kb = tmp_path / "kb"
+        kb.mkdir()
+        (kb / "doc.md").write_text("# Doc\n\ncontent", encoding="utf-8")
+
+        _, tools = build_multi_mcp("incremental-test", {"docs": kb})
+
+        with patch(
+            "trace_search.server_app.Collection.rebuild",
+            return_value=2,
+            autospec=True,
+        ) as rebuild_mock:
+            result = tools["reindex"].fn()
+
+        assert "(forced rebuild)" not in result
+        assert "2 chunks indexed" in result
+        kwargs = rebuild_mock.call_args.kwargs
+        assert kwargs.get("force") is False
 
 
 class TestListDocumentsMultiCollectionWalk:
