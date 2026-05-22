@@ -94,6 +94,8 @@ class QueryResult:
     path_first_hit_rank: int | None = None
     path_reciprocal_rank: float = 0.0
     path_hit_within_max_rank: bool = False
+    smart_strategy: str | None = None
+    smart_fallback_used: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -111,6 +113,8 @@ class QueryResult:
             "path_first_hit_rank": self.path_first_hit_rank,
             "path_reciprocal_rank": self.path_reciprocal_rank,
             "path_hit_within_max_rank": self.path_hit_within_max_rank,
+            "smart_strategy": self.smart_strategy,
+            "smart_fallback_used": self.smart_fallback_used,
         }
 
 
@@ -290,6 +294,7 @@ class EvaluationReport:
     stress_only: bool = False
     strict_keywords: bool = False
     strict_keywords_top1: bool = False
+    smart_fallback_rate: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -316,6 +321,7 @@ class EvaluationReport:
             "stress_only": self.stress_only,
             "strict_keywords": self.strict_keywords,
             "strict_keywords_top1": self.strict_keywords_top1,
+            "smart_fallback_rate": self.smart_fallback_rate,
         }
 
     @classmethod
