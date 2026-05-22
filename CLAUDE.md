@@ -12,7 +12,8 @@ Start here:
 
 - Default entrypoint: `uv run trace`
 - Local inspector: `KB_PATH=/path/to/your/docs uv run fastmcp dev src/trace_search/trace_server.py`
-- Core files: `config.py`, `server_app.py`, `trace_server.py`, `search.py`, `indexer.py`, `index_metadata.py`
+- Core package: `config.py`, `trace_server.py`, `search.py`, `indexer.py` (re-export shim), `index_metadata.py`
+- Internal modules: `wiki_indexer.py`, `extractors.py`, `chunking.py`, `collection_registry.py`, `formatting.py`, `corpus.py`, `models.py`
 - Indexes live under the KB root unless `INDEX_PATH` is set
 - `reindex` is incremental by default (skips unchanged files); pass `--force` / `force=true` to rebuild from scratch
 - All search tools and `list_documents` accept `path_prefix`, `extensions`, and `since` filters
@@ -42,5 +43,9 @@ KB_PATH=/path/to/your/docs uv run python -m tools.eval --full
 # Evaluation — tiny committed fixture (no copy step; good smoke test)
 KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
   uv run python -m tools.eval.cli --full --search semantic
-# Optional: pytest uses the same golden file — uv run python -m pytest tests/test_eval_retrieval.py -m slow
+KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
+  uv run python -m tools.eval.cli --full --search smart
+# Optional: pytest uses the same golden file — uv run pytest tests/test_eval_retrieval.py -m slow
+
+uv run python scripts/check_module_sizes.py
 ```
