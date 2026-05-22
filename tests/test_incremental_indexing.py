@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
 import pytest
 
 from tests.test_runtime_hardening import FakeBackend
+from trace_search.config import settings
 from trace_search.index_metadata import (
     INDEX_METADATA_VERSION,
     metadata_path,
@@ -147,7 +149,7 @@ def test_force_flag_drops_and_rebuilds_everything(kb_paths):
     assert first_ids == second_ids
 
 
-def test_outdated_metadata_promotes_to_full_rebuild(kb_paths, monkeypatch):
+def test_outdated_metadata_promotes_to_full_rebuild(kb_paths):
     kb, chroma, bm25 = kb_paths
     (kb / "intro.md").write_text("# Intro", encoding="utf-8")
 
@@ -166,6 +168,26 @@ def test_outdated_metadata_promotes_to_full_rebuild(kb_paths, monkeypatch):
     meta = read_index_metadata(bm25.parent)
     assert meta is not None
     assert meta.version == INDEX_METADATA_VERSION
+
+
+def test_embedding_backend_mismatch_promotes_to_full_rebuild(kb_paths):
+    kb, chroma, bm25 = kb_paths
+    (kb / "intro.md").write_text("# Intro", encoding="utf-8")
+
+    indexer = _make_indexer(kb, chroma, bm25)
+    indexer.build_index(force=True)
+
+    raw = json.loads(metadata_path(bm25.parent).read_text(encoding="utf-8"))
+    stale_backend = "torch" if settings.embedding_backend != "torch" else "onnx"
+    raw["embedding_backend"] = stale_backend
+    metadata_path(bm25.parent).write_text(json.dumps(raw), encoding="utf-8")
+
+    fresh = _make_indexer(kb, chroma, bm25)
+    fresh.build_index()
+
+    meta = read_index_metadata(bm25.parent)
+    assert meta is not None
+    assert meta.embedding_backend != stale_backend
 
 
 def test_chunk_ids_are_stable_for_unchanged_files(kb_paths):

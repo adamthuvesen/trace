@@ -924,7 +924,10 @@ class WikiIndexer:
         enough to update in place; BM25 may need rebuilding from Chroma but
         chunks are preserved across the update.
         """
-        from trace_search.index_metadata import read_index_metadata
+        from trace_search.index_metadata import (
+            metadata_matches_active_model,
+            read_index_metadata,
+        )
 
         if force:
             return "force"
@@ -937,6 +940,13 @@ class WikiIndexer:
         if metadata is None:
             logger.info(
                 "Index metadata missing or outdated; promoting to full rebuild"
+            )
+            return "force"
+
+        if not metadata_matches_active_model(metadata):
+            logger.info(
+                "Index metadata does not match active embedding settings; "
+                "promoting to full rebuild"
             )
             return "force"
 

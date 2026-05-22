@@ -167,6 +167,20 @@ def test_settings_allow_non_kb_access_without_kb_path(monkeypatch):
         get_settings.cache_clear()
 
 
+def test_settings_reject_invalid_log_level():
+    from trace_search.config import Settings
+
+    with pytest.raises(ValueError, match="Invalid LOG_LEVEL"):
+        Settings(log_level="chatty")
+
+
+def test_settings_normalize_valid_log_level():
+    from trace_search.config import Settings
+
+    assert Settings(log_level="debug").log_level == "DEBUG"
+    assert Settings(log_level="notset").log_level == "NOTSET"
+
+
 def test_settings_load_kb_path_from_dotenv(tmp_path, monkeypatch):
     """Local .env files should be honored for teammate-friendly setup."""
     from trace_search.config import get_settings

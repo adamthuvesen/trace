@@ -198,11 +198,17 @@ def diagnose_index(kb_path: Path, index_path: Path) -> IndexDiagnosis:
             f"{len(changes.added)} added, {len(changes.changed)} changed, "
             f"{len(changes.removed)} removed since last index."
         )
-        messages.append("Next `reindex` will run incrementally on changed files.")
-        next_reindex = "incremental"
+        if status == "incompatible":
+            messages.append("Next `reindex` will be forced because the model changed.")
+            next_reindex = "forced"
+        else:
+            messages.append("Next `reindex` will run incrementally on changed files.")
+            next_reindex = "incremental"
     else:
         if status == "incompatible":
-            messages.append("Next `reindex` will run, but model mismatch forces a rebuild.")
+            messages.append(
+                "Next `reindex` will run, but model mismatch forces a rebuild."
+            )
             next_reindex = "forced"
         else:
             messages.append("Indexes are present, compatible, and fresh.")

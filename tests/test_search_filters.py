@@ -47,9 +47,17 @@ class TestParseFilters:
         filters = parse_filters(extensions="md, py, tsx")
         assert filters.extensions == (".md", ".py", ".tsx")
 
+    def test_extensions_list_allows_comma_separated_entries(self):
+        filters = parse_filters(extensions=["md, py", "tsx"])
+        assert filters.extensions == (".md", ".py", ".tsx")
+
     def test_empty_extension_entry_raises(self):
         with pytest.raises(ValueError, match="non-empty"):
             parse_filters(extensions=["   "])
+
+    def test_empty_comma_separated_extension_entry_raises(self):
+        with pytest.raises(ValueError, match="non-empty"):
+            parse_filters(extensions="md,,py")
 
     def test_since_iso_string_parses_to_utc(self):
         filters = parse_filters(since="2026-01-01T00:00:00Z")

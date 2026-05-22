@@ -27,6 +27,16 @@ class TestKBCollectionsParsing:
         result = s.parsed_collections
         assert result == {"docs": kb}
 
+    def test_kb_path_expands_user_home(self, tmp_path, monkeypatch):
+        home = tmp_path / "home"
+        kb = home / "docs"
+        kb.mkdir(parents=True)
+        monkeypatch.setenv("HOME", str(home))
+
+        s = Settings(kb_path="~/docs")
+
+        assert s.parsed_collections == {"docs": kb}
+
     def test_raises_when_neither_set(self, monkeypatch):
         monkeypatch.delenv("KB_PATH", raising=False)
         monkeypatch.delenv("KB_COLLECTIONS", raising=False)
@@ -50,6 +60,17 @@ class TestKBCollectionsParsing:
         s = Settings(kb_collections=f"wiki:{kb}")
         result = s.parsed_collections
         assert result == {"wiki": kb}
+
+    def test_kb_collections_expands_user_home(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("KB_PATH", raising=False)
+        home = tmp_path / "home"
+        kb = home / "wiki"
+        kb.mkdir(parents=True)
+        monkeypatch.setenv("HOME", str(home))
+
+        s = Settings(kb_collections="wiki:~/wiki")
+
+        assert s.parsed_collections == {"wiki": kb}
 
     def test_only_kb_path_works(self, tmp_path):
         kb = tmp_path / "docs"

@@ -1,5 +1,7 @@
 """Tests for Trace doctor diagnostics."""
 
+import json
+
 from trace_search.diagnostics import (
     diagnose_collections,
     diagnose_index,
@@ -7,8 +9,10 @@ from trace_search.diagnostics import (
     render_doctor_report,
     scan_corpus,
 )
+from trace_search.config import settings
 from trace_search.index_metadata import (
     build_index_metadata,
+    metadata_path,
     utc_now_iso,
     write_index_metadata,
 )
@@ -155,11 +159,39 @@ def test_diagnose_index_reports_categorized_changes(tmp_path):
     assert "Next reindex" in rendered
 
 
+def test_diagnose_index_forces_reindex_when_model_mismatch_has_source_changes(
+    tmp_path,
+):
+    kb = tmp_path / "kb"
+    kb.mkdir()
+    doc = kb / "intro.md"
+    doc.write_text("# Intro", encoding="utf-8")
+    index_root = get_default_index_root(kb)
+    _create_index_dirs(index_root)
+    completed = utc_now_iso()
+    metadata = build_index_metadata(
+        kb_path=kb,
+        build_started_at=completed,
+        build_completed_at=completed,
+        document_count=1,
+        chunk_count=1,
+    )
+    write_index_metadata(index_root, metadata)
+    raw = json.loads(metadata_path(index_root).read_text(encoding="utf-8"))
+    raw["embedding_backend"] = (
+        "torch" if settings.embedding_backend != "torch" else "onnx"
+    )
+    metadata_path(index_root).write_text(json.dumps(raw), encoding="utf-8")
+    doc.write_text("# Intro\n\nchanged", encoding="utf-8")
+
+    diagnosis = diagnose_index(kb, index_root)
+
+    assert diagnosis.status == "incompatible"
+    assert diagnosis.next_reindex == "forced"
+    assert any("forced" in msg for msg in diagnosis.messages)
+
+
 def test_diagnose_index_reports_outdated_metadata_as_forced_rebuild(tmp_path):
-    import json as _json
-
-    from trace_search.index_metadata import metadata_path
-
     kb = tmp_path / "kb"
     kb.mkdir()
     (kb / "intro.md").write_text("# Intro", encoding="utf-8")
@@ -173,9 +205,9 @@ def test_diagnose_index_reports_outdated_metadata_as_forced_rebuild(tmp_path):
         chunk_count=1,
     )
     write_index_metadata(index_root, metadata)
-    raw = _json.loads(metadata_path(index_root).read_text(encoding="utf-8"))
+    raw = json.loads(metadata_path(index_root).read_text(encoding="utf-8"))
     raw["version"] = 1
-    metadata_path(index_root).write_text(_json.dumps(raw), encoding="utf-8")
+    metadata_path(index_root).write_text(json.dumps(raw), encoding="utf-8")
 
     diagnosis = diagnose_index(kb, index_root)
 
@@ -255,3 +287,80 @@ def test_registry_probe_skips_missing_indexes(tmp_path):
 
     with pytest.raises(ValueError, match="indexes are missing"):
         registry.probe_search("intro", 5, None)
+
+
+def test_registry_probe_skips_incompatible_indexes(tmp_path):
+    import pytest
+
+    from trace_search.server_app import CollectionRegistry
+
+    kb = tmp_path / "kb"
+    kb.mkdir()
+    registry = CollectionRegistry({"docs": kb})
+    col = registry.collections["docs"]
+    model_slug = "all_minilm_l6_v2"
+    (col.index_path / f".chroma_db_{model_slug}").mkdir(parents=True)
+    (col.index_path / f".bm25_index_{model_slug}").mkdir(parents=True)
+    metadata = build_index_metadata(
+        kb_path=kb,
+        build_started_at=utc_now_iso(),
+        build_completed_at=utc_now_iso(),
+        document_count=0,
+        chunk_count=0,
+    )
+    mismatched = metadata.__class__(
+        **{
+            **metadata.to_dict(),
+            "embedding_backend": (
+                "torch" if settings.embedding_backend != "torch" else "onnx"
+            ),
+        }
+    )
+    write_index_metadata(col.index_path, mismatched)
+
+    with pytest.raises(ValueError, match="indexes are incompatible"):
+        registry.probe_search("intro", 5, "docs")
+
+
+def test_registry_probe_uses_existing_indexes_without_rebuild(tmp_path):
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from tests.test_runtime_hardening import FakeBackend
+    from trace_search.search import SearchRoute, SmartSearchResult
+    from trace_search.server_app import CollectionRegistry
+
+    kb = tmp_path / "kb"
+    kb.mkdir()
+    registry = CollectionRegistry({"docs": kb})
+    registry._backend = FakeBackend()
+    registry._warmed = True
+
+    col = registry.collections["docs"]
+    model_slug = "all_minilm_l6_v2"
+    (col.index_path / f".chroma_db_{model_slug}").mkdir(parents=True)
+    (col.index_path / f".bm25_index_{model_slug}").mkdir(parents=True)
+    metadata = build_index_metadata(
+        kb_path=kb,
+        build_started_at=utc_now_iso(),
+        build_completed_at=utc_now_iso(),
+        document_count=0,
+        chunk_count=0,
+    )
+    write_index_metadata(col.index_path, metadata)
+    fake_smart = SimpleNamespace(
+        search=lambda query, top_k: SmartSearchResult(
+            hits=[{"path": "intro.md", "score": 1.0}],
+            route=SearchRoute(
+                strategy="keyword",
+                reason="test",
+                fallback_used=False,
+            ),
+        )
+    )
+
+    with patch.object(col, "get_smart", return_value=fake_smart) as get_smart:
+        hits = registry.probe_search("intro", 5, "docs")
+
+    assert hits == [{"path": "intro.md", "score": 1.0}]
+    get_smart.assert_called_once_with(registry.backend, skip_build=True)

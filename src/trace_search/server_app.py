@@ -12,6 +12,7 @@ from fastmcp import FastMCP
 from trace_search.config import settings, configure_logging
 from trace_search.embeddings import EmbeddingBackend, build_embedding_backend
 from trace_search.diagnostics import diagnose_collections, render_doctor_report
+from trace_search.index_metadata import metadata_matches_active_model, read_index_metadata
 from trace_search.indexer import (
     SUPPORTED_EXTENSIONS,
     WikiIndexer,
@@ -117,7 +118,15 @@ class Collection:
             self._hybrid = HybridSearch(indexer, indexer.backend)
         return self._hybrid
 
-    def get_smart(self, backend: EmbeddingBackend | None = None) -> SmartSearch:
+    def get_smart(
+        self,
+        backend: EmbeddingBackend | None = None,
+        *,
+        skip_build: bool = False,
+    ) -> SmartSearch:
+        if skip_build:
+            indexer = self.ensure_index(backend, skip_build=True)
+            return SmartSearch(indexer, indexer.backend)
         if self._smart is None:
             indexer = self.ensure_index(backend)
             self._smart = SmartSearch(indexer, indexer.backend)
@@ -362,21 +371,48 @@ class CollectionRegistry:
         )
 
     def probe_search(self, query: str, top_k: int, collection: str | None) -> list[dict]:
-        """Run a sample query only when indexes already exist."""
+        """Run a sample query only when indexes already exist and match settings."""
         model_slug = settings.model_slug
         missing = []
+        incompatible = []
         for col in self._resolve(collection):
             chroma_path = col.index_path / f".chroma_db_{model_slug}"
             bm25_path = col.index_path / f".bm25_index_{model_slug}"
             if not chroma_path.exists() or not bm25_path.exists():
                 missing.append(col.name)
+                continue
+            metadata = read_index_metadata(col.index_path)
+            if metadata is None or not metadata_matches_active_model(metadata):
+                incompatible.append(col.name)
         if missing:
             names = ", ".join(sorted(missing))
             raise ValueError(
                 f"Sample query skipped because indexes are missing for: {names}. "
                 "Run `reindex` first."
             )
-        return self.search_smart(query, top_k, collection).hits
+        if incompatible:
+            names = ", ".join(sorted(incompatible))
+            raise ValueError(
+                f"Sample query skipped because indexes are incompatible or missing "
+                f"metadata for: {names}. Run `reindex` first."
+            )
+        cols = self._resolve(collection)
+        if len(cols) == 1:
+            result = cols[0].get_smart(self.backend, skip_build=True).search(
+                query,
+                top_k,
+            )
+            return result.hits
+
+        results = [
+            c.get_smart(self.backend, skip_build=True).search(query, top_k)
+            for c in cols
+        ]
+        return self._merge_results(
+            [result.hits for result in results],
+            top_k,
+            [c.name for c in cols],
+        )
 
     def _with_neighbor_context(self, col: Collection, hit: dict) -> dict:
         enriched = hit.copy()
@@ -768,9 +804,11 @@ def build_multi_mcp(
         extensions: list[str] | None = None,
         since: str | None = None,
     ) -> str:
-        """Alias for `search`. Use `search` instead — it's the same BM25 engine.
+        """Direct BM25 keyword search for exact terms, identifiers, and filenames.
 
-        Same `path_prefix` / `extensions` / `since` filters as `search`.
+        Use `search` as the default smart route; use this tool when you want
+        lexical matching without semantic fallback. Same `path_prefix` /
+        `extensions` / `since` filters as `search`.
         """
         return operations.keyword_search(
             keyword,

@@ -99,9 +99,9 @@ uv run fastmcp dev src/trace_search/trace_server.py
 
 | Variable                   | Description                                                     | Default            |
 | -------------------------- | --------------------------------------------------------------- | ------------------ |
-| `KB_PATH`                  | Path to a single collection                                     | —                  |
-| `KB_COLLECTIONS`           | Comma-separated `name:path` pairs                               | —                  |
-| `INDEX_PATH`               | Root path for indexes                                           | —                  |
+| `KB_PATH`                  | Path to a single collection (`~` is expanded)                   | —                  |
+| `KB_COLLECTIONS`           | Comma-separated `name:path` pairs (`~` is expanded in paths)    | —                  |
+| `INDEX_PATH`               | Root path for indexes (`~` is expanded)                         | —                  |
 | `LOG_LEVEL`                | Logging level                                                   | `INFO`             |
 | `EMBEDDING_MODEL`          | Embedding model (`all-MiniLM-L6-v2` or `BAAI/bge-base-en-v1.5`) | `all-MiniLM-L6-v2` |
 | `EMBEDDING_BACKEND`        | Embedding runtime: `onnx` (int8, faster) or `torch`             | `onnx`             |
@@ -109,6 +109,8 @@ uv run fastmcp dev src/trace_search/trace_server.py
 | `RERANKER_ENABLED`         | Enable reranking                                                | `false`            |
 
 `KB_COLLECTIONS` and `KB_PATH` are mutually exclusive — setting both raises a startup error.
+Invalid paths, collection names, and log levels fail fast with clear startup errors.
+Valid log levels are `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`, and `NOTSET`.
 
 ## Agent Tools
 
@@ -183,6 +185,10 @@ KB_PATH=/path/to/your/docs uv run trace doctor "frontmatter"
 KB_COLLECTIONS="docs:/path/to/docs,team:/path/to/team" uv run trace doctor --collection docs "onboarding"
 ```
 
+When you include a sample query, `doctor` probes existing indexes only. It will
+tell you to run `reindex` if indexes are missing instead of building them as a
+side effect.
+
 Doctor checks:
 
 - whether `KB_PATH` / `KB_COLLECTIONS` is valid
@@ -205,8 +211,10 @@ multi-collection mode uses one subdirectory per collection.
 ## Development
 
 ```bash
-# Tests
+# Checks
 uv run python -m pytest -m "not slow"
+uv run ruff check .
+uv build
 
 # Rebuild index
 KB_PATH=/path/to/your/docs \
@@ -216,4 +224,8 @@ uv run python -c "from trace_search.indexer import WikiIndexer; WikiIndexer().bu
 cp tools/eval/golden_queries.example.yaml tools/eval/golden_queries.yaml
 KB_PATH=/path/to/your/docs uv run python -c "from trace_search.indexer import WikiIndexer; WikiIndexer().build_index(force=True)"
 KB_PATH=/path/to/your/docs uv run python -m tools.eval.cli --quick
+
+# Tiny committed fixture smoke test
+KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
+  uv run python -m tools.eval.cli --full --search semantic
 ```

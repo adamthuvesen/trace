@@ -77,6 +77,14 @@ def _normalize_extension(value: str) -> str:
     return cleaned if cleaned.startswith(".") else f".{cleaned}"
 
 
+def _split_extensions(values: list[str] | tuple[str, ...]) -> tuple[str, ...]:
+    """Normalize extension lists, allowing comma-separated entries per item."""
+    normalized: list[str] = []
+    for value in values:
+        normalized.extend(_normalize_extension(item) for item in value.split(","))
+    return tuple(normalized)
+
+
 def parse_filters(
     path_prefix: str | list[str] | tuple[str, ...] | None = None,
     extensions: str | list[str] | tuple[str, ...] | None = None,
@@ -100,10 +108,9 @@ def parse_filters(
     if extensions is None or extensions == "":
         exts: tuple[str, ...] = ()
     elif isinstance(extensions, str):
-        raw = [item.strip() for item in extensions.split(",") if item.strip()]
-        exts = tuple(_normalize_extension(item) for item in raw)
+        exts = _split_extensions((extensions,))
     else:
-        exts = tuple(_normalize_extension(item) for item in extensions if item)
+        exts = _split_extensions(extensions)
 
     parsed_since: datetime | None = None
     if since is not None and since != "":

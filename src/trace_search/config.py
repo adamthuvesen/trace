@@ -15,6 +15,7 @@ SUPPORTED_MODELS = {
     "BAAI/bge-base-en-v1.5": {"dims": 768, "pooling": "cls"},
 }
 COLLECTION_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+VALID_LOG_LEVELS = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"}
 
 
 def validate_collection_name(name: str) -> str:
@@ -107,6 +108,19 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
     )
 
+    @field_validator(
+        "kb_path",
+        "index_path",
+        "chroma_path",
+        "eval_golden_queries",
+        mode="before",
+    )
+    @classmethod
+    def expand_user_path(cls, v: str | Path | None) -> Path | None:
+        if v is None or v == "":
+            return None
+        return Path(v).expanduser()
+
     @field_validator("kb_path")
     @classmethod
     def validate_kb_path(cls, v: Path | None) -> Path | None:
@@ -117,6 +131,17 @@ class Settings(BaseSettings):
         if not v.is_dir():
             raise ValueError(f"Knowledge base path is not a directory: {v}")
         return v
+
+    @field_validator("log_level")
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        normalized = v.strip().upper()
+        if normalized not in VALID_LOG_LEVELS:
+            raise ValueError(
+                f"Invalid LOG_LEVEL: {v}. "
+                f"Supported levels: {', '.join(sorted(VALID_LOG_LEVELS))}"
+            )
+        return normalized
 
     @field_validator("embedding_model")
     @classmethod
@@ -190,7 +215,7 @@ class Settings(BaseSettings):
                 validate_collection_name(name)
                 if name in collections:
                     raise ValueError(f"Duplicate collection name: {name}")
-                path = Path(path_str.strip())
+                path = Path(path_str.strip()).expanduser()
                 if not path.exists():
                     raise ValueError(f"Collection '{name}' path does not exist: {path}")
                 if not path.is_dir():
@@ -233,6 +258,6 @@ settings = _LazySettingsProxy()
 def configure_logging() -> None:
     log_level = get_settings().log_level
     logging.basicConfig(
-        level=getattr(logging, log_level.upper()),
+        level=getattr(logging, log_level),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
