@@ -176,10 +176,6 @@ def test_multi_collection_smart_search_batches_neighbor_fetches(tmp_path):
         col._smart = smart
 
         indexer = MagicMock()
-        indexer.collection.get.return_value = {
-            "ids": [f"{name}/doc0.md::0"],
-            "documents": ["neighbor chunk content"],
-        }
         col._indexer = indexer
 
     result = registry.search_smart("query", top_k=10, collection=None)
@@ -187,13 +183,11 @@ def test_multi_collection_smart_search_batches_neighbor_fetches(tmp_path):
     assert len(result.hits) == 10
     assert {h["collection"] for h in result.hits} == {"kb1", "kb2"}
 
-    kb1_get = registry.collections["kb1"]._indexer.collection.get
-    kb2_get = registry.collections["kb2"]._indexer.collection.get
-    assert kb1_get.call_count == 1
-    assert kb2_get.call_count == 1
-
-    kb1_call_ids = kb1_get.call_args.kwargs["ids"]
-    assert len(kb1_call_ids) == 10  # 5 hits × 2 neighbors each
+    kb1_batch = registry.collections["kb1"]._indexer.neighbor_contents_batch
+    kb2_batch = registry.collections["kb2"]._indexer.neighbor_contents_batch
+    assert kb1_batch.call_count == 1
+    assert kb2_batch.call_count == 1
+    assert len(kb1_batch.call_args.args[0]) == 5  # one batch per collection
 
 
 def test_specialist_keyword_tool_bypasses_smart_registry_path(tmp_path):
