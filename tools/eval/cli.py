@@ -47,8 +47,6 @@ from pathlib import Path
 
 import click
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
-
 from tools.eval.evaluator import load_golden_queries, run_evaluation
 from tools.eval.regression import (
     check_ci_thresholds,
@@ -101,9 +99,9 @@ def resolve_eval_scope(
 )
 @click.option(
     "--search",
-    type=click.Choice(["semantic", "bm25", "hybrid"]),
+    type=click.Choice(["semantic", "bm25", "hybrid", "smart"]),
     default="hybrid",
-    help="Search mode to evaluate (default: hybrid)",
+    help="Search mode to evaluate (default: hybrid; smart matches MCP default)",
 )
 @click.option(
     "--category",

@@ -24,7 +24,11 @@ from tools.eval.models import (
 
 if TYPE_CHECKING:
     from trace_search.indexer import WikiIndexer
-    from trace_search.search import HybridSearch, KeywordSearch, SemanticSearch
+    from trace_search.search import HybridSearch, KeywordSearch, SemanticSearch, SmartSearch
+
+    Searcher = SemanticSearch | KeywordSearch | HybridSearch | SmartSearch
+else:
+    Searcher = object
 
 logger = logging.getLogger(__name__)
 
@@ -114,17 +118,18 @@ def load_golden_queries(
 def create_searcher(
     indexer: WikiIndexer,
     search_mode: str,
-) -> SemanticSearch | KeywordSearch | HybridSearch:
-    from trace_search.search import HybridSearch, KeywordSearch, SemanticSearch
+) -> Searcher:
+    from trace_search.search import HybridSearch, KeywordSearch, SemanticSearch, SmartSearch
 
     if search_mode == "semantic":
         return SemanticSearch(indexer.collection, indexer.backend)
-    elif search_mode == "bm25":
+    if search_mode == "bm25":
         return KeywordSearch(indexer)
-    elif search_mode == "hybrid":
+    if search_mode == "hybrid":
         return HybridSearch(indexer, indexer.backend)
-    else:
-        raise ValueError(f"Unknown search mode: {search_mode}")
+    if search_mode == "smart":
+        return SmartSearch(indexer, indexer.backend)
+    raise ValueError(f"Unknown search mode: {search_mode}")
 
 
 def _effective_min_keywords(
@@ -170,7 +175,7 @@ def percentile(sorted_values: list[float], pct: float) -> float:
 
 def evaluate_query(
     query: GoldenQuery,
-    searcher: SemanticSearch | KeywordSearch | HybridSearch,
+    searcher: Searcher,
     search_mode: str,
     top_k: int = 5,
     min_keywords: int = 2,
@@ -193,8 +198,19 @@ def evaluate_query(
     """
     need = _effective_min_keywords(query, min_keywords, strict_keywords)
 
+    smart_strategy: str | None = None
+    smart_fallback_used: bool | None = None
+
     start = time.perf_counter()
-    if search_mode == "bm25":
+    if search_mode == "smart":
+        from trace_search.search_types import SmartSearchResult
+
+        smart_result = searcher.search(query.query, top_k=top_k)
+        assert isinstance(smart_result, SmartSearchResult)
+        hits = smart_result.hits
+        smart_strategy = smart_result.route.strategy
+        smart_fallback_used = smart_result.route.fallback_used
+    elif search_mode == "bm25":
         hits = searcher.search(query.query, max_results=top_k)
     else:
         hits = searcher.search(query.query, top_k=top_k)
@@ -216,6 +232,8 @@ def evaluate_query(
             path_first_hit_rank=None,
             path_reciprocal_rank=0.0,
             path_hit_within_max_rank=False,
+            smart_strategy=smart_strategy,
+            smart_fallback_used=smart_fallback_used,
         )
 
     path_first_hit_rank: int | None = None
@@ -261,6 +279,8 @@ def evaluate_query(
         path_first_hit_rank=path_first_hit_rank,
         path_reciprocal_rank=reciprocal,
         path_hit_within_max_rank=path_hit_within_max_rank,
+        smart_strategy=smart_strategy,
+        smart_fallback_used=smart_fallback_used,
     )
 
 
@@ -418,6 +438,16 @@ def run_evaluation(
     by_category = compute_category_metrics(queries, results)
     by_file_type = compute_file_type_metrics(queries, results)
 
+    smart_fallback_rate: float | None = None
+    if search_mode == "smart":
+        fallback_flags = [
+            r.smart_fallback_used for r in results if r.smart_fallback_used is not None
+        ]
+        if fallback_flags:
+            smart_fallback_rate = sum(1 for flag in fallback_flags if flag) / len(
+                fallback_flags
+            )
+
     return EvaluationReport(
         timestamp=datetime.now(timezone.utc).isoformat(),
         search_mode=search_mode,
@@ -444,4 +474,5 @@ def run_evaluation(
         stress_only=stress_only,
         strict_keywords=strict_keywords,
         strict_keywords_top1=strict_keywords_top1,
+        smart_fallback_rate=smart_fallback_rate,
     )

@@ -117,6 +117,23 @@ class TestFiltersToChromaWhere:
         assert len(clause["$and"]) == 2
 
 
+class TestMatchesRecord:
+    def test_empty_filters_match_everything(self):
+        filters = SearchFilters()
+        assert filters.matches_record("any/path.md", ".md", 100.0)
+
+    def test_path_prefix_and_extension_and_since(self):
+        filters = parse_filters(
+            path_prefix="rfcs/",
+            extensions=[".md"],
+            since=datetime.fromtimestamp(100.0, tz=UTC).isoformat(),
+        )
+        assert filters.matches_record("rfcs/a.md", ".md", 200.0)
+        assert not filters.matches_record("architecture/a.md", ".md", 200.0)
+        assert not filters.matches_record("rfcs/b.py", ".py", 200.0)
+        assert not filters.matches_record("rfcs/old.md", ".md", 10.0)
+
+
 class TestApplyFiltersToHits:
     def _hit(
         self,

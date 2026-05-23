@@ -1,6 +1,11 @@
 """Tests for search module."""
 
 from trace_search.config import settings
+from trace_search.query_profile import (
+    WEIGHT_KEYWORD,
+    WEIGHT_QUESTION,
+    classify_query,
+)
 from trace_search.search import (
     HybridSearch,
     _clamp_top_k,
@@ -8,22 +13,16 @@ from trace_search.search import (
 
 
 class TestHybridSearchQueryClassification:
-    """Exercises HybridSearch._classify_query directly via a minimal stub."""
+    """Exercises shared query_profile.classify_query."""
 
     @staticmethod
     def _classify(query: str) -> tuple[str, float]:
-        import types
-
-        stub = types.SimpleNamespace(
-            WEIGHT_KEYWORD=HybridSearch.WEIGHT_KEYWORD,
-            WEIGHT_QUESTION=HybridSearch.WEIGHT_QUESTION,
-        )
-        return HybridSearch._classify_query(stub, query)
+        return classify_query(query)
 
     def test_question_classified_as_question(self):
         query_type, weight = self._classify("What is BM25?")
         assert query_type == "question"
-        assert weight == HybridSearch.WEIGHT_QUESTION
+        assert weight == WEIGHT_QUESTION
 
         query_type, weight = self._classify("How do BM25 and RRF differ?")
         assert query_type == "question"
@@ -31,7 +30,7 @@ class TestHybridSearchQueryClassification:
     def test_short_keyword_query_classified_as_keyword(self):
         query_type, weight = self._classify("frontmatter")
         assert query_type == "keyword"
-        assert weight == HybridSearch.WEIGHT_KEYWORD
+        assert weight == WEIGHT_KEYWORD
 
         query_type, weight = self._classify("heading chunking")
         assert query_type == "keyword"
@@ -40,31 +39,27 @@ class TestHybridSearchQueryClassification:
         """Acronyms should not trigger expansion; routed as plain keyword."""
         query_type, weight = self._classify("RRF")
         assert query_type == "keyword"
-        assert weight == HybridSearch.WEIGHT_KEYWORD
+        assert weight == WEIGHT_KEYWORD
 
     def test_long_query_classified_as_default(self):
         query_type, weight = self._classify(
             "compare semantic and keyword search behavior"
         )
         assert query_type == "default"
-        assert weight == HybridSearch.WEIGHT_QUESTION
+        assert weight == WEIGHT_QUESTION
 
     def test_weight_constants_defined(self):
-        assert hasattr(HybridSearch, "WEIGHT_KEYWORD")
-        assert hasattr(HybridSearch, "WEIGHT_QUESTION")
-        assert not hasattr(HybridSearch, "WEIGHT_ACRONYM")
+        assert WEIGHT_KEYWORD == 0.4
+        assert WEIGHT_QUESTION == 0.7
 
     def test_question_weight_favors_semantic(self):
-        assert HybridSearch.WEIGHT_QUESTION > 0.5
+        assert WEIGHT_QUESTION > 0.5
 
     def test_keyword_weight_favors_bm25(self):
-        assert HybridSearch.WEIGHT_KEYWORD < 0.5
+        assert WEIGHT_KEYWORD < 0.5
 
     def test_weights_in_valid_range(self):
-        weights = [
-            HybridSearch.WEIGHT_KEYWORD,
-            HybridSearch.WEIGHT_QUESTION,
-        ]
+        weights = [WEIGHT_KEYWORD, WEIGHT_QUESTION]
         for w in weights:
             assert 0 <= w <= 1, f"Weight {w} should be between 0 and 1"
 

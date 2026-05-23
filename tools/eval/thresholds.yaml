@@ -54,6 +54,13 @@ regression:
   # Minimum queries that must regress (pass->fail) to flag
   min_regressed_queries: 2
 
+# Optional gates when running with `--search smart` (production MCP default).
+smart:
+  fallback_rate:
+    target: 0.35
+    warning: 0.50
+    critical: 0.65
+
 # CI mode settings
 ci:
   # Exit code 1 if any of these conditions are met

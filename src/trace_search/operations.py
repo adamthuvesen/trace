@@ -3,13 +3,9 @@
 from __future__ import annotations
 
 from trace_search.config import get_settings
-from trace_search.search import (
-    SearchFilters,
-    format_results,
-    format_smart_search,
-    parse_filters,
-)
-from trace_search.server_app import CollectionRegistry
+from trace_search.formatting import format_context_packets, format_results
+from trace_search.search import SearchFilters, parse_filters
+from trace_search.collection_registry import CollectionRegistry
 
 
 def _build_filters(
@@ -51,7 +47,7 @@ class TraceOperations:
     ) -> str:
         filters = _build_filters(path_prefix, extensions, since)
         result = self.registry.search_smart(query, top_k, collection, filters=filters)
-        return format_smart_search(result, query)
+        return format_context_packets(result.hits, query=query, route=result.route)
 
     def semantic_search(
         self,

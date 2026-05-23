@@ -7,17 +7,28 @@ import logging
 import re
 from collections import OrderedDict, defaultdict
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path as _Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 
-import bm25s
-import Stemmer
 from sentence_transformers import CrossEncoder
 
+from trace_search.bm25_tokenize import tokenize_keywords
 from trace_search.config import settings
 from trace_search.embeddings import EmbeddingBackend, build_embedding_backend
+from trace_search.hit_builders import hit_from_bm25, hit_from_chroma, hits_to_dicts
+from trace_search.formatting import (  # noqa: F401 — package re-exports
+    format_context_packets,
+    format_results,
+)
+from trace_search.query_profile import (
+    BM25_WEAK_BEST_SCORE,
+    SMART_KEYWORD_STRENGTH_TOP_K,
+    classify_query,
+    is_conceptual_query,
+)
+from trace_search.search_types import SearchRoute, SmartSearchResult
 
 if TYPE_CHECKING:
     from trace_search.indexer import WikiIndexer
@@ -67,6 +78,27 @@ class SearchFilters:
         if self.since is not None:
             parts.append(f"since={self.since.isoformat()}")
         return "; ".join(parts)
+
+    def matches_record(
+        self,
+        rel_path: str,
+        extension: str,
+        mtime: float | None,
+    ) -> bool:
+        """Return whether a file or hit record satisfies all active filters."""
+        if self.is_empty:
+            return True
+        if self.path_prefix and not any(
+            rel_path.startswith(prefix) for prefix in self.path_prefix
+        ):
+            return False
+        if self.extensions and extension not in self.extensions:
+            return False
+        if self.since is not None:
+            since_epoch = self.since.timestamp()
+            if mtime is None or mtime < since_epoch:
+                return False
+        return True
 
 
 def _normalize_extension(value: str) -> str:
@@ -172,26 +204,16 @@ def apply_filters_to_hits(
     if filters.is_empty:
         return hits
 
-    since_epoch = filters.since.timestamp() if filters.since is not None else None
-    extensions = set(filters.extensions)
-    prefixes = filters.path_prefix
-
     kept: list[dict[str, Any]] = []
     for hit in hits:
         path = str(hit.get("path", ""))
-        if prefixes and not any(path.startswith(prefix) for prefix in prefixes):
-            continue
-        if extensions:
-            ext = hit.get("extension")
-            if not ext:
-                ext = _Path(path).suffix.lower()
-            if ext not in extensions:
-                continue
-        if since_epoch is not None:
-            mtime = hit.get("source_mtime")
-            if mtime is None or float(mtime) < since_epoch:
-                continue
-        kept.append(hit)
+        ext = hit.get("extension")
+        if not ext:
+            ext = _Path(path).suffix.lower()
+        mtime_raw = hit.get("source_mtime")
+        mtime = float(mtime_raw) if mtime_raw is not None else None
+        if filters.matches_record(path, str(ext), mtime):
+            kept.append(hit)
     return kept
 
 
@@ -200,6 +222,19 @@ def _candidate_fetch_size(top_k: int, filters: SearchFilters) -> int:
     if filters.is_empty:
         return top_k
     return min(top_k * _FILTER_OVERSAMPLE, _MAX_OVERSAMPLE_FETCH)
+
+
+class ChromaQueryCollection(Protocol):
+    """Minimal Chroma collection surface used by semantic search."""
+
+    def query(
+        self,
+        *,
+        query_embeddings: list[list[float]],
+        n_results: int,
+        include: list[str],
+        where: dict | None = ...,
+    ) -> dict[str, list]: ...
 
 
 class SemanticSearch:
@@ -213,7 +248,11 @@ class SemanticSearch:
     _cache_misses: ClassVar[int] = 0
     _cache_maxsize: ClassVar[int] = 1000
 
-    def __init__(self, collection, backend: EmbeddingBackend | None = None):
+    def __init__(
+        self,
+        collection: ChromaQueryCollection,
+        backend: EmbeddingBackend | None = None,
+    ):
         """Initialize semantic search.
 
         Args:
@@ -280,30 +319,21 @@ class SemanticSearch:
             query_kwargs["where"] = where
         results = self.collection.query(**query_kwargs)
 
-        hits: list[dict] = []
+        built: list = []
         for i, doc_id in enumerate(results["ids"][0]):
             distance = results["distances"][0][i]
             similarity = 1 - distance
             metadata = results["metadatas"][0][i]
-
-            hits.append(
-                {
-                    "id": doc_id,
-                    "path": metadata["path"],
-                    "title": metadata["title"],
-                    "folder": metadata["folder"],
-                    "chunk_index": metadata.get("chunk_index"),
-                    "chunk_count": metadata.get("chunk_count"),
-                    "breadcrumb": metadata.get("breadcrumb"),
-                    "extension": metadata.get("extension"),
-                    "source_mtime": metadata.get("source_mtime"),
-                    "content": results["documents"][0][i],
-                    "score": similarity,
-                    "source": "semantic",
-                }
+            built.append(
+                hit_from_chroma(
+                    doc_id,
+                    metadata,
+                    results["documents"][0][i],
+                    similarity,
+                )
             )
 
-        hits = apply_filters_to_hits(hits, filters)
+        hits = apply_filters_to_hits(hits_to_dicts(built), filters)
         return hits[:top_k]
 
 
@@ -317,7 +347,6 @@ class KeywordSearch:
             indexer: WikiIndexer with loaded BM25 index and corpus metadata.
         """
         self.indexer = indexer
-        self._stemmer = Stemmer.Stemmer("english")
 
     def search(
         self,
@@ -337,11 +366,7 @@ class KeywordSearch:
         if bm25 is None or not metadata_list:
             return []
 
-        query_tokens = bm25s.tokenize(
-            [keyword],
-            stopwords="en",
-            stemmer=self._stemmer,
-        )
+        query_tokens = tokenize_keywords(keyword)
 
         # Over-fetch when filters are active so we can return `max_results`
         # in-scope hits after dropping out-of-scope ones.
@@ -349,7 +374,7 @@ class KeywordSearch:
         fetch_n = min(fetch_n, len(metadata_list))
         results, scores = bm25.retrieve(query_tokens, k=fetch_n)
 
-        hits = []
+        built = []
         for i, result in enumerate(results[0]):
             score = float(scores[0][i])
             if score <= 0:
@@ -366,25 +391,9 @@ class KeywordSearch:
                 continue
 
             metadata = metadata_list[doc_idx]
+            built.append(hit_from_bm25(metadata, doc_content, score))
 
-            hits.append(
-                {
-                    "id": f"{metadata['path']}::{metadata['chunk_index']}",
-                    "path": metadata["path"],
-                    "title": metadata["title"],
-                    "folder": metadata["folder"],
-                    "chunk_index": metadata.get("chunk_index"),
-                    "chunk_count": metadata.get("chunk_count"),
-                    "breadcrumb": metadata.get("breadcrumb"),
-                    "extension": metadata.get("extension"),
-                    "source_mtime": metadata.get("source_mtime"),
-                    "content": doc_content,
-                    "score": score,
-                    "source": "keyword",
-                }
-            )
-
-        hits = apply_filters_to_hits(hits, filters)
+        hits = apply_filters_to_hits(hits_to_dicts(built), filters)
         return hits[:max_results]
 
 
@@ -393,10 +402,6 @@ class HybridSearch:
 
     # Lazy-loaded reranker (shared across instances)
     _reranker: ClassVar[CrossEncoder | None] = None
-
-    # Query type weights (semantic_weight)
-    WEIGHT_KEYWORD = 0.4  # Short keyword queries favor BM25
-    WEIGHT_QUESTION = 0.7  # Question queries favor semantic
 
     def __init__(self, indexer: WikiIndexer, backend: EmbeddingBackend | None = None):
         """Initialize hybrid search.
@@ -415,29 +420,6 @@ class HybridSearch:
         if cls._reranker is None:
             cls._reranker = CrossEncoder(settings.reranker_model)
         return cls._reranker
-
-    def _classify_query(self, query: str) -> tuple[str, float]:
-        """Classify query type and return optimal semantic weight.
-
-        Returns:
-            Tuple of (query_type, semantic_weight)
-        """
-        query_lower = query.lower().strip()
-        words = query_lower.split()
-
-        if not words:
-            return ("default", self.WEIGHT_QUESTION)
-
-        # Questions benefit from semantic understanding
-        question_starters = {"what", "how", "where", "when", "why", "which", "who"}
-        if words[0] in question_starters:
-            return ("question", self.WEIGHT_QUESTION)
-
-        # Short queries favor BM25 exact matching
-        if len(words) <= 2:
-            return ("keyword", self.WEIGHT_KEYWORD)
-
-        return ("default", self.WEIGHT_QUESTION)
 
     def search(
         self,
@@ -463,7 +445,7 @@ class HybridSearch:
 
         query_type: str | None = None
         if semantic_weight is None:
-            query_type, semantic_weight = self._classify_query(query)
+            query_type, semantic_weight = classify_query(query)
             logger.debug(
                 "Query classified as '%s', weight=%s", query_type, semantic_weight
             )
@@ -522,24 +504,6 @@ class HybridSearch:
         return candidates[:top_k]
 
 
-@dataclass(frozen=True)
-class SearchRoute:
-    """Routing metadata for smart search."""
-
-    strategy: str
-    reason: str
-    fallback_used: bool
-    filters: SearchFilters = field(default_factory=SearchFilters)
-
-
-@dataclass(frozen=True)
-class SmartSearchResult:
-    """Smart search hits plus transparent routing metadata."""
-
-    hits: list[dict[str, Any]]
-    route: SearchRoute
-
-
 NeighborLookup = Callable[[str, int, int], list[dict[str, Any]]]
 
 
@@ -548,15 +512,6 @@ def _query_terms(query: str) -> list[str]:
     return [
         term for term in re.findall(r"[A-Za-z0-9_/-]+", query.lower()) if len(term) > 1
     ]
-
-
-def _is_conceptual_query(query: str) -> bool:
-    words = query.lower().strip().split()
-    if not words:
-        return False
-    if words[0] in {"what", "how", "where", "when", "why", "which", "who"}:
-        return True
-    return len(words) >= 5
 
 
 def _lexical_match_hints(query: str, hit: dict[str, Any]) -> list[str]:
@@ -616,17 +571,17 @@ class SmartSearch:
 
         best_score = float(hits[0].get("score", 0) or 0)
         distinct_docs = {hit.get("path") for hit in hits}
-        requested = max(1, min(top_k, 3))
+        requested = max(1, min(top_k, SMART_KEYWORD_STRENGTH_TOP_K))
 
         if best_score <= 0:
             return False, "BM25 best score was not positive"
-        if len(hits) < requested and _is_conceptual_query(query):
+        if len(hits) < requested and is_conceptual_query(query):
             return False, "conceptual query had too few BM25 hits"
-        if best_score < 0.05:
+        if best_score < BM25_WEAK_BEST_SCORE:
             return False, "BM25 best score was very low"
-        if len(hits) > 1 and len(distinct_docs) == 1 and _is_conceptual_query(query):
+        if len(hits) > 1 and len(distinct_docs) == 1 and is_conceptual_query(query):
             return False, "BM25 results were duplicate-heavy for a conceptual query"
-        if _is_conceptual_query(query) and len(hits) < top_k:
+        if is_conceptual_query(query) and len(hits) < top_k:
             return False, "conceptual query may benefit from hybrid retrieval"
 
         return True, "BM25 returned strong exact-match results"
@@ -677,227 +632,3 @@ class SmartSearch:
                 filters=filters,
             ),
         )
-
-
-def _trim_at_boundary(text: str, limit: int) -> str:
-    """Trim text at a readable boundary."""
-    compact = re.sub(r"\s+", " ", text).strip()
-    if len(compact) <= limit:
-        return compact
-    cut = compact.rfind(" ", 0, limit)
-    return compact[: cut if cut > 0 else limit].rstrip() + "..."
-
-
-def _best_quote(content: str, query: str, limit: int = 360) -> str | None:
-    """Extract a concise quote-ready snippet."""
-    compact = re.sub(r"\s+", " ", content).strip()
-    if not compact:
-        return None
-
-    terms = _query_terms(query)
-    lowered = compact.lower()
-    positions = [lowered.find(term) for term in terms if lowered.find(term) >= 0]
-    if positions:
-        pos = min(positions)
-        start = max(0, pos - 120)
-        end = min(len(compact), pos + limit - 120)
-        snippet = compact[start:end]
-        if start > 0:
-            snippet = "..." + snippet
-        if end < len(compact):
-            snippet += "..."
-        return _trim_at_boundary(snippet, limit)
-
-    return _trim_at_boundary(compact, limit)
-
-
-def _normalization_key(text: str) -> str:
-    """Normalize text for near-duplicate suppression."""
-    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()[:220]
-
-
-def _score_for_sort(hit: dict[str, Any]) -> float:
-    score = hit.get("rerank_score", hit.get("rrf_score", hit.get("score", 0)))
-    return float(score or 0)
-
-
-def _format_followups(hits: list[dict[str, Any]], limit: int = 3) -> list[str]:
-    seen: set[tuple[str | None, str]] = set()
-    followups: list[str] = []
-    for hit in hits:
-        path = hit.get("path")
-        if not path:
-            continue
-        collection = hit.get("collection")
-        key = (collection, str(path))
-        if key in seen:
-            continue
-        seen.add(key)
-        if collection:
-            followups.append(
-                f'- `get_document(path="{path}", collection="{collection}")`'
-            )
-        else:
-            followups.append(f'- `get_document(path="{path}")`')
-        if len(followups) >= limit:
-            break
-    return followups
-
-
-def format_context_packets(
-    hits: list[dict[str, Any]],
-    *,
-    query: str,
-    route: SearchRoute | None = None,
-    max_documents: int = 5,
-    max_snippets_per_document: int = 2,
-) -> str:
-    """Render agent-native context grouped by document."""
-    if not hits:
-        if route is None:
-            return "No results found."
-        empty_lines = [
-            "No results found.",
-            "",
-            f"**Strategy:** {route.strategy}",
-            f"**Reason:** {route.reason}",
-        ]
-        if not route.filters.is_empty:
-            empty_lines.append(f"**Active filters:** {route.filters.describe()}")
-        return "\n".join(empty_lines)
-
-    sorted_hits = sorted(hits, key=_score_for_sort, reverse=True)
-    lines = [f"Found {len(hits)} results"]
-
-    if route is not None:
-        fallback = "yes" if route.fallback_used else "no"
-        lines.extend(
-            [
-                "",
-                "## Strategy",
-                f"- **Selected:** {route.strategy}",
-                f"- **Fallback used:** {fallback}",
-                f"- **Reason:** {route.reason}",
-            ]
-        )
-        if not route.filters.is_empty:
-            lines.append(f"- **Active filters:** {route.filters.describe()}")
-
-    grouped: dict[tuple[str | None, str], list[dict[str, Any]]] = defaultdict(list)
-    for hit in sorted_hits:
-        grouped[(hit.get("collection"), str(hit.get("path", "")))].append(hit)
-
-    document_groups = sorted(
-        grouped.values(),
-        key=lambda group: max(_score_for_sort(hit) for hit in group),
-        reverse=True,
-    )[:max_documents]
-
-    lines.extend(["", "## Context"])
-    global_seen: set[tuple[str | None, str]] = set()
-    for index, group in enumerate(document_groups, 1):
-        first = group[0]
-        path = str(first.get("path", ""))
-        title = first.get("title") or path or "Untitled"
-        collection = first.get("collection")
-        source = first.get("source", "unknown")
-        folder = first.get("folder", "")
-        lines.append("")
-        lines.append(f"### {index}. {title}")
-        lines.append(f"- **Path:** `{path}`")
-        if collection:
-            lines.append(f"- **Collection:** {collection}")
-        if folder:
-            lines.append(f"- **Folder:** {folder}")
-        lines.append(f"- **Source:** {source}")
-
-        per_doc_seen: set[str] = set()
-        snippets_added = 0
-        for hit in group:
-            quote = _best_quote(str(hit.get("content", "")), query)
-            if not quote:
-                continue
-            normalized = _normalization_key(quote)
-            global_key = (collection, normalized)
-            if normalized in per_doc_seen:
-                continue
-            if global_key in global_seen and len(document_groups) > 1:
-                continue
-            per_doc_seen.add(normalized)
-            global_seen.add(global_key)
-
-            breadcrumb = hit.get("breadcrumb") or title
-            lines.append("")
-            lines.append(f"**Snippet {snippets_added + 1}:** {breadcrumb}")
-            hints = hit.get("match_hints") or []
-            if hints:
-                lines.append(f"- **Match evidence:** {'; '.join(hints[:3])}")
-            matched_terms = [
-                term for term in _query_terms(query) if term in quote.lower()
-            ]
-            if matched_terms:
-                terms = ", ".join(f"`{term}`" for term in sorted(set(matched_terms)))
-                lines.append(f"- **Matched terms:** {terms}")
-            lines.append(f"- **Best quote:** {quote}")
-
-            neighbor = hit.get("neighbor_content")
-            if neighbor:
-                lines.append(
-                    f"- **Nearby context:** {_trim_at_boundary(str(neighbor), 220)}"
-                )
-
-            snippets_added += 1
-            if snippets_added >= max_snippets_per_document:
-                break
-
-    followups = _format_followups(sorted_hits)
-    if followups:
-        lines.extend(["", "## Suggested Follow-ups"])
-        lines.extend(followups)
-
-    return "\n".join(lines)
-
-
-def format_smart_search(result: SmartSearchResult, query: str) -> str:
-    """Format smart search results with route metadata and context packets."""
-    return format_context_packets(result.hits, query=query, route=result.route)
-
-
-def format_results(hits: list[dict[str, Any]], include_content: bool = True) -> str:
-    """Format search results for display."""
-    if not hits:
-        return "No results found."
-
-    lines = [f"Found {len(hits)} results:\n"]
-
-    for i, hit in enumerate(hits, 1):
-        score_str = (
-            f"{hit.get('score', 0):.3f}"
-            if isinstance(hit.get("score"), float)
-            else str(hit.get("score", ""))
-        )
-        source = hit.get("source", "unknown")
-
-        lines.append(f"---\n### {i}. {hit['title']}")
-        lines.append(f"**Path:** `{hit['path']}`")
-        if "collection" in hit:
-            lines.append(f"**Collection:** {hit['collection']}")
-        lines.append(f"**Folder:** {hit['folder']}")
-
-        if source == "keyword":
-            lines.append(f"**BM25 Score:** {score_str}")
-        elif source == "semantic":
-            lines.append(f"**Similarity:** {score_str}")
-        elif source == "hybrid":
-            rrf = hit.get("rrf_score", 0)
-            rerank = hit.get("rerank_score")
-            if rerank is not None:
-                lines.append(f"**Rerank Score:** {rerank:.3f} (RRF: {rrf:.4f})")
-            else:
-                lines.append(f"**RRF Score:** {rrf:.4f}")
-
-        if include_content:
-            content = _trim_at_boundary(hit.get("content", ""), 500)
-            lines.append(f"\n**Preview:**\n{content}\n")
-
-    return "\n".join(lines)

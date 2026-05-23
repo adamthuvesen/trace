@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from trace_search.config import settings
-from trace_search.indexer import SUPPORTED_EXTENSIONS, should_exclude_path
+from trace_search.corpus import iter_kb_files
 
 INDEX_METADATA_VERSION = 2
 INDEX_METADATA_FILENAME = "index_metadata.json"
@@ -100,13 +100,7 @@ def collect_source_files(
             prior_by_path[record.path] = record
 
     records: list[SourceFileRecord] = []
-    for file_path in kb_path.rglob("*"):
-        if not file_path.is_file():
-            continue
-        if file_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
-            continue
-        if should_exclude_path(file_path, kb_path):
-            continue
+    for file_path in iter_kb_files(kb_path):
         stat = file_path.stat()
         rel = str(file_path.relative_to(kb_path))
         previous = prior_by_path.get(rel)

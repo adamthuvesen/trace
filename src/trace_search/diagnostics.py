@@ -19,11 +19,9 @@ from trace_search.index_metadata import (
     metadata_path,
     read_index_metadata,
 )
-from trace_search.indexer import (
-    SUPPORTED_EXTENSIONS,
-    get_default_index_root,
-    should_exclude_path,
-)
+from trace_search.corpus import iter_kb_files
+from trace_search.index_paths import bm25_dir, chroma_dir
+from trace_search.kb_paths import get_default_index_root, should_exclude_path
 
 SampleQueryRunner = Callable[[str, str | None], list[dict[str, Any]]]
 
@@ -113,15 +111,15 @@ def _exclusion_reason(path: Path, kb_path: Path) -> str:
 def scan_corpus(kb_path: Path) -> CorpusScan:
     """Scan a collection for visible supported files and excluded paths."""
     scan = CorpusScan()
+    visible_paths = {p for p in iter_kb_files(kb_path)}
     for path in kb_path.rglob("*"):
-        if should_exclude_path(path, kb_path):
-            scan.excluded_by_reason[_exclusion_reason(path, kb_path)] += 1
-            continue
         if not path.is_file():
             continue
-        ext = path.suffix.lower()
-        if ext in SUPPORTED_EXTENSIONS:
-            scan.visible_by_extension[ext] += 1
+        if path in visible_paths:
+            scan.visible_by_extension[path.suffix.lower()] += 1
+            continue
+        if should_exclude_path(path, kb_path):
+            scan.excluded_by_reason[_exclusion_reason(path, kb_path)] += 1
     return scan
 
 
@@ -140,8 +138,8 @@ def _read_metadata_version(index_path: Path) -> int | None:
 def diagnose_index(kb_path: Path, index_path: Path) -> IndexDiagnosis:
     """Diagnose index presence, compatibility, freshness, and last build time."""
     model_slug = settings.model_slug
-    chroma_path = index_path / f".chroma_db_{model_slug}"
-    bm25_path = index_path / f".bm25_index_{model_slug}"
+    chroma_path = chroma_dir(index_path, model_slug)
+    bm25_path = bm25_dir(index_path, model_slug)
 
     messages: list[str] = []
     status = "healthy"

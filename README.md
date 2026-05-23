@@ -213,6 +213,7 @@ multi-collection mode uses one subdirectory per collection.
 ```bash
 # Checks
 uv run python -m pytest -m "not slow"
+uv run python scripts/check_module_sizes.py
 uv run ruff check .
 uv build
 
@@ -228,4 +229,7 @@ KB_PATH=/path/to/your/docs uv run python -m tools.eval.cli --quick
 # Tiny committed fixture smoke test
 KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
   uv run python -m tools.eval.cli --full --search semantic
+# Match MCP default (`search` tool / SmartSearch):
+KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
+  uv run python -m tools.eval.cli --full --search smart
 ```
