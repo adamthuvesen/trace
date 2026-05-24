@@ -10,6 +10,7 @@ from fastmcp import FastMCP
 from trace_search.collection_registry import CollectionRegistry
 from trace_search.operations import TraceOperations
 
+
 def _build_multi_instructions(collection_names: list[str]) -> str:
     """Generate dynamic instructions listing available collections."""
     names = ", ".join(f'"{c}"' for c in collection_names)

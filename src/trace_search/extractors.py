@@ -30,6 +30,7 @@ SUPPORTED_EXTENSIONS_ORDERED = (
 )
 SUPPORTED_EXTENSIONS = set(SUPPORTED_EXTENSIONS_ORDERED)
 
+
 def extract_title(content: str, path: Path) -> str:
     """Extract title from file with fallback strategies."""
     ext = path.suffix.lower()

@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-QUESTION_STARTERS = frozenset(
-    {"what", "how", "where", "when", "why", "which", "who"}
-)
+QUESTION_STARTERS = frozenset({"what", "how", "where", "when", "why", "which", "who"})
 
 # SmartSearch keyword-strength heuristics
 BM25_WEAK_BEST_SCORE = 0.05

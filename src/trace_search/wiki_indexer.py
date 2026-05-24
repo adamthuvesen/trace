@@ -46,6 +46,7 @@ from trace_search.kb_paths import get_default_index_root, should_exclude_path
 
 logger = logging.getLogger(__name__)
 
+
 class WikiIndexer:
     """Index wiki documents into ChromaDB and BM25 for search."""
 
@@ -188,9 +189,7 @@ class WikiIndexer:
 
         metadata = read_index_metadata(self.bm25_path.parent)
         if metadata is None:
-            logger.info(
-                "Index metadata missing or outdated; promoting to full rebuild"
-            )
+            logger.info("Index metadata missing or outdated; promoting to full rebuild")
             return "force"
 
         if not metadata_matches_active_model(metadata):

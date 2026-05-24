@@ -7,6 +7,7 @@ from functools import lru_cache
 
 from trace_search.config import settings
 
+
 class TokenCounter:
     """Token counter using the embedding model's tokenizer.
 
@@ -81,6 +82,7 @@ class TokenCounter:
 def _get_token_counter() -> TokenCounter:
     """Get singleton TokenCounter instance (lazy-loaded)."""
     return TokenCounter()
+
 
 def _get_size(text: str, use_tokens: bool) -> int:
     """Get size of text in characters or tokens."""
@@ -521,4 +523,3 @@ def extract_breadcrumb(chunk: str, title: str) -> str:
     if headings:
         return " > ".join(headings[-3:])
     return title
-

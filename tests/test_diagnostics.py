@@ -141,9 +141,7 @@ def test_diagnose_index_reports_categorized_changes(tmp_path):
     (kb / "new.md").write_text("# New", encoding="utf-8")
 
     diagnosis = diagnose_index(kb, index_root)
-    rendered = render_doctor_report(
-        diagnose_collections({"docs": kb})
-    )
+    rendered = render_doctor_report(diagnose_collections({"docs": kb}))
 
     assert diagnosis.status == "stale"
     assert diagnosis.next_reindex == "incremental"

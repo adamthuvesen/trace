@@ -330,7 +330,9 @@ def render_doctor_report(report: DoctorReport) -> str:
         if collection.corpus.excluded_by_reason:
             excluded = ", ".join(
                 f"{reason}={count}"
-                for reason, count in sorted(collection.corpus.excluded_by_reason.items())
+                for reason, count in sorted(
+                    collection.corpus.excluded_by_reason.items()
+                )
             )
             lines.append(f"- **Excluded paths:** {excluded}")
         else:

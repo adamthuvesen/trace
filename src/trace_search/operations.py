@@ -89,9 +89,7 @@ class TraceOperations:
         since: str | None = None,
     ) -> str:
         filters = _build_filters(path_prefix, extensions, since)
-        results = self.registry.search_hybrid(
-            query, top_k, collection, filters=filters
-        )
+        results = self.registry.search_hybrid(query, top_k, collection, filters=filters)
         return format_results(results)
 
     def get_document(self, path: str, collection: str | None = None) -> str:

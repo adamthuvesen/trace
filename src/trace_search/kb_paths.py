@@ -6,6 +6,7 @@ from pathlib import Path
 
 from trace_search.config import settings
 
+
 def _relative_parts(kb_path: Path, path: Path) -> tuple[str, ...]:
     """Return path parts relative to the KB root, resolving only when needed."""
     try:
@@ -31,7 +32,9 @@ def should_exclude_path(
     if not _is_within_root(path, kb_path):
         return True
     exclude = set(
-        exclude_patterns if exclude_patterns is not None else settings.exclude_patterns_list
+        exclude_patterns
+        if exclude_patterns is not None
+        else settings.exclude_patterns_list
     )
     return any(
         part.startswith(".") or part in exclude

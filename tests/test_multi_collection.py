@@ -303,7 +303,9 @@ class TestGetDocumentWarning:
         doc.write_text("# Broken")
 
         reg = CollectionRegistry({"docs": kb})
-        with caplog.at_level(logging.WARNING, logger="trace_search.collection_registry"):
+        with caplog.at_level(
+            logging.WARNING, logger="trace_search.collection_registry"
+        ):
             with patch(
                 "trace_search.collection_registry.extract_content",
                 side_effect=RuntimeError("disk read failed"),

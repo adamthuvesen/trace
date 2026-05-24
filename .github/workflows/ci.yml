@@ -32,5 +32,8 @@ jobs:
       - name: Lint
         run: uv run ruff check .
 
+      - name: Format
+        run: uv run ruff format --check .
+
       - name: Test
         run: uv run python -m pytest -m "not slow"

@@ -64,8 +64,7 @@ def test_incremental_rebuild_skips_unchanged_files(kb_paths):
     indexer.build_index(force=True)
     before = indexer.collection.get(include=["documents", "metadatas"])
     before_by_path = {
-        meta["path"]: doc
-        for meta, doc in zip(before["metadatas"], before["documents"])
+        meta["path"]: doc for meta, doc in zip(before["metadatas"], before["documents"])
     }
 
     (kb / "edit.md").write_text("# Edit\n\nupdated content", encoding="utf-8")
@@ -76,8 +75,7 @@ def test_incremental_rebuild_skips_unchanged_files(kb_paths):
 
     after = fresh.collection.get(include=["documents", "metadatas"])
     after_by_path = {
-        meta["path"]: doc
-        for meta, doc in zip(after["metadatas"], after["documents"])
+        meta["path"]: doc for meta, doc in zip(after["metadatas"], after["documents"])
     }
     assert after_by_path["keep.md"] == before_by_path["keep.md"]
     assert after_by_path["edit.md"] != before_by_path["edit.md"]

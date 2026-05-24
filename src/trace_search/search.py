@@ -63,9 +63,7 @@ class SearchFilters:
 
     @property
     def is_empty(self) -> bool:
-        return (
-            not self.path_prefix and not self.extensions and self.since is None
-        )
+        return not self.path_prefix and not self.extensions and self.since is None
 
     def describe(self) -> str:
         """Human-readable summary of active filters; empty string if none."""
@@ -606,9 +604,7 @@ class SmartSearch:
             )
 
         top_k = _clamp_top_k(top_k)
-        keyword_hits = self.keyword.search(
-            query, max_results=top_k, filters=filters
-        )
+        keyword_hits = self.keyword.search(query, max_results=top_k, filters=filters)
         strong, reason = self._keyword_strength(query, keyword_hits, top_k)
 
         if strong:
