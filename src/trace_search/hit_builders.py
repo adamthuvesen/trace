@@ -43,11 +43,7 @@ def hit_from_bm25(
     """Build a keyword hit from BM25 corpus metadata."""
     path = str(metadata["path"])
     chunk_index = metadata.get("chunk_index")
-    hit_id = (
-        chunk_id(path, int(chunk_index))
-        if chunk_index is not None
-        else path
-    )
+    hit_id = chunk_id(path, int(chunk_index)) if chunk_index is not None else path
     return SearchHit(
         id=hit_id,
         path=path,

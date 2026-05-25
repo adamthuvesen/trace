@@ -403,7 +403,9 @@ class EvaluationReport:
             top_1_keyword_accuracy=data.get("top_1_keyword_accuracy", 0.0),
             top_5_keyword_accuracy=data.get("top_5_keyword_accuracy", 0.0),
             mean_reciprocal_rank=data.get("mean_reciprocal_rank", 0.0),
-            within_max_rank_path_accuracy=data.get("within_max_rank_path_accuracy", 0.0),
+            within_max_rank_path_accuracy=data.get(
+                "within_max_rank_path_accuracy", 0.0
+            ),
             latency_p50_ms=data.get("latency_p50_ms", 0.0),
             latency_p95_ms=data.get("latency_p95_ms", 0.0),
             latency_p99_ms=data.get("latency_p99_ms", 0.0),

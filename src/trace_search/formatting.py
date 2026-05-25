@@ -14,6 +14,8 @@ def _query_terms(query: str) -> list[str]:
     return [
         term for term in re.findall(r"[A-Za-z0-9_/-]+", query.lower()) if len(term) > 1
     ]
+
+
 def _trim_at_boundary(text: str, limit: int) -> str:
     """Trim text at a readable boundary."""
     compact = re.sub(r"\s+", " ", text).strip()

@@ -60,7 +60,10 @@ QUERIES_CORE = [
 
 # === INDEXING & PARSING ===
 QUERIES_INDEXING = [
-    ("How does heading-based chunking work?", ["heading-based", "chunking", "sections"]),
+    (
+        "How does heading-based chunking work?",
+        ["heading-based", "chunking", "sections"],
+    ),
     ("What is chunk overlap?", ["overlap", "chunk", "context"]),
     ("How does partial reindexing work?", ["partial reindex", "changed", "documents"]),
     (
@@ -132,7 +135,10 @@ QUERIES_EVALUATION = [
     ("How does benchmark reporting work?", ["benchmark", "report", "latency"]),
     ("What is the latency budget?", ["latency budget", "p95", "p99"]),
     ("How do relevance tests work?", ["relevance tests", "top-1", "top-5"]),
-    ("How do notebook exports support analysis?", ["notebook export", "analysis", "data"]),
+    (
+        "How do notebook exports support analysis?",
+        ["notebook export", "analysis", "data"],
+    ),
 ]
 
 # === SUPPORT WORKFLOWS ===

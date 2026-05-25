@@ -141,7 +141,6 @@ class TestServerImports:
 
 @pytest.mark.slow
 class TestGetDocumentLogic:
-
     def test_md_file_extraction(self, wiki_path):
         md_files = list(wiki_path.rglob("*.md"))
         if not md_files:

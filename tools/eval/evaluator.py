@@ -24,7 +24,12 @@ from tools.eval.models import (
 
 if TYPE_CHECKING:
     from trace_search.indexer import WikiIndexer
-    from trace_search.search import HybridSearch, KeywordSearch, SemanticSearch, SmartSearch
+    from trace_search.search import (
+        HybridSearch,
+        KeywordSearch,
+        SemanticSearch,
+        SmartSearch,
+    )
 
     Searcher = SemanticSearch | KeywordSearch | HybridSearch | SmartSearch
 else:
@@ -119,7 +124,12 @@ def create_searcher(
     indexer: WikiIndexer,
     search_mode: str,
 ) -> Searcher:
-    from trace_search.search import HybridSearch, KeywordSearch, SemanticSearch, SmartSearch
+    from trace_search.search import (
+        HybridSearch,
+        KeywordSearch,
+        SemanticSearch,
+        SmartSearch,
+    )
 
     if search_mode == "semantic":
         return SemanticSearch(indexer.collection, indexer.backend)

@@ -103,7 +103,9 @@ class TestFiltersToChromaWhere:
     def test_since_becomes_gte_on_source_mtime(self):
         clause = filters_to_chroma_where(parse_filters(since="2026-01-01T00:00:00Z"))
         assert clause is not None
-        assert clause["source_mtime"] == {"$gte": datetime(2026, 1, 1, tzinfo=UTC).timestamp()}
+        assert clause["source_mtime"] == {
+            "$gte": datetime(2026, 1, 1, tzinfo=UTC).timestamp()
+        }
 
     def test_path_prefix_alone_is_not_pushed_down(self):
         assert filters_to_chroma_where(parse_filters(path_prefix="a/")) is None
@@ -171,9 +173,7 @@ class TestApplyFiltersToHits:
             self._hit(path="b/2.md"),
             self._hit(path="c/3.md"),
         ]
-        filtered = apply_filters_to_hits(
-            hits, parse_filters(path_prefix=["a/", "b/"])
-        )
+        filtered = apply_filters_to_hits(hits, parse_filters(path_prefix=["a/", "b/"]))
         assert [h["path"] for h in filtered] == ["a/1.md", "b/2.md"]
 
     def test_extensions_filter(self):

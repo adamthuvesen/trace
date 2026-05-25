@@ -12,7 +12,10 @@ from trace_search.corpus import iter_kb_files
 from trace_search.diagnostics import diagnose_collections, render_doctor_report
 from trace_search.embeddings import EmbeddingBackend, build_embedding_backend
 from trace_search.extractors import SUPPORTED_EXTENSIONS, extract_content, extract_title
-from trace_search.index_metadata import metadata_matches_active_model, read_index_metadata
+from trace_search.index_metadata import (
+    metadata_matches_active_model,
+    read_index_metadata,
+)
 from trace_search.index_paths import bm25_dir, chroma_dir
 from trace_search.kb_paths import get_default_index_root, should_exclude_path
 from trace_search.search import (
@@ -30,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_LIST_LIMIT = 50
 MAX_LIST_LIMIT = 500
+
 
 @dataclass
 class Collection:
@@ -122,7 +126,6 @@ class Collection:
         """Batch-fetch neighbor content via the collection indexer."""
         indexer = self.ensure_index(backend)
         return indexer.neighbor_contents_batch(requests)
-
 
     def rebuild(
         self,
@@ -273,13 +276,10 @@ class CollectionRegistry:
         filters = filters or SearchFilters()
         cols = self._resolve(collection)
         if len(cols) == 1:
-            result = cols[0].get_smart(self.backend).search(
-                query, top_k, filters=filters
+            result = (
+                cols[0].get_smart(self.backend).search(query, top_k, filters=filters)
             )
-            hits = [
-                self._with_neighbor_context(cols[0], hit)
-                for hit in result.hits
-            ]
+            hits = [self._with_neighbor_context(cols[0], hit) for hit in result.hits]
             return SmartSearchResult(hits=hits, route=result.route)
 
         results = [
@@ -305,7 +305,9 @@ class CollectionRegistry:
             ),
         )
 
-    def probe_search(self, query: str, top_k: int, collection: str | None) -> list[dict]:
+    def probe_search(
+        self, query: str, top_k: int, collection: str | None
+    ) -> list[dict]:
         """Run a sample query only when indexes already exist and match settings."""
         model_slug = settings.model_slug
         missing = []
@@ -333,9 +335,13 @@ class CollectionRegistry:
             )
         cols = self._resolve(collection)
         if len(cols) == 1:
-            result = cols[0].get_smart(self.backend, skip_build=True).search(
-                query,
-                top_k,
+            result = (
+                cols[0]
+                .get_smart(self.backend, skip_build=True)
+                .search(
+                    query,
+                    top_k,
+                )
             )
             return result.hits
 
