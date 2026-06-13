@@ -57,6 +57,32 @@ def test_smart_search_falls_back_for_weak_keyword_results():
     assert result.hits[0]["source"] == "hybrid"
 
 
+def test_smart_search_falls_back_when_weak_tail_inflates_hit_count():
+    """A conceptual query whose top BM25 hits are crowded by a weak tail (a common
+    word matching many docs) should fall back instead of trusting BM25's rank."""
+    smart = SmartSearch.__new__(SmartSearch)
+    smart.keyword = MagicMock()
+    smart.hybrid = MagicMock()
+    # Top two are close and several weak tail hits (~0.25 of best) pad the count
+    # past top_k — raw count would short-circuit, strong-hit count must not.
+    smart.keyword.search.return_value = [
+        _hit(path="wrong.md", score=1.40),
+        _hit(path="right.md", score=1.18),
+        _hit(path="a.md", score=0.34),
+        _hit(path="b.md", score=0.34),
+        _hit(path="c.md", score=0.33),
+    ]
+    smart.hybrid.search.return_value = [
+        _hit(path="right.md", score=0.7, source="hybrid")
+    ]
+
+    result = smart.search("how do I set the knowledge base path", top_k=5)
+
+    assert result.route.strategy == "hybrid"
+    assert result.route.fallback_used
+    smart.hybrid.search.assert_called_once()
+
+
 def test_smart_search_empty_query_does_not_call_engines():
     smart = SmartSearch.__new__(SmartSearch)
     smart.keyword = MagicMock()
