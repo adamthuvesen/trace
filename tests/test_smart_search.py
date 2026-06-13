@@ -83,6 +83,35 @@ def test_smart_search_falls_back_when_weak_tail_inflates_hit_count():
     smart.hybrid.search.assert_called_once()
 
 
+def test_smart_search_falls_back_when_top_hit_is_not_dominant():
+    """A conceptual query whose BM25 scores are flat (no dominant hit) is a
+    vocabulary-mismatch case with no real keyword anchor — fall back to vectors
+    even though every hit clears the strong-hit bar."""
+    smart = SmartSearch.__new__(SmartSearch)
+    smart.keyword = MagicMock()
+    smart.hybrid = MagicMock()
+    # Five distinct docs, all "strong" relative to the best, but the top barely
+    # edges the runner-up (ratio 1.16) — coincidental matches, not confidence.
+    smart.keyword.search.return_value = [
+        _hit(path="wrong.md", score=1.23),
+        _hit(path="b.md", score=1.06),
+        _hit(path="c.md", score=0.95),
+        _hit(path="d.md", score=0.90),
+        _hit(path="e.md", score=0.85),
+    ]
+    smart.hybrid.search.return_value = [
+        _hit(path="right.md", score=0.7, source="hybrid")
+    ]
+
+    result = smart.search(
+        "find nearby vectors fast without scanning every one", top_k=5
+    )
+
+    assert result.route.strategy == "hybrid"
+    assert result.route.fallback_used
+    smart.hybrid.search.assert_called_once()
+
+
 def test_smart_search_empty_query_does_not_call_engines():
     smart = SmartSearch.__new__(SmartSearch)
     smart.keyword = MagicMock()

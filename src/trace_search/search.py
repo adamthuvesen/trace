@@ -23,6 +23,7 @@ from trace_search.formatting import (  # noqa: F401 — package re-exports
     format_results,
 )
 from trace_search.query_profile import (
+    BM25_DOMINANCE_MARGIN,
     BM25_STRONG_HIT_FRACTION,
     BM25_WEAK_BEST_SCORE,
     SMART_KEYWORD_STRENGTH_TOP_K,
@@ -591,7 +592,14 @@ class SmartSearch:
         if len(hits) > 1 and len(distinct_docs) == 1 and conceptual:
             return False, "BM25 results were duplicate-heavy for a conceptual query"
         if conceptual and strong_hits < top_k:
-            return False, "conceptual query lacks a dominant BM25 match"
+            return False, "conceptual query lacks enough strong BM25 hits"
+        runner_up = float(hits[1].get("score", 0) or 0) if len(hits) > 1 else 0.0
+        if (
+            conceptual
+            and runner_up > 0
+            and best_score < BM25_DOMINANCE_MARGIN * runner_up
+        ):
+            return False, "no dominant BM25 match for a conceptual query"
 
         return True, "BM25 returned strong exact-match results"
 

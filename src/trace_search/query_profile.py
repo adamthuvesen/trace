@@ -12,6 +12,11 @@ SMART_KEYWORD_STRENGTH_TOP_K = 3
 # documents weakly and inflate the raw hit count; this keeps the long weak tail
 # from masquerading as a confident keyword result.
 BM25_STRONG_HIT_FRACTION = 0.5
+# A conceptual query also needs a clearly dominant top hit to trust BM25. When the
+# best score barely edges the runner-up, the lexical match is coincidental — a
+# vocabulary-mismatch query with no real keyword anchor — and vector search is the
+# safer route.
+BM25_DOMINANCE_MARGIN = 1.3
 
 # HybridSearch default semantic weights
 WEIGHT_QUESTION = 0.7
