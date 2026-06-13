@@ -34,3 +34,38 @@ jobs:
 
       - name: Test
         run: uv run python -m pytest -m "not slow"
+
+  eval:
+    name: Retrieval eval (smart)
+    # Separate from the fast test job so it never gates pytest feedback; both
+    # run in parallel and report independently.
+    runs-on: ubuntu-latest
+
+    env:
+      KB_PATH: tests/fixtures/eval_kb
+      EVAL_GOLDEN_QUERIES: tests/fixtures/eval_golden_queries.yaml
+      FASTEMBED_CACHE_PATH: ${{ github.workspace }}/.fastembed-cache
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Sync dependencies
+        run: uv sync --locked --dev
+
+      # The eval builds the fixture index at runtime, which downloads the
+      # all-MiniLM-L6-v2 ONNX model from Hugging Face on a cold runner. Cache it
+      # (keyed on the model id) so the job stays fast and resilient to HF hiccups.
+      - name: Cache embedding model
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.FASTEMBED_CACHE_PATH }}
+          key: fastembed-qdrant-all-MiniLM-L6-v2-onnx
+
+      - name: Run retrieval eval against committed fixture
+        run: uv run python -m tools.eval.cli --ci --search smart
