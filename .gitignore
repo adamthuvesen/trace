@@ -31,7 +31,9 @@ ENV/
 !.env.example
 
 # Repo docs (root only; not tests/fixtures/**/docs/)
-/docs/
+# Benchmarks are a published artifact; everything else under /docs/ stays local.
+/docs/*
+!/docs/benchmarks/
 
 # Index data (stored in content repos, not here)
 .chroma_db*/

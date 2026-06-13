@@ -148,6 +148,39 @@ to `reindex` rather than building as a side effect. If it reports unknown
 metadata (an older `v1` schema), one `reindex` repopulates model and freshness
 metadata; that run is forced, later runs are incremental.
 
+## Retrieval quality
+
+Trace ships an evaluation harness (`tools/eval/`) that runs a golden query set
+through each search mode and scores path accuracy, MRR, and latency. The numbers
+below come from the committed fixture — **8 short Markdown docs and an 8-query
+"what is X?" golden set** — so read them as a smoke signal, not a corpus-scale
+benchmark.
+
+| Mode | Top-1 path | Top-5 path | MRR | p50 | p95 |
+| --- | --- | --- | --- | --- | --- |
+| `bm25` | 100% | 100% | 1.000 | 0.2 ms | 10.6 ms |
+| `semantic` | 100% | 100% | 1.000 | 7.8 ms | 10.6 ms |
+| `hybrid` | 100% | 100% | 1.000 | 8.5 ms | 19.1 ms |
+| `smart` | 100% | 100% | 1.000 | 7.6 ms | 17.9 ms |
+
+The corpus is too small and too clean to separate the modes on accuracy — each
+retrieves the right document for all 8 queries. What differs is cost and routing:
+pure `bm25` answers in ~0.2 ms p50, and because the golden queries are all
+conceptual against a tiny corpus, `smart` judges BM25 too thin on every one and
+falls back to vector search (100% fallback rate) — so here it tracks
+`hybrid`/`semantic` latency rather than BM25's sub-millisecond path. On a larger
+corpus with exact-term queries, that fallback rate drops and `smart` keeps the
+fast lexical route. Latencies are microbenchmarks over 8 queries on one machine
+(Apple Silicon, ONNX int8); treat them as relative, not absolute.
+
+Full per-mode reports live in [`docs/benchmarks/`](docs/benchmarks/). Reproduce
+any row, or `--ci` (the gate CI runs on every PR):
+
+```bash
+KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
+  uv run python -m tools.eval.cli --full --search smart --output-dir docs/benchmarks/
+```
+
 ## Development
 
 ```bash
