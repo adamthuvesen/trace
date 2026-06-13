@@ -1,15 +1,26 @@
-# Golden queries for tests/fixtures/eval_kb — small corpus for CI/local smoke eval.
+# Golden queries for tests/fixtures/eval_kb — a small but adversarial corpus for
+# CI/local smoke eval. The fixture is deliberately discriminating: it packs
+# confusable concept clusters (TF-IDF vs BM25, cosine vs dot-product, the eval
+# metrics, RRF vs linear combination, chunk overlap vs size vs splitting) so that
+# a single doc is the "right" answer but several are plausible distractors.
+#
+# Queries fall into three buckets:
+#   - lexical / exact-term  -> BM25 should win (and smart should take the fast path)
+#   - paraphrase / vocab-mismatch -> the answer doc shares few surface words, so
+#     pure keyword search struggles and vector retrieval earns its keep
+#   - ambiguous -> a distractor competes hard, so ranking (MRR) suffers
 #
 # Run the same harness as production eval without copying golden_queries.example.yaml:
 #
 #   KB_PATH=tests/fixtures/eval_kb \
 #   EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
-#   uv run python -m tools.eval.cli --full --search semantic
+#   uv run python -m tools.eval.cli --full --search smart
 #
-# Add --include-stress to include the two paraphrase queries at the bottom.
+# Add --include-stress to include the paraphrase stress queries at the bottom.
 version: '1.0'
-description: Fixture KB golden set (13 core + 2 stress); conceptual + lexical mix
+description: Adversarial fixture golden set (17 core + 2 stress); lexical + paraphrase mix
 queries:
+# --- Conceptual baseline -----------------------------------------------------
 - id: easy-bm25
   query: What is BM25?
   category: concepts
@@ -19,72 +30,16 @@ queries:
   - keyword
   - ranking
   quick_set: true
-- id: easy-rrf
-  query: What is RRF?
+- id: easy-embeddings
+  query: What are embeddings?
   category: concepts
-  expected_path: glossary/rrf.md
+  expected_path: glossary/embeddings.md
   expected_keywords:
-  - RRF
-  - rank
-  - fusion
-  quick_set: true
-- id: easy-ann
-  query: What is ANN search?
-  category: concepts
-  expected_path: glossary/ann-search.md
-  expected_keywords:
-  - ANN
-  - nearest neighbor
-  - vector
-  quick_set: true
-- id: easy-hybrid
-  query: What is hybrid search?
-  category: concepts
-  expected_path: search/hybrid-search.md
-  expected_keywords:
-  - hybrid search
-  - semantic
-  - keyword
-  quick_set: true
-- id: easy-overlap
-  query: What is chunk overlap?
-  category: indexing
-  expected_path: indexing/chunk-overlap.md
-  expected_keywords:
-  - overlap
-  - chunk
-  - context
+  - embeddings
+  - vectors
+  - meaning
   quick_set: false
-- id: easy-rerank
-  query: What is reranking?
-  category: features
-  expected_path: features/reranking.md
-  expected_keywords:
-  - reranking
-  - results
-  - relevance
-  quick_set: false
-- id: easy-kb-path
-  query: How do I set KB_PATH?
-  category: config
-  expected_path: config/kb-path.md
-  expected_keywords:
-  - KB_PATH
-  - knowledge base
-  - path
-  quick_set: false
-- id: easy-style
-  query: What is the writing style guide?
-  category: docs
-  expected_path: docs/writing-style-guide.md
-  expected_keywords:
-  - style guide
-  - writing
-  - docs
-  quick_set: false
-# Lexical / exact-term queries: short, non-question, exact identifiers. These are
-# where BM25-first should fire (smart takes the fast keyword path, no fallback)
-# and where pure vector search can confuse near-identical config docs.
+# --- Lexical / exact-term: BM25 wins, smart should take the fast path ---------
 - id: lex-embedding-backend
   query: EMBEDDING_BACKEND onnx torch
   category: config
@@ -94,14 +49,6 @@ queries:
   - onnx
   - torch
   quick_set: true
-- id: lex-embedding-model
-  query: EMBEDDING_MODEL setting
-  category: config
-  expected_path: config/embedding-model.md
-  expected_keywords:
-  - EMBEDDING_MODEL
-  - model
-  quick_set: false
 - id: lex-index-path
   query: INDEX_PATH
   category: config
@@ -126,6 +73,97 @@ queries:
   - mutually exclusive
   - KB_COLLECTIONS
   quick_set: true
+- id: lex-saturation
+  query: term frequency saturation document length normalization
+  category: concepts
+  expected_path: glossary/bm25.md
+  expected_keywords:
+  - term frequency
+  - normalization
+  quick_set: false
+# --- Paraphrase / vocabulary mismatch: vector retrieval should win ------------
+- id: para-overlap
+  query: keep sentences from being cut off where two chunks meet
+  category: indexing
+  expected_path: indexing/chunk-overlap.md
+  expected_keywords:
+  - overlap
+  - chunk
+  quick_set: true
+- id: para-rerank
+  query: reorder the shortlist with a slower but more accurate model
+  category: features
+  expected_path: features/reranking.md
+  expected_keywords:
+  - reranking
+  - relevance
+  quick_set: false
+- id: para-rrf
+  query: blend two ranked result lists without any training
+  category: search
+  expected_path: glossary/rrf.md
+  expected_keywords:
+  - rank
+  - fusion
+  quick_set: true
+- id: para-cosine
+  query: gauge how aligned two vectors are regardless of their length
+  category: concepts
+  expected_path: glossary/cosine-similarity.md
+  expected_keywords:
+  - cosine
+  - angle
+  quick_set: false
+- id: para-ann
+  query: find nearby vectors fast without scanning every one
+  category: concepts
+  expected_path: glossary/ann-search.md
+  expected_keywords:
+  - nearest neighbor
+  - vector
+  quick_set: false
+- id: para-mrr
+  query: metric that only cares how high the first correct answer lands
+  category: metrics
+  expected_path: glossary/mrr.md
+  expected_keywords:
+  - reciprocal
+  - rank
+  quick_set: false
+- id: para-crossenc
+  query: model that scores a query and document jointly in one pass
+  category: features
+  expected_path: features/cross-encoder.md
+  expected_keywords:
+  - cross-encoder
+  - relevance
+  quick_set: false
+- id: para-idf
+  query: down-weight words that appear in almost every document
+  category: concepts
+  expected_path: glossary/tf-idf.md
+  expected_keywords:
+  - inverse document frequency
+  - rare
+  quick_set: false
+# --- Ambiguous: a distractor competes hard, so ranking suffers ----------------
+- id: amb-hybrid
+  query: combine keyword and semantic signals into one ranking
+  category: search
+  expected_path: search/hybrid-search.md
+  expected_keywords:
+  - hybrid
+  - semantic
+  quick_set: true
+- id: amb-ndcg
+  query: reward putting better answers higher using graded relevance
+  category: metrics
+  expected_path: glossary/ndcg.md
+  expected_keywords:
+  - relevance
+  - rank
+  quick_set: false
+# --- Stress subset (harder paraphrases; run with --stress / --include-stress) -
 - id: stress-bm25
   query: >-
     Which bag-of-words scoring model dampens term frequency and normalizes by
