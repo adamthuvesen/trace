@@ -8,7 +8,7 @@
 #
 # Add --include-stress to include the two paraphrase queries at the bottom.
 version: '1.0'
-description: Fixture KB golden set (8 core + 2 stress)
+description: Fixture KB golden set (13 core + 2 stress); conceptual + lexical mix
 queries:
 - id: easy-bm25
   query: What is BM25?
@@ -82,6 +82,50 @@ queries:
   - writing
   - docs
   quick_set: false
+# Lexical / exact-term queries: short, non-question, exact identifiers. These are
+# where BM25-first should fire (smart takes the fast keyword path, no fallback)
+# and where pure vector search can confuse near-identical config docs.
+- id: lex-embedding-backend
+  query: EMBEDDING_BACKEND onnx torch
+  category: config
+  expected_path: config/embedding-backend.md
+  expected_keywords:
+  - EMBEDDING_BACKEND
+  - onnx
+  - torch
+  quick_set: true
+- id: lex-embedding-model
+  query: EMBEDDING_MODEL setting
+  category: config
+  expected_path: config/embedding-model.md
+  expected_keywords:
+  - EMBEDDING_MODEL
+  - model
+  quick_set: false
+- id: lex-index-path
+  query: INDEX_PATH
+  category: config
+  expected_path: config/index-path.md
+  expected_keywords:
+  - INDEX_PATH
+  - index
+  quick_set: true
+- id: lex-reranker-flag
+  query: RERANKER_ENABLED flag
+  category: config
+  expected_path: config/reranker.md
+  expected_keywords:
+  - RERANKER_ENABLED
+  - cross-encoder
+  quick_set: false
+- id: lex-mutually-exclusive
+  query: mutually exclusive KB_COLLECTIONS error
+  category: troubleshooting
+  expected_path: troubleshooting/conflicting-roots.md
+  expected_keywords:
+  - mutually exclusive
+  - KB_COLLECTIONS
+  quick_set: true
 - id: stress-bm25
   query: >-
     Which bag-of-words scoring model dampens term frequency and normalizes by
