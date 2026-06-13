@@ -163,15 +163,17 @@ benchmark.
 | `hybrid` | 100% | 100% | 1.000 | 8.5 ms | 19.1 ms |
 | `smart` | 100% | 100% | 1.000 | 7.6 ms | 17.9 ms |
 
-The corpus is too small and too clean to separate the modes on accuracy — each
-retrieves the right document for all 8 queries. What differs is cost and routing:
-pure `bm25` answers in ~0.2 ms p50, and because the golden queries are all
-conceptual against a tiny corpus, `smart` judges BM25 too thin on every one and
-falls back to vector search (100% fallback rate) — so here it tracks
-`hybrid`/`semantic` latency rather than BM25's sub-millisecond path. On a larger
-corpus with exact-term queries, that fallback rate drops and `smart` keeps the
-fast lexical route. Latencies are microbenchmarks over 8 queries on one machine
-(Apple Silicon, ONNX int8); treat them as relative, not absolute.
+Every mode retrieves the correct document for all 8 queries (top-1 = top-5 =
+100%, MRR 1.000) — on a corpus this small and clean, accuracy can't separate
+them, so the table really compares cost and routing. Pure `bm25` answers in
+~0.2 ms p50. `smart` lands the right doc for all 8 too, and routes every one
+through the hybrid path here (a 100% fallback rate): its rule defers to vector
+search when a conceptual query returns fewer than `top_k` BM25 candidates, and
+with one document per concept this fixture never clears that bar. So on this
+corpus `smart` spends a few ms more than raw `bm25` and never trades away
+accuracy; a corpus with more documents per concept returns enough candidates for
+`smart` to keep BM25's fast path. Latencies are microbenchmarks over 8 queries on
+one machine (Apple Silicon, ONNX int8) — read them as relative, not absolute.
 
 Full per-mode reports live in [`docs/benchmarks/`](docs/benchmarks/). Reproduce
 any row, or `--ci` (the gate CI runs on every PR):
