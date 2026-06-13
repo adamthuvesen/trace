@@ -14,6 +14,11 @@ jobs:
     name: Tests and lint
     runs-on: ubuntu-latest
 
+    env:
+      # Chunking tests load the tokenizer via transformers; cache it here so the
+      # fast job doesn't re-download from Hugging Face (and isn't flaky on 429s).
+      HF_HOME: ${{ github.workspace }}/.hf-cache
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -31,6 +36,12 @@ jobs:
 
       - name: Format
         run: uv run ruff format --check .
+
+      - name: Cache tokenizer model
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.HF_HOME }}
+          key: hf-all-MiniLM-L6-v2
 
       - name: Test
         run: uv run python -m pytest -m "not slow"
