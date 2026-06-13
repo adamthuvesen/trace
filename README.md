@@ -152,28 +152,34 @@ metadata; that run is forced, later runs are incremental.
 
 Trace ships an evaluation harness (`tools/eval/`) that runs a golden query set
 through each search mode and scores path accuracy, MRR, and latency. The numbers
-below come from the committed fixture — **8 short Markdown docs and an 8-query
-"what is X?" golden set** — so read them as a smoke signal, not a corpus-scale
+below come from the committed fixture — **13 short Markdown docs and a 13-query
+golden set, split between conceptual "what is X?" questions and lexical
+exact-term lookups** — so read them as a smoke signal, not a corpus-scale
 benchmark.
 
 | Mode | Top-1 path | Top-5 path | MRR | p50 | p95 |
 | --- | --- | --- | --- | --- | --- |
-| `bm25` | 100% | 100% | 1.000 | 0.2 ms | 10.6 ms |
-| `semantic` | 100% | 100% | 1.000 | 7.8 ms | 10.6 ms |
-| `hybrid` | 100% | 100% | 1.000 | 8.5 ms | 19.1 ms |
-| `smart` | 100% | 100% | 1.000 | 7.6 ms | 17.9 ms |
+| `bm25` | 92% | 100% | 0.962 | 0.1 ms | 4.8 ms |
+| `semantic` | 100% | 100% | 1.000 | 7.0 ms | 8.6 ms |
+| `hybrid` | 100% | 100% | 1.000 | 7.0 ms | 12.3 ms |
+| `smart` | 100% | 100% | 1.000 | 7.3 ms | 13.5 ms |
 
-Every mode retrieves the correct document for all 8 queries (top-1 = top-5 =
-100%, MRR 1.000) — on a corpus this small and clean, accuracy can't separate
-them, so the table really compares cost and routing. Pure `bm25` answers in
-~0.2 ms p50. `smart` lands the right doc for all 8 too, and routes every one
-through the hybrid path here (a 100% fallback rate): its rule defers to vector
-search when a conceptual query returns fewer than `top_k` BM25 candidates, and
-with one document per concept this fixture never clears that bar. So on this
-corpus `smart` spends a few ms more than raw `bm25` and never trades away
-accuracy; a corpus with more documents per concept returns enough candidates for
-`smart` to keep BM25's fast path. Latencies are microbenchmarks over 8 queries on
-one machine (Apple Silicon, ONNX int8) — read them as relative, not absolute.
+The split is what makes the modes separate. On the five lexical queries — exact
+identifiers like `EMBEDDING_BACKEND` or the error string `KB_PATH and
+KB_COLLECTIONS are mutually exclusive` — `bm25` is both correct and the cheapest
+path at ~0.1 ms p50. On the eight conceptual questions it slips once: it ranks
+the wrong config doc for "How do I set KB_PATH?" because the common word *set*
+is scattered across several docs, landing at 92% top-1.
+
+`smart` is the routing layer the project is built around. It takes the
+sub-millisecond BM25 path on all five lexical queries and falls back to vector
+search on the eight conceptual ones (62% fallback rate), which recovers the query
+`bm25` alone misses — so it ties `semantic`/`hybrid` at 100% top-1 and MRR 1.000
+while keeping BM25's speed on exact-term lookups instead of paying for an
+embedding on every query. (Getting the KB_PATH case right took a real fix: smart
+now measures BM25 confidence by the count of *strong* hits, not the raw hit count
+a common word can inflate.) Latencies are microbenchmarks over 13 queries on one
+machine (Apple Silicon, ONNX int8) — read them as relative, not absolute.
 
 Full per-mode reports live in [`docs/benchmarks/`](docs/benchmarks/). Reproduce
 any row, or `--ci` (the gate CI runs on every PR):

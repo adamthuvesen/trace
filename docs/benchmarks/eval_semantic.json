@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-06-13T10:15:34.651870+00:00",
+  "timestamp": "2026-06-13T10:46:24.142336+00:00",
   "search_mode": "semantic",
   "embedding_model": "all-MiniLM-L6-v2",
-  "total_queries": 8,
+  "total_queries": 13,
   "quick_set_only": false,
   "top_1_path_accuracy": 1.0,
   "top_5_path_accuracy": 1.0,
@@ -10,10 +10,10 @@
   "top_5_keyword_accuracy": 1.0,
   "mean_reciprocal_rank": 1.0,
   "within_max_rank_path_accuracy": 1.0,
-  "latency_p50_ms": 7.847583619877696,
-  "latency_p95_ms": 10.587904334533958,
-  "latency_p99_ms": 11.524014307651667,
-  "latency_mean_ms": 8.288421988254413,
+  "latency_p50_ms": 7.023958023637533,
+  "latency_p95_ms": 8.569758478552103,
+  "latency_p99_ms": 8.827618900686502,
+  "latency_mean_ms": 7.334762861808906,
   "by_category": {
     "concepts": {
       "category": "concepts",
@@ -26,7 +26,7 @@
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 1.0,
       "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 8.764760394115001
+      "avg_latency_ms": 7.317500014323741
     },
     "indexing": {
       "category": "indexing",
@@ -39,7 +39,7 @@
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 1.0,
       "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 8.037250023335218
+      "avg_latency_ms": 6.665042135864496
     },
     "features": {
       "category": "features",
@@ -52,20 +52,20 @@
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 1.0,
       "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 7.657917216420174
+      "avg_latency_ms": 8.892084006220102
     },
     "config": {
       "category": "config",
-      "query_count": 1,
-      "top_1_path_hits": 1,
-      "top_5_path_hits": 1,
-      "top_1_keyword_hits": 1,
-      "top_5_keyword_hits": 1,
+      "query_count": 5,
+      "top_1_path_hits": 5,
+      "top_5_path_hits": 5,
+      "top_1_keyword_hits": 5,
+      "top_5_keyword_hits": 5,
       "top_1_path_accuracy": 1.0,
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 1.0,
       "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 8.414791896939278
+      "avg_latency_ms": 7.126058219000697
     },
     "docs": {
       "category": "docs",
@@ -78,18 +78,31 @@
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 1.0,
       "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 7.1383751928806305
+      "avg_latency_ms": 8.160749915987253
+    },
+    "troubleshooting": {
+      "category": "troubleshooting",
+      "query_count": 1,
+      "top_1_path_hits": 1,
+      "top_5_path_hits": 1,
+      "top_1_keyword_hits": 1,
+      "top_5_keyword_hits": 1,
+      "top_1_path_accuracy": 1.0,
+      "top_5_path_accuracy": 1.0,
+      "top_1_keyword_accuracy": 1.0,
+      "top_5_keyword_accuracy": 1.0,
+      "avg_latency_ms": 6.733749993145466
     }
   },
   "by_file_type": {
     ".md": {
       "file_type": ".md",
-      "query_count": 8,
-      "top_1_path_hits": 8,
-      "top_5_path_hits": 8,
+      "query_count": 13,
+      "top_1_path_hits": 13,
+      "top_5_path_hits": 13,
       "top_1_accuracy": 1.0,
       "top_5_accuracy": 1.0,
-      "avg_latency_ms": 8.288421988254413
+      "avg_latency_ms": 7.334762861808906
     }
   },
   "results": [
@@ -102,7 +115,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "glossary/bm25.md",
       "retrieved_score": 0.6521896719932556,
-      "latency_ms": 11.758041800931096,
+      "latency_ms": 7.171334000304341,
       "keywords_found": [
         "BM25",
         "keyword",
@@ -124,7 +137,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "glossary/rrf.md",
       "retrieved_score": 0.49105799198150635,
-      "latency_ms": 7.471207994967699,
+      "latency_ms": 7.073166081681848,
       "keywords_found": [
         "RRF",
         "rank",
@@ -146,7 +159,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "glossary/ann-search.md",
       "retrieved_score": 0.46473705768585205,
-      "latency_ms": 8.386707864701748,
+      "latency_ms": 8.354874793440104,
       "keywords_found": [
         "ANN",
         "nearest neighbor",
@@ -168,7 +181,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "search/hybrid-search.md",
       "retrieved_score": 0.5047353506088257,
-      "latency_ms": 7.443083915859461,
+      "latency_ms": 6.670625181868672,
       "keywords_found": [
         "hybrid search",
         "semantic",
@@ -190,7 +203,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "indexing/chunk-overlap.md",
       "retrieved_score": 0.6198669075965881,
-      "latency_ms": 8.037250023335218,
+      "latency_ms": 6.665042135864496,
       "keywords_found": [
         "overlap",
         "chunk",
@@ -212,7 +225,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "features/reranking.md",
       "retrieved_score": 0.6215813755989075,
-      "latency_ms": 7.657917216420174,
+      "latency_ms": 8.892084006220102,
       "keywords_found": [
         "reranking",
         "results",
@@ -234,7 +247,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "config/kb-path.md",
       "retrieved_score": 0.5741831660270691,
-      "latency_ms": 8.414791896939278,
+      "latency_ms": 6.891458062455058,
       "keywords_found": [
         "KB_PATH",
         "knowledge base",
@@ -256,11 +269,117 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "docs/writing-style-guide.md",
       "retrieved_score": 0.7514188289642334,
-      "latency_ms": 7.1383751928806305,
+      "latency_ms": 8.160749915987253,
       "keywords_found": [
         "style guide",
         "writing",
         "docs"
+      ],
+      "keywords_missing": [],
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
+      "path_hit_within_max_rank": true,
+      "smart_strategy": null,
+      "smart_fallback_used": null
+    },
+    {
+      "query_id": "lex-embedding-backend",
+      "query": "EMBEDDING_BACKEND onnx torch",
+      "top_1_path_hit": true,
+      "top_5_path_hit": true,
+      "top_1_keyword_hit": true,
+      "top_5_keyword_hit": true,
+      "retrieved_path": "config/embedding-backend.md",
+      "retrieved_score": 0.7727166414260864,
+      "latency_ms": 6.947583984583616,
+      "keywords_found": [
+        "EMBEDDING_BACKEND",
+        "onnx",
+        "torch"
+      ],
+      "keywords_missing": [],
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
+      "path_hit_within_max_rank": true,
+      "smart_strategy": null,
+      "smart_fallback_used": null
+    },
+    {
+      "query_id": "lex-embedding-model",
+      "query": "EMBEDDING_MODEL setting",
+      "top_1_path_hit": true,
+      "top_5_path_hit": true,
+      "top_1_keyword_hit": true,
+      "top_5_keyword_hit": true,
+      "retrieved_path": "config/embedding-model.md",
+      "retrieved_score": 0.6212358474731445,
+      "latency_ms": 7.023958023637533,
+      "keywords_found": [
+        "EMBEDDING_MODEL",
+        "model"
+      ],
+      "keywords_missing": [],
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
+      "path_hit_within_max_rank": true,
+      "smart_strategy": null,
+      "smart_fallback_used": null
+    },
+    {
+      "query_id": "lex-index-path",
+      "query": "INDEX_PATH",
+      "top_1_path_hit": true,
+      "top_5_path_hit": true,
+      "top_1_keyword_hit": true,
+      "top_5_keyword_hit": true,
+      "retrieved_path": "config/index-path.md",
+      "retrieved_score": 0.5647386312484741,
+      "latency_ms": 7.789999945089221,
+      "keywords_found": [
+        "INDEX_PATH",
+        "index"
+      ],
+      "keywords_missing": [],
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
+      "path_hit_within_max_rank": true,
+      "smart_strategy": null,
+      "smart_fallback_used": null
+    },
+    {
+      "query_id": "lex-reranker-flag",
+      "query": "RERANKER_ENABLED flag",
+      "top_1_path_hit": true,
+      "top_5_path_hit": true,
+      "top_1_keyword_hit": true,
+      "top_5_keyword_hit": true,
+      "retrieved_path": "config/reranker.md",
+      "retrieved_score": 0.627860963344574,
+      "latency_ms": 6.977291079238057,
+      "keywords_found": [
+        "RERANKER_ENABLED",
+        "cross-encoder"
+      ],
+      "keywords_missing": [],
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
+      "path_hit_within_max_rank": true,
+      "smart_strategy": null,
+      "smart_fallback_used": null
+    },
+    {
+      "query_id": "lex-mutually-exclusive",
+      "query": "mutually exclusive KB_COLLECTIONS error",
+      "top_1_path_hit": true,
+      "top_5_path_hit": true,
+      "top_1_keyword_hit": true,
+      "top_5_keyword_hit": true,
+      "retrieved_path": "troubleshooting/conflicting-roots.md",
+      "retrieved_score": 0.5568042993545532,
+      "latency_ms": 6.733749993145466,
+      "keywords_found": [
+        "mutually exclusive",
+        "KB_COLLECTIONS"
       ],
       "keywords_missing": [],
       "path_first_hit_rank": 1,
