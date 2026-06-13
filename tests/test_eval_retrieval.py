@@ -49,7 +49,7 @@ def test_run_evaluation_reports_reciprocal_rank(
         stress_only=False,
         include_stress=False,
     )
-    assert report.total_queries == 8
+    assert report.total_queries == 17
     assert report.mean_reciprocal_rank > 0.0
     by_id = {r.query_id: r for r in report.results}
     assert by_id["easy-bm25"].path_first_hit_rank == 1

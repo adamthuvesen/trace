@@ -23,6 +23,8 @@ from trace_search.formatting import (  # noqa: F401 — package re-exports
     format_results,
 )
 from trace_search.query_profile import (
+    BM25_DOMINANCE_MARGIN,
+    BM25_STRONG_HIT_FRACTION,
     BM25_WEAK_BEST_SCORE,
     SMART_KEYWORD_STRENGTH_TOP_K,
     classify_query,
@@ -570,17 +572,34 @@ class SmartSearch:
         best_score = float(hits[0].get("score", 0) or 0)
         distinct_docs = {hit.get("path") for hit in hits}
         requested = max(1, min(top_k, SMART_KEYWORD_STRENGTH_TOP_K))
+        conceptual = is_conceptual_query(query)
+        # Confidence for conceptual queries is the count of *strong* hits, not the
+        # raw hit count: a common query word (e.g. "set" in "how do I set X")
+        # matches many docs weakly and would otherwise look like a confident BM25
+        # result, letting smart skip a fallback it should take.
+        strong_hits = sum(
+            1
+            for hit in hits
+            if float(hit.get("score", 0) or 0) >= BM25_STRONG_HIT_FRACTION * best_score
+        )
 
         if best_score <= 0:
             return False, "BM25 best score was not positive"
-        if len(hits) < requested and is_conceptual_query(query):
-            return False, "conceptual query had too few BM25 hits"
+        if conceptual and strong_hits < requested:
+            return False, "conceptual query had too few strong BM25 hits"
         if best_score < BM25_WEAK_BEST_SCORE:
             return False, "BM25 best score was very low"
-        if len(hits) > 1 and len(distinct_docs) == 1 and is_conceptual_query(query):
+        if len(hits) > 1 and len(distinct_docs) == 1 and conceptual:
             return False, "BM25 results were duplicate-heavy for a conceptual query"
-        if is_conceptual_query(query) and len(hits) < top_k:
-            return False, "conceptual query may benefit from hybrid retrieval"
+        if conceptual and strong_hits < top_k:
+            return False, "conceptual query lacks enough strong BM25 hits"
+        runner_up = float(hits[1].get("score", 0) or 0) if len(hits) > 1 else 0.0
+        if (
+            conceptual
+            and runner_up > 0
+            and best_score < BM25_DOMINANCE_MARGIN * runner_up
+        ):
+            return False, "no dominant BM25 match for a conceptual query"
 
         return True, "BM25 returned strong exact-match results"
 
