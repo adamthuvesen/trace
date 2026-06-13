@@ -1,84 +1,45 @@
 {
-  "timestamp": "2026-06-13T10:46:30.788487+00:00",
+  "timestamp": "2026-06-13T11:15:55.846202+00:00",
   "search_mode": "smart",
   "embedding_model": "all-MiniLM-L6-v2",
-  "total_queries": 13,
+  "total_queries": 17,
   "quick_set_only": false,
-  "top_1_path_accuracy": 1.0,
+  "top_1_path_accuracy": 0.8823529411764706,
   "top_5_path_accuracy": 1.0,
-  "top_1_keyword_accuracy": 1.0,
+  "top_1_keyword_accuracy": 0.8235294117647058,
   "top_5_keyword_accuracy": 1.0,
-  "mean_reciprocal_rank": 1.0,
+  "mean_reciprocal_rank": 0.9411764705882353,
   "within_max_rank_path_accuracy": 1.0,
-  "latency_p50_ms": 7.2749999817460775,
-  "latency_p95_ms": 13.454608852043727,
-  "latency_p99_ms": 20.496688829734907,
-  "latency_mean_ms": 5.757407141992679,
+  "latency_p50_ms": 7.200292078778148,
+  "latency_p95_ms": 10.556216491386284,
+  "latency_p99_ms": 19.143843306228515,
+  "latency_mean_ms": 6.47957347716917,
   "by_category": {
     "concepts": {
       "category": "concepts",
-      "query_count": 4,
+      "query_count": 6,
       "top_1_path_hits": 4,
-      "top_5_path_hits": 4,
+      "top_5_path_hits": 6,
       "top_1_keyword_hits": 4,
-      "top_5_keyword_hits": 4,
-      "top_1_path_accuracy": 1.0,
+      "top_5_keyword_hits": 6,
+      "top_1_path_accuracy": 0.6666666666666666,
       "top_5_path_accuracy": 1.0,
-      "top_1_keyword_accuracy": 1.0,
+      "top_1_keyword_accuracy": 0.6666666666666666,
       "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 11.182094167452306
-    },
-    "indexing": {
-      "category": "indexing",
-      "query_count": 1,
-      "top_1_path_hits": 1,
-      "top_5_path_hits": 1,
-      "top_1_keyword_hits": 1,
-      "top_5_keyword_hits": 1,
-      "top_1_path_accuracy": 1.0,
-      "top_5_path_accuracy": 1.0,
-      "top_1_keyword_accuracy": 1.0,
-      "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 7.3280001524835825
-    },
-    "features": {
-      "category": "features",
-      "query_count": 1,
-      "top_1_path_hits": 1,
-      "top_5_path_hits": 1,
-      "top_1_keyword_hits": 1,
-      "top_5_keyword_hits": 1,
-      "top_1_path_accuracy": 1.0,
-      "top_5_path_accuracy": 1.0,
-      "top_1_keyword_accuracy": 1.0,
-      "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 7.2749999817460775
+      "avg_latency_ms": 9.680777904577553
     },
     "config": {
       "category": "config",
-      "query_count": 5,
-      "top_1_path_hits": 5,
-      "top_5_path_hits": 5,
-      "top_1_keyword_hits": 5,
-      "top_5_keyword_hits": 5,
+      "query_count": 3,
+      "top_1_path_hits": 3,
+      "top_5_path_hits": 3,
+      "top_1_keyword_hits": 3,
+      "top_5_keyword_hits": 3,
       "top_1_path_accuracy": 1.0,
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 1.0,
       "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 1.5786916017532349
-    },
-    "docs": {
-      "category": "docs",
-      "query_count": 1,
-      "top_1_path_hits": 1,
-      "top_5_path_hits": 1,
-      "top_1_keyword_hits": 1,
-      "top_5_keyword_hits": 1,
-      "top_1_path_accuracy": 1.0,
-      "top_5_path_accuracy": 1.0,
-      "top_1_keyword_accuracy": 1.0,
-      "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 7.476875092834234
+      "avg_latency_ms": 0.16319425776600838
     },
     "troubleshooting": {
       "category": "troubleshooting",
@@ -91,18 +52,70 @@
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 1.0,
       "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 0.1445829402655363
+      "avg_latency_ms": 0.15870784409344196
+    },
+    "indexing": {
+      "category": "indexing",
+      "query_count": 1,
+      "top_1_path_hits": 1,
+      "top_5_path_hits": 1,
+      "top_1_keyword_hits": 1,
+      "top_5_keyword_hits": 1,
+      "top_1_path_accuracy": 1.0,
+      "top_5_path_accuracy": 1.0,
+      "top_1_keyword_accuracy": 1.0,
+      "top_5_keyword_accuracy": 1.0,
+      "avg_latency_ms": 7.369874976575375
+    },
+    "features": {
+      "category": "features",
+      "query_count": 2,
+      "top_1_path_hits": 2,
+      "top_5_path_hits": 2,
+      "top_1_keyword_hits": 2,
+      "top_5_keyword_hits": 2,
+      "top_1_path_accuracy": 1.0,
+      "top_5_path_accuracy": 1.0,
+      "top_1_keyword_accuracy": 1.0,
+      "top_5_keyword_accuracy": 1.0,
+      "avg_latency_ms": 7.609270513057709
+    },
+    "search": {
+      "category": "search",
+      "query_count": 2,
+      "top_1_path_hits": 2,
+      "top_5_path_hits": 2,
+      "top_1_keyword_hits": 2,
+      "top_5_keyword_hits": 2,
+      "top_1_path_accuracy": 1.0,
+      "top_5_path_accuracy": 1.0,
+      "top_1_keyword_accuracy": 1.0,
+      "top_5_keyword_accuracy": 1.0,
+      "avg_latency_ms": 7.125625037588179
+    },
+    "metrics": {
+      "category": "metrics",
+      "query_count": 2,
+      "top_1_path_hits": 2,
+      "top_5_path_hits": 2,
+      "top_1_keyword_hits": 1,
+      "top_5_keyword_hits": 2,
+      "top_1_path_accuracy": 1.0,
+      "top_5_path_accuracy": 1.0,
+      "top_1_keyword_accuracy": 0.5,
+      "top_5_keyword_accuracy": 1.0,
+      "avg_latency_ms": 7.290062494575977
     }
   },
   "by_file_type": {
     ".md": {
       "file_type": ".md",
-      "query_count": 13,
-      "top_1_path_hits": 13,
-      "top_5_path_hits": 13,
-      "top_1_accuracy": 1.0,
+      "query_count": 17,
+      "top_1_path_hits": 15,
+      "top_5_path_hits": 17,
+      "top_1_accuracy": 0.8823529411764706,
       "top_5_accuracy": 1.0,
-      "avg_latency_ms": 5.757407141992679
+      "avg_latency_ms": 6.47957347716917
     }
   },
   "results": [
@@ -115,7 +128,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "glossary/bm25.md",
       "retrieved_score": 0.6521896719932556,
-      "latency_ms": 22.257208824157715,
+      "latency_ms": 21.290750009939075,
       "keywords_found": [
         "BM25",
         "keyword",
@@ -129,155 +142,23 @@
       "smart_fallback_used": true
     },
     {
-      "query_id": "easy-rrf",
-      "query": "What is RRF?",
-      "top_1_path_hit": true,
+      "query_id": "easy-embeddings",
+      "query": "What are embeddings?",
+      "top_1_path_hit": false,
       "top_5_path_hit": true,
-      "top_1_keyword_hit": true,
+      "top_1_keyword_hit": false,
       "top_5_keyword_hit": true,
-      "retrieved_path": "glossary/rrf.md",
-      "retrieved_score": 0.49105799198150635,
-      "latency_ms": 7.586208870634437,
+      "retrieved_path": "config/embedding-backend.md",
+      "retrieved_score": 0.45955538749694824,
+      "latency_ms": 7.872583111748099,
       "keywords_found": [
-        "RRF",
-        "rank",
-        "fusion"
+        "embeddings",
+        "vectors",
+        "meaning"
       ],
       "keywords_missing": [],
-      "path_first_hit_rank": 1,
-      "path_reciprocal_rank": 1.0,
-      "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
-    },
-    {
-      "query_id": "easy-ann",
-      "query": "What is ANN search?",
-      "top_1_path_hit": true,
-      "top_5_path_hit": true,
-      "top_1_keyword_hit": true,
-      "top_5_keyword_hit": true,
-      "retrieved_path": "glossary/ann-search.md",
-      "retrieved_score": 0.46473705768585205,
-      "latency_ms": 7.412208942696452,
-      "keywords_found": [
-        "ANN",
-        "nearest neighbor",
-        "vector"
-      ],
-      "keywords_missing": [],
-      "path_first_hit_rank": 1,
-      "path_reciprocal_rank": 1.0,
-      "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
-    },
-    {
-      "query_id": "easy-hybrid",
-      "query": "What is hybrid search?",
-      "top_1_path_hit": true,
-      "top_5_path_hit": true,
-      "top_1_keyword_hit": true,
-      "top_5_keyword_hit": true,
-      "retrieved_path": "search/hybrid-search.md",
-      "retrieved_score": 0.5047353506088257,
-      "latency_ms": 7.472750032320619,
-      "keywords_found": [
-        "hybrid search",
-        "semantic",
-        "keyword"
-      ],
-      "keywords_missing": [],
-      "path_first_hit_rank": 1,
-      "path_reciprocal_rank": 1.0,
-      "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
-    },
-    {
-      "query_id": "easy-overlap",
-      "query": "What is chunk overlap?",
-      "top_1_path_hit": true,
-      "top_5_path_hit": true,
-      "top_1_keyword_hit": true,
-      "top_5_keyword_hit": true,
-      "retrieved_path": "indexing/chunk-overlap.md",
-      "retrieved_score": 0.6198669075965881,
-      "latency_ms": 7.3280001524835825,
-      "keywords_found": [
-        "overlap",
-        "chunk",
-        "context"
-      ],
-      "keywords_missing": [],
-      "path_first_hit_rank": 1,
-      "path_reciprocal_rank": 1.0,
-      "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
-    },
-    {
-      "query_id": "easy-rerank",
-      "query": "What is reranking?",
-      "top_1_path_hit": true,
-      "top_5_path_hit": true,
-      "top_1_keyword_hit": true,
-      "top_5_keyword_hit": true,
-      "retrieved_path": "features/reranking.md",
-      "retrieved_score": 0.6215813755989075,
-      "latency_ms": 7.2749999817460775,
-      "keywords_found": [
-        "reranking",
-        "results",
-        "relevance"
-      ],
-      "keywords_missing": [],
-      "path_first_hit_rank": 1,
-      "path_reciprocal_rank": 1.0,
-      "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
-    },
-    {
-      "query_id": "easy-kb-path",
-      "query": "How do I set KB_PATH?",
-      "top_1_path_hit": true,
-      "top_5_path_hit": true,
-      "top_1_keyword_hit": true,
-      "top_5_keyword_hit": true,
-      "retrieved_path": "config/kb-path.md",
-      "retrieved_score": 0.5741831660270691,
-      "latency_ms": 7.25937495008111,
-      "keywords_found": [
-        "KB_PATH",
-        "knowledge base",
-        "path"
-      ],
-      "keywords_missing": [],
-      "path_first_hit_rank": 1,
-      "path_reciprocal_rank": 1.0,
-      "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
-    },
-    {
-      "query_id": "easy-style",
-      "query": "What is the writing style guide?",
-      "top_1_path_hit": true,
-      "top_5_path_hit": true,
-      "top_1_keyword_hit": true,
-      "top_5_keyword_hit": true,
-      "retrieved_path": "docs/writing-style-guide.md",
-      "retrieved_score": 0.7514188289642334,
-      "latency_ms": 7.476875092834234,
-      "keywords_found": [
-        "style guide",
-        "writing",
-        "docs"
-      ],
-      "keywords_missing": [],
-      "path_first_hit_rank": 1,
-      "path_reciprocal_rank": 1.0,
+      "path_first_hit_rank": 2,
+      "path_reciprocal_rank": 0.5,
       "path_hit_within_max_rank": true,
       "smart_strategy": "hybrid",
       "smart_fallback_used": true
@@ -290,33 +171,12 @@
       "top_1_keyword_hit": true,
       "top_5_keyword_hit": true,
       "retrieved_path": "config/embedding-backend.md",
-      "retrieved_score": 3.392995834350586,
-      "latency_ms": 0.18379208631813526,
+      "retrieved_score": 4.359013080596924,
+      "latency_ms": 0.19766693003475666,
       "keywords_found": [
         "EMBEDDING_BACKEND",
         "onnx",
         "torch"
-      ],
-      "keywords_missing": [],
-      "path_first_hit_rank": 1,
-      "path_reciprocal_rank": 1.0,
-      "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false
-    },
-    {
-      "query_id": "lex-embedding-model",
-      "query": "EMBEDDING_MODEL setting",
-      "top_1_path_hit": true,
-      "top_5_path_hit": true,
-      "top_1_keyword_hit": true,
-      "top_5_keyword_hit": true,
-      "retrieved_path": "config/embedding-model.md",
-      "retrieved_score": 1.2820557355880737,
-      "latency_ms": 0.1668750774115324,
-      "keywords_found": [
-        "EMBEDDING_MODEL",
-        "model"
       ],
       "keywords_missing": [],
       "path_first_hit_rank": 1,
@@ -333,8 +193,8 @@
       "top_1_keyword_hit": true,
       "top_5_keyword_hit": true,
       "retrieved_path": "config/index-path.md",
-      "retrieved_score": 0.9935594201087952,
-      "latency_ms": 0.14054100029170513,
+      "retrieved_score": 1.2808901071548462,
+      "latency_ms": 0.14658295549452305,
       "keywords_found": [
         "INDEX_PATH",
         "index"
@@ -354,8 +214,8 @@
       "top_1_keyword_hit": true,
       "top_5_keyword_hit": true,
       "retrieved_path": "config/reranker.md",
-      "retrieved_score": 2.0288965702056885,
-      "latency_ms": 0.14287489466369152,
+      "retrieved_score": 2.612452745437622,
+      "latency_ms": 0.14533288776874542,
       "keywords_found": [
         "RERANKER_ENABLED",
         "cross-encoder"
@@ -375,8 +235,8 @@
       "top_1_keyword_hit": true,
       "top_5_keyword_hit": true,
       "retrieved_path": "troubleshooting/conflicting-roots.md",
-      "retrieved_score": 4.35601282119751,
-      "latency_ms": 0.1445829402655363,
+      "retrieved_score": 5.6030049324035645,
+      "latency_ms": 0.15870784409344196,
       "keywords_found": [
         "mutually exclusive",
         "KB_COLLECTIONS"
@@ -387,6 +247,237 @@
       "path_hit_within_max_rank": true,
       "smart_strategy": "keyword",
       "smart_fallback_used": false
+    },
+    {
+      "query_id": "lex-saturation",
+      "query": "term frequency saturation document length normalization",
+      "top_1_path_hit": false,
+      "top_5_path_hit": true,
+      "top_1_keyword_hit": false,
+      "top_5_keyword_hit": true,
+      "retrieved_path": "glossary/tf-idf.md",
+      "retrieved_score": 0.38447141647338867,
+      "latency_ms": 7.554457988590002,
+      "keywords_found": [
+        "term frequency",
+        "normalization"
+      ],
+      "keywords_missing": [],
+      "path_first_hit_rank": 2,
+      "path_reciprocal_rank": 0.5,
+      "path_hit_within_max_rank": true,
+      "smart_strategy": "hybrid",
+      "smart_fallback_used": true
+    },
+    {
+      "query_id": "para-overlap",
+      "query": "keep sentences from being cut off where two chunks meet",
+      "top_1_path_hit": true,
+      "top_5_path_hit": true,
+      "top_1_keyword_hit": true,
+      "top_5_keyword_hit": true,
+      "retrieved_path": "indexing/chunk-overlap.md",
+      "retrieved_score": 0.6519870758056641,
+      "latency_ms": 7.369874976575375,
+      "keywords_found": [
+        "overlap",
+        "chunk"
+      ],
+      "keywords_missing": [],
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
+      "path_hit_within_max_rank": true,
+      "smart_strategy": "hybrid",
+      "smart_fallback_used": true
+    },
+    {
+      "query_id": "para-rerank",
+      "query": "reorder the shortlist with a slower but more accurate model",
+      "top_1_path_hit": true,
+      "top_5_path_hit": true,
+      "top_1_keyword_hit": true,
+      "top_5_keyword_hit": true,
+      "retrieved_path": "features/reranking.md",
+      "retrieved_score": 0.3964656591415405,
+      "latency_ms": 7.856749929487705,
+      "keywords_found": [
+        "reranking",
+        "relevance"
+      ],
+      "keywords_missing": [],
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
+      "path_hit_within_max_rank": true,
+      "smart_strategy": "hybrid",
+      "smart_fallback_used": true
+    },
+    {
+      "query_id": "para-rrf",
+      "query": "blend two ranked result lists without any training",
+      "top_1_path_hit": true,
+      "top_5_path_hit": true,
+      "top_1_keyword_hit": true,
+      "top_5_keyword_hit": true,
+      "retrieved_path": "glossary/rrf.md",
+      "retrieved_score": 0.516713559627533,
+      "latency_ms": 7.200292078778148,
+      "keywords_found": [
+        "rank",
+        "fusion"
+      ],
+      "keywords_missing": [],
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
+      "path_hit_within_max_rank": true,
+      "smart_strategy": "hybrid",
+      "smart_fallback_used": true
+    },
+    {
+      "query_id": "para-cosine",
+      "query": "gauge how aligned two vectors are regardless of their length",
+      "top_1_path_hit": true,
+      "top_5_path_hit": true,
+      "top_1_keyword_hit": true,
+      "top_5_keyword_hit": true,
+      "retrieved_path": "glossary/cosine-similarity.md",
+      "retrieved_score": 0.4904261827468872,
+      "latency_ms": 6.992209004238248,
+      "keywords_found": [
+        "cosine",
+        "angle"
+      ],
+      "keywords_missing": [],
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
+      "path_hit_within_max_rank": true,
+      "smart_strategy": "hybrid",
+      "smart_fallback_used": true
+    },
+    {
+      "query_id": "para-ann",
+      "query": "find nearby vectors fast without scanning every one",
+      "top_1_path_hit": true,
+      "top_5_path_hit": true,
+      "top_1_keyword_hit": true,
+      "top_5_keyword_hit": true,
+      "retrieved_path": "glossary/ann-search.md",
+      "retrieved_score": 0.5742923617362976,
+      "latency_ms": 7.1362091694027185,
+      "keywords_found": [
+        "nearest neighbor",
+        "vector"
+      ],
+      "keywords_missing": [],
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
+      "path_hit_within_max_rank": true,
+      "smart_strategy": "hybrid",
+      "smart_fallback_used": true
+    },
+    {
+      "query_id": "para-mrr",
+      "query": "metric that only cares how high the first correct answer lands",
+      "top_1_path_hit": true,
+      "top_5_path_hit": true,
+      "top_1_keyword_hit": true,
+      "top_5_keyword_hit": true,
+      "retrieved_path": "glossary/mrr.md",
+      "retrieved_score": 0.40917056798934937,
+      "latency_ms": 7.68487504683435,
+      "keywords_found": [
+        "reciprocal",
+        "rank"
+      ],
+      "keywords_missing": [],
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
+      "path_hit_within_max_rank": true,
+      "smart_strategy": "hybrid",
+      "smart_fallback_used": true
+    },
+    {
+      "query_id": "para-crossenc",
+      "query": "model that scores a query and document jointly in one pass",
+      "top_1_path_hit": true,
+      "top_5_path_hit": true,
+      "top_1_keyword_hit": true,
+      "top_5_keyword_hit": true,
+      "retrieved_path": "features/cross-encoder.md",
+      "retrieved_score": 0.5048666000366211,
+      "latency_ms": 7.361791096627712,
+      "keywords_found": [
+        "cross-encoder",
+        "relevance"
+      ],
+      "keywords_missing": [],
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
+      "path_hit_within_max_rank": true,
+      "smart_strategy": "hybrid",
+      "smart_fallback_used": true
+    },
+    {
+      "query_id": "para-idf",
+      "query": "down-weight words that appear in almost every document",
+      "top_1_path_hit": true,
+      "top_5_path_hit": true,
+      "top_1_keyword_hit": true,
+      "top_5_keyword_hit": true,
+      "retrieved_path": "glossary/tf-idf.md",
+      "retrieved_score": 0.6682261824607849,
+      "latency_ms": 7.238458143547177,
+      "keywords_found": [
+        "inverse document frequency",
+        "rare"
+      ],
+      "keywords_missing": [],
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
+      "path_hit_within_max_rank": true,
+      "smart_strategy": "hybrid",
+      "smart_fallback_used": true
+    },
+    {
+      "query_id": "amb-hybrid",
+      "query": "combine keyword and semantic signals into one ranking",
+      "top_1_path_hit": true,
+      "top_5_path_hit": true,
+      "top_1_keyword_hit": true,
+      "top_5_keyword_hit": true,
+      "retrieved_path": "search/hybrid-search.md",
+      "retrieved_score": 0.46570277214050293,
+      "latency_ms": 7.0509579963982105,
+      "keywords_found": [
+        "hybrid",
+        "semantic"
+      ],
+      "keywords_missing": [],
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
+      "path_hit_within_max_rank": true,
+      "smart_strategy": "hybrid",
+      "smart_fallback_used": true
+    },
+    {
+      "query_id": "amb-ndcg",
+      "query": "reward putting better answers higher using graded relevance",
+      "top_1_path_hit": true,
+      "top_5_path_hit": true,
+      "top_1_keyword_hit": false,
+      "top_5_keyword_hit": true,
+      "retrieved_path": "glossary/ndcg.md",
+      "retrieved_score": 0.46332597732543945,
+      "latency_ms": 6.895249942317605,
+      "keywords_found": [
+        "relevance",
+        "rank"
+      ],
+      "keywords_missing": [],
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
+      "path_hit_within_max_rank": true,
+      "smart_strategy": "hybrid",
+      "smart_fallback_used": true
     }
   ],
   "regression": null,
@@ -394,5 +485,5 @@
   "stress_only": false,
   "strict_keywords": false,
   "strict_keywords_top1": false,
-  "smart_fallback_rate": 0.6153846153846154
+  "smart_fallback_rate": 0.7647058823529411
 }

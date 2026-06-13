@@ -152,34 +152,43 @@ metadata; that run is forced, later runs are incremental.
 
 Trace ships an evaluation harness (`tools/eval/`) that runs a golden query set
 through each search mode and scores path accuracy, MRR, and latency. The numbers
-below come from the committed fixture — **13 short Markdown docs and a 13-query
-golden set, split between conceptual "what is X?" questions and lexical
-exact-term lookups** — so read them as a smoke signal, not a corpus-scale
-benchmark.
+below come from the committed fixture — **24 short Markdown docs and a 17-query
+golden set** — built to be adversarial rather than easy: it packs confusable
+clusters (TF-IDF vs BM25, cosine vs dot-product, the eval metrics, RRF vs linear
+combination, chunk overlap vs size vs splitting) so several docs are plausible
+for each query, and the queries split between exact-term lookups and paraphrases
+that share few words with the answer. It is a smoke test, not a corpus-scale
+benchmark, but it is hard enough that no mode aces it.
 
-| Mode | Top-1 path | Top-5 path | MRR | p50 | p95 |
+| Mode | Top-1 (P@1) | Top-5 (Success@5) | MRR | p50 | p95 |
 | --- | --- | --- | --- | --- | --- |
-| `bm25` | 92% | 100% | 0.962 | 0.1 ms | 4.8 ms |
-| `semantic` | 100% | 100% | 1.000 | 7.0 ms | 8.6 ms |
-| `hybrid` | 100% | 100% | 1.000 | 7.0 ms | 12.3 ms |
-| `smart` | 100% | 100% | 1.000 | 7.3 ms | 13.5 ms |
+| `bm25` | 88% | 94% | 0.912 | 0.16 ms | 2.6 ms |
+| `semantic` | 88% | 100% | 0.941 | 6.71 ms | 7.1 ms |
+| `hybrid` | 88% | 100% | 0.941 | 7.10 ms | 10.9 ms |
+| `smart` | 88% | 100% | 0.941 | 7.20 ms | 10.6 ms |
 
-The split is what makes the modes separate. On the five lexical queries — exact
-identifiers like `EMBEDDING_BACKEND` or the error string `KB_PATH and
-KB_COLLECTIONS are mutually exclusive` — `bm25` is both correct and the cheapest
-path at ~0.1 ms p50. On the eight conceptual questions it slips once: it ranks
-the wrong config doc for "How do I set KB_PATH?" because the common word *set*
-is scattered across several docs, landing at 92% top-1.
+Top-1 lands at 88% across the board — but that masks the real story, because the
+modes miss *different* queries. `bm25` wins exact-term and rare-token lookups
+(the env-var identifiers, BM25's own "term frequency saturation" phrasing) yet
+whiffs on paraphrases where the answer shares no keywords ("reorder the shortlist
+with a slower model" → reranking), so it also drops on the deeper metrics: lower
+MRR (0.912 vs 0.941, worse ranking) and the only mode that misses a query
+entirely (Success@5 94% vs 100%). `semantic` is the mirror image — it handles
+paraphrases but confuses the near-duplicate config/glossary docs (it sends "what
+are embeddings?" to the `EMBEDDING_BACKEND` doc). This is the usual lexical-vs-
+dense trade-off; on larger benchmarks like BEIR the two land within a few points
+of each other too, separating on ranking and recall rather than raw hit rate.
 
-`smart` is the routing layer the project is built around. It takes the
-sub-millisecond BM25 path on all five lexical queries and falls back to vector
-search on the eight conceptual ones (62% fallback rate), which recovers the query
-`bm25` alone misses — so it ties `semantic`/`hybrid` at 100% top-1 and MRR 1.000
-while keeping BM25's speed on exact-term lookups instead of paying for an
-embedding on every query. (Getting the KB_PATH case right took a real fix: smart
-now measures BM25 confidence by the count of *strong* hits, not the raw hit count
-a common word can inflate.) Latencies are microbenchmarks over 13 queries on one
-machine (Apple Silicon, ONNX int8) — read them as relative, not absolute.
+`smart` is the routing layer the project is built around: it sends exact-term
+queries down the sub-millisecond BM25 path and falls back to vector search on
+paraphrase/conceptual ones (76% fallback rate), matching the best accuracy
+(`semantic`/`hybrid`) while keeping BM25's speed on lexical lookups. Tuning it on
+this fixture surfaced — and fixed — two real routing bugs: smart used to trust
+BM25's raw hit count (which a common word inflates) and its top hit even when the
+scores were flat (a vocabulary-mismatch query with no real keyword anchor). It
+now gates the fast path on the count of *strong, dominant* hits. Latencies are
+microbenchmarks over 17 queries on one machine (Apple Silicon, ONNX int8) — read
+them as relative, not absolute.
 
 Full per-mode reports live in [`docs/benchmarks/`](docs/benchmarks/). Reproduce
 any row, or `--ci` (the gate CI runs on every PR):
