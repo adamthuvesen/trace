@@ -5,10 +5,15 @@ from trace_search.query_profile import (
     WEIGHT_KEYWORD,
     WEIGHT_QUESTION,
     classify_query,
+    is_conceptual_query,
+    is_keywordish_query,
 )
 from trace_search.search import (
     HybridSearch,
+    SearchFilters,
     _clamp_top_k,
+    _semantic_fetch_size,
+    _semantic_lexical_boost,
 )
 
 
@@ -20,12 +25,14 @@ class TestHybridSearchQueryClassification:
         return classify_query(query)
 
     def test_question_classified_as_question(self):
-        query_type, weight = self._classify("What is BM25?")
+        query_type, weight = self._classify("How does semantic ranking work?")
         assert query_type == "question"
         assert weight == WEIGHT_QUESTION
 
-        query_type, weight = self._classify("How do BM25 and RRF differ?")
-        assert query_type == "question"
+    def test_short_definition_classified_as_keyword(self):
+        query_type, weight = self._classify("What is BM25?")
+        assert query_type == "keyword"
+        assert weight == WEIGHT_KEYWORD
 
     def test_short_keyword_query_classified_as_keyword(self):
         query_type, weight = self._classify("frontmatter")
@@ -63,6 +70,18 @@ class TestHybridSearchQueryClassification:
         for w in weights:
             assert 0 <= w <= 1, f"Weight {w} should be between 0 and 1"
 
+    def test_identifier_query_classified_as_keywordish(self):
+        assert is_keywordish_query("HTTP 429 Retry-After burst limit")
+        assert not is_conceptual_query("HTTP 429 Retry-After burst limit")
+        assert self._classify("HTTP 429 Retry-After burst limit")[1] == WEIGHT_KEYWORD
+
+    def test_dense_noun_phrase_classified_as_keywordish(self):
+        query = "term frequency saturation document length normalization"
+
+        assert is_keywordish_query(query)
+        assert not is_conceptual_query(query)
+        assert self._classify(query)[1] == WEIGHT_KEYWORD
+
 
 class TestEmptyCorpusSearch:
     def test_empty_corpus_returns_empty_list(self):
@@ -77,6 +96,11 @@ class TestEmptyCorpusSearch:
         ks = KeywordSearch(mock_indexer)
         result = ks.search("anything")
         assert result == []
+
+
+class TestSemanticFetchSize:
+    def test_semantic_fetch_size_never_drops_below_top_k(self):
+        assert _semantic_fetch_size(100, SearchFilters()) >= 100
 
 
 class TestBM25Parameters:
@@ -212,6 +236,42 @@ class TestSemanticSearchCacheStats:
         assert isinstance(stats["cache_hits"], int)
         assert isinstance(stats["cache_misses"], int)
         assert isinstance(stats["cache_hit_rate"], str)
+
+
+class TestSemanticLexicalBoost:
+    def test_exact_title_gets_larger_boost_than_partial_title(self):
+        query = "What are embeddings?"
+        exact = {
+            "title": "Embeddings",
+            "path": "glossary/embeddings.md",
+            "content": "Embeddings turn text into vectors.",
+        }
+        partial = {
+            "title": "Embedding backend",
+            "path": "config/embedding-backend.md",
+            "content": "EMBEDDING_BACKEND config chooses onnx or torch.",
+        }
+
+        assert _semantic_lexical_boost(query, exact) > _semantic_lexical_boost(
+            query, partial
+        )
+
+    def test_content_overlap_boosts_header_queries(self):
+        query = "HTTP 429 Retry-After burst limit"
+        rate_limit = {
+            "title": "Rate limits",
+            "path": "api/rate-limits.md",
+            "content": "HTTP 429 Retry-After burst sustained request limit.",
+        }
+        retryable = {
+            "title": "Retryable errors",
+            "path": "errors/retryable-errors.md",
+            "content": "Retry HTTP 408, 429, and 503 with backoff.",
+        }
+
+        assert _semantic_lexical_boost(query, rate_limit) > _semantic_lexical_boost(
+            query, retryable
+        )
 
 
 class TestFormatResultsPreviewTruncation:
