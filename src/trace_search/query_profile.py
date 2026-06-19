@@ -56,7 +56,12 @@ def is_keywordish_query(query: str) -> bool:
     if not words:
         return False
 
-    if len(words) <= 4 and words[0] == "what" and len(words) > 1 and words[1] in {"is", "are"}:
+    if (
+        len(words) <= 4
+        and words[0] == "what"
+        and len(words) > 1
+        and words[1] in {"is", "are"}
+    ):
         return True
 
     if any("_" in word or "/" in word or "-" in word for word in words):

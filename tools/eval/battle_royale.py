@@ -50,7 +50,9 @@ def load_suite(path: Path) -> tuple[str, list[BattleKnowledgeBase], tuple[str, .
         if not kb_path.is_dir():
             raise click.ClickException(f"KB path does not exist: {kb_path}")
         if not golden_path.is_file():
-            raise click.ClickException(f"Golden queries file does not exist: {golden_path}")
+            raise click.ClickException(
+                f"Golden queries file does not exist: {golden_path}"
+            )
         kbs.append(
             BattleKnowledgeBase(
                 kb_id=str(item["id"]),
@@ -65,12 +67,16 @@ def load_suite(path: Path) -> tuple[str, list[BattleKnowledgeBase], tuple[str, .
     modes = tuple(str(mode) for mode in raw_modes)
     unknown = sorted(set(modes) - set(SEARCH_MODES))
     if unknown:
-        raise click.ClickException(f"Unknown search modes in {path}: {', '.join(unknown)}")
+        raise click.ClickException(
+            f"Unknown search modes in {path}: {', '.join(unknown)}"
+        )
 
     return str(data.get("description", "")), kbs, modes
 
 
-def _write_mode_report(report, output_dir: Path, kb_id: str, mode: str) -> dict[str, str]:
+def _write_mode_report(
+    report, output_dir: Path, kb_id: str, mode: str
+) -> dict[str, str]:
     output_dir.mkdir(parents=True, exist_ok=True)
     base = f"{kb_id}_{mode}"
     json_path = output_dir / f"{base}.json"
