@@ -1,0 +1,363 @@
+{
+  "label": "baseline",
+  "suite": "tests/fixtures/eval_battle_royale.yaml",
+  "description": "Multi-KB retrieval battle suite for deterministic local evaluation.",
+  "judging": "deterministic expected-path metrics only; no LLM judges",
+  "modes": [
+    "bm25",
+    "semantic",
+    "hybrid",
+    "reranked",
+    "smart"
+  ],
+  "knowledge_bases": [
+    {
+      "id": "retrieval",
+      "name": "Retrieval concepts fixture",
+      "kb_path": "tests/fixtures/eval_kb",
+      "golden_queries": "tests/fixtures/eval_golden_queries.yaml",
+      "include_stress": true
+    },
+    {
+      "id": "support",
+      "name": "Support and operations fixture",
+      "kb_path": "tests/fixtures/battle_kbs/support_kb",
+      "golden_queries": "tests/fixtures/battle_kbs/support_golden_queries.yaml",
+      "include_stress": false
+    },
+    {
+      "id": "api",
+      "name": "API integration fixture",
+      "kb_path": "tests/fixtures/battle_kbs/api_kb",
+      "golden_queries": "tests/fixtures/battle_kbs/api_golden_queries.yaml",
+      "include_stress": false
+    }
+  ],
+  "aggregate_by_mode": {
+    "bm25": {
+      "mode": "bm25",
+      "knowledge_bases": 3,
+      "queries": 35,
+      "hit_at_1": 0.9428571428571428,
+      "hit_at_5": 0.9714285714285714,
+      "mrr": 0.9571428571428572,
+      "p50_ms": 0.15729200094938278,
+      "p95_ms": 0.6579125300049768,
+      "failure_buckets": {
+        "concepts": 1,
+        "features": 1
+      },
+      "smart_fallback_rate": null
+    },
+    "semantic": {
+      "mode": "semantic",
+      "knowledge_bases": 3,
+      "queries": 35,
+      "hit_at_1": 0.8857142857142857,
+      "hit_at_5": 1.0,
+      "mrr": 0.9428571428571428,
+      "p50_ms": 9.417207911610603,
+      "p95_ms": 33.39800443500276,
+      "failure_buckets": {
+        "concepts": 3,
+        "hybrid": 1
+      },
+      "smart_fallback_rate": null
+    },
+    "hybrid": {
+      "mode": "hybrid",
+      "knowledge_bases": 3,
+      "queries": 35,
+      "hit_at_1": 0.8857142857142857,
+      "hit_at_5": 1.0,
+      "mrr": 0.9428571428571428,
+      "p50_ms": 8.811959065496922,
+      "p95_ms": 30.873271380551152,
+      "failure_buckets": {
+        "concepts": 3,
+        "hybrid": 1
+      },
+      "smart_fallback_rate": null
+    },
+    "reranked": {
+      "mode": "reranked",
+      "knowledge_bases": 3,
+      "queries": 35,
+      "hit_at_1": 0.8857142857142857,
+      "hit_at_5": 1.0,
+      "mrr": 0.9428571428571428,
+      "p50_ms": 12.535375077277422,
+      "p95_ms": 47.23058773670336,
+      "failure_buckets": {
+        "concepts": 3,
+        "hybrid": 1
+      },
+      "smart_fallback_rate": null
+    },
+    "smart": {
+      "mode": "smart",
+      "knowledge_bases": 3,
+      "queries": 35,
+      "hit_at_1": 0.8857142857142857,
+      "hit_at_5": 1.0,
+      "mrr": 0.9428571428571428,
+      "p50_ms": 8.70012491941452,
+      "p95_ms": 14.114799839444448,
+      "failure_buckets": {
+        "concepts": 3,
+        "hybrid": 1
+      },
+      "smart_fallback_rate": 0.8285714285714286
+    }
+  },
+  "by_kb": [
+    {
+      "kb_id": "retrieval",
+      "kb_name": "Retrieval concepts fixture",
+      "mode": "bm25",
+      "queries": 19,
+      "hit_at_1": 0.8947368421052632,
+      "hit_at_5": 0.9473684210526315,
+      "mrr": 0.9210526315789473,
+      "p50_ms": 0.1525001134723425,
+      "p95_ms": 0.3436374943703398,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "retrieval",
+      "kb_name": "Retrieval concepts fixture",
+      "mode": "semantic",
+      "queries": 19,
+      "hit_at_1": 0.8421052631578947,
+      "hit_at_5": 1.0,
+      "mrr": 0.9210526315789473,
+      "p50_ms": 8.939999854192138,
+      "p95_ms": 11.061612400226291,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "retrieval",
+      "kb_name": "Retrieval concepts fixture",
+      "mode": "hybrid",
+      "queries": 19,
+      "hit_at_1": 0.8421052631578947,
+      "hit_at_5": 1.0,
+      "mrr": 0.9210526315789473,
+      "p50_ms": 8.232790976762772,
+      "p95_ms": 12.648904067464116,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "retrieval",
+      "kb_name": "Retrieval concepts fixture",
+      "mode": "reranked",
+      "queries": 19,
+      "hit_at_1": 0.8421052631578947,
+      "hit_at_5": 1.0,
+      "mrr": 0.9210526315789473,
+      "p50_ms": 17.944584134966135,
+      "p95_ms": 72.87359647452826,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "retrieval",
+      "kb_name": "Retrieval concepts fixture",
+      "mode": "smart",
+      "queries": 19,
+      "hit_at_1": 0.8421052631578947,
+      "hit_at_5": 1.0,
+      "mrr": 0.9210526315789473,
+      "p50_ms": 9.002875071018934,
+      "p95_ms": 17.167187226004895,
+      "smart_fallback_rate": 0.7894736842105263
+    },
+    {
+      "kb_id": "support",
+      "kb_name": "Support and operations fixture",
+      "mode": "bm25",
+      "queries": 8,
+      "hit_at_1": 1.0,
+      "hit_at_5": 1.0,
+      "mrr": 1.0,
+      "p50_ms": 0.17010397277772427,
+      "p95_ms": 0.3088665078394115,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "support",
+      "kb_name": "Support and operations fixture",
+      "mode": "semantic",
+      "queries": 8,
+      "hit_at_1": 1.0,
+      "hit_at_5": 1.0,
+      "mrr": 1.0,
+      "p50_ms": 9.42920835223049,
+      "p95_ms": 10.092053841799498,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "support",
+      "kb_name": "Support and operations fixture",
+      "mode": "hybrid",
+      "queries": 8,
+      "hit_at_1": 1.0,
+      "hit_at_5": 1.0,
+      "mrr": 1.0,
+      "p50_ms": 8.615083526819944,
+      "p95_ms": 9.942239825613797,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "support",
+      "kb_name": "Support and operations fixture",
+      "mode": "reranked",
+      "queries": 8,
+      "hit_at_1": 1.0,
+      "hit_at_5": 1.0,
+      "mrr": 1.0,
+      "p50_ms": 7.953896070830524,
+      "p95_ms": 11.424331297166646,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "support",
+      "kb_name": "Support and operations fixture",
+      "mode": "smart",
+      "queries": 8,
+      "hit_at_1": 1.0,
+      "hit_at_5": 1.0,
+      "mrr": 1.0,
+      "p50_ms": 8.21016647387296,
+      "p95_ms": 9.34978979639709,
+      "smart_fallback_rate": 0.875
+    },
+    {
+      "kb_id": "api",
+      "kb_name": "API integration fixture",
+      "mode": "bm25",
+      "queries": 8,
+      "hit_at_1": 1.0,
+      "hit_at_5": 1.0,
+      "mrr": 1.0,
+      "p50_ms": 0.3100000321865082,
+      "p95_ms": 1.005352230276912,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "api",
+      "kb_name": "API integration fixture",
+      "mode": "semantic",
+      "queries": 8,
+      "hit_at_1": 0.875,
+      "hit_at_5": 1.0,
+      "mrr": 0.9375,
+      "p50_ms": 27.647583046928048,
+      "p95_ms": 48.95727887051179,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "api",
+      "kb_name": "API integration fixture",
+      "mode": "hybrid",
+      "queries": 8,
+      "hit_at_1": 0.875,
+      "hit_at_5": 1.0,
+      "mrr": 0.9375,
+      "p50_ms": 16.550166998058558,
+      "p95_ms": 31.58165664644912,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "api",
+      "kb_name": "API integration fixture",
+      "mode": "reranked",
+      "queries": 8,
+      "hit_at_1": 0.875,
+      "hit_at_5": 1.0,
+      "mrr": 0.9375,
+      "p50_ms": 7.149541517719626,
+      "p95_ms": 13.778739888221025,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "api",
+      "kb_name": "API integration fixture",
+      "mode": "smart",
+      "queries": 8,
+      "hit_at_1": 0.875,
+      "hit_at_5": 1.0,
+      "mrr": 0.9375,
+      "p50_ms": 7.82614597119391,
+      "p95_ms": 12.011070968583224,
+      "smart_fallback_rate": 0.875
+    }
+  ],
+  "reports": {
+    "retrieval": {
+      "bm25": {
+        "json": "docs/benchmarks/retrieval_battle_royale/baseline/retrieval_bm25.json",
+        "md": "docs/benchmarks/retrieval_battle_royale/baseline/retrieval_bm25.md"
+      },
+      "semantic": {
+        "json": "docs/benchmarks/retrieval_battle_royale/baseline/retrieval_semantic.json",
+        "md": "docs/benchmarks/retrieval_battle_royale/baseline/retrieval_semantic.md"
+      },
+      "hybrid": {
+        "json": "docs/benchmarks/retrieval_battle_royale/baseline/retrieval_hybrid.json",
+        "md": "docs/benchmarks/retrieval_battle_royale/baseline/retrieval_hybrid.md"
+      },
+      "reranked": {
+        "json": "docs/benchmarks/retrieval_battle_royale/baseline/retrieval_reranked.json",
+        "md": "docs/benchmarks/retrieval_battle_royale/baseline/retrieval_reranked.md"
+      },
+      "smart": {
+        "json": "docs/benchmarks/retrieval_battle_royale/baseline/retrieval_smart.json",
+        "md": "docs/benchmarks/retrieval_battle_royale/baseline/retrieval_smart.md"
+      }
+    },
+    "support": {
+      "bm25": {
+        "json": "docs/benchmarks/retrieval_battle_royale/baseline/support_bm25.json",
+        "md": "docs/benchmarks/retrieval_battle_royale/baseline/support_bm25.md"
+      },
+      "semantic": {
+        "json": "docs/benchmarks/retrieval_battle_royale/baseline/support_semantic.json",
+        "md": "docs/benchmarks/retrieval_battle_royale/baseline/support_semantic.md"
+      },
+      "hybrid": {
+        "json": "docs/benchmarks/retrieval_battle_royale/baseline/support_hybrid.json",
+        "md": "docs/benchmarks/retrieval_battle_royale/baseline/support_hybrid.md"
+      },
+      "reranked": {
+        "json": "docs/benchmarks/retrieval_battle_royale/baseline/support_reranked.json",
+        "md": "docs/benchmarks/retrieval_battle_royale/baseline/support_reranked.md"
+      },
+      "smart": {
+        "json": "docs/benchmarks/retrieval_battle_royale/baseline/support_smart.json",
+        "md": "docs/benchmarks/retrieval_battle_royale/baseline/support_smart.md"
+      }
+    },
+    "api": {
+      "bm25": {
+        "json": "docs/benchmarks/retrieval_battle_royale/baseline/api_bm25.json",
+        "md": "docs/benchmarks/retrieval_battle_royale/baseline/api_bm25.md"
+      },
+      "semantic": {
+        "json": "docs/benchmarks/retrieval_battle_royale/baseline/api_semantic.json",
+        "md": "docs/benchmarks/retrieval_battle_royale/baseline/api_semantic.md"
+      },
+      "hybrid": {
+        "json": "docs/benchmarks/retrieval_battle_royale/baseline/api_hybrid.json",
+        "md": "docs/benchmarks/retrieval_battle_royale/baseline/api_hybrid.md"
+      },
+      "reranked": {
+        "json": "docs/benchmarks/retrieval_battle_royale/baseline/api_reranked.json",
+        "md": "docs/benchmarks/retrieval_battle_royale/baseline/api_reranked.md"
+      },
+      "smart": {
+        "json": "docs/benchmarks/retrieval_battle_royale/baseline/api_smart.json",
+        "md": "docs/benchmarks/retrieval_battle_royale/baseline/api_smart.md"
+      }
+    }
+  }
+}

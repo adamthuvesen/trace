@@ -99,9 +99,13 @@ def resolve_eval_scope(
 )
 @click.option(
     "--search",
-    type=click.Choice(["semantic", "bm25", "hybrid", "smart"]),
+    type=click.Choice(["semantic", "bm25", "hybrid", "reranked", "smart"]),
     default="hybrid",
-    help="Search mode to evaluate (default: hybrid; smart matches MCP default)",
+    help=(
+        "Search mode to evaluate "
+        "(default: hybrid; reranked forces cross-encoder reranking; "
+        "smart matches MCP default)"
+    ),
 )
 @click.option(
     "--category",

@@ -1,0 +1,45 @@
+version: "1.0"
+description: API KB battle golden set for identifier, paraphrase, hybrid, and reranking behavior.
+queries:
+  - id: api-lex-idempotency
+    query: Idempotency-Key same payload 24 hours
+    category: lexical
+    expected_path: api/idempotency-keys.md
+    expected_keywords: [Idempotency-Key, payload, 24 hours]
+    quick_set: true
+  - id: api-lex-page-token
+    query: next_page_token page_token
+    category: lexical
+    expected_path: guides/pagination.md
+    expected_keywords: [next_page_token, page_token]
+    quick_set: true
+  - id: api-para-try-again
+    query: the server asks the client to slow down and try again later
+    category: paraphrase
+    expected_path: errors/retryable-errors.md
+    expected_keywords: [retry, slow down, backoff]
+  - id: api-para-upload-rows
+    query: upload a spreadsheet and get row level validation errors
+    category: paraphrase
+    expected_path: api/batch-imports.md
+    expected_keywords: [CSV, row, validation]
+  - id: api-hybrid-429
+    query: HTTP 429 Retry-After burst limit
+    category: hybrid
+    expected_path: api/rate-limits.md
+    expected_keywords: [429, Retry-After, burst]
+  - id: api-hybrid-filter-before-page
+    query: status active filter before pagination
+    category: hybrid
+    expected_path: guides/filtering.md
+    expected_keywords: [status=active, pagination]
+  - id: api-rerank-webhook-signature
+    query: verify an event notification came from Trace using its signature
+    category: rerank
+    expected_path: api/webhooks.md
+    expected_keywords: [webhook, signature, event]
+  - id: api-ambiguous-auth-not-retry
+    query: bearer token is expired should the client retry the request
+    category: ambiguous
+    expected_path: errors/authentication.md
+    expected_keywords: [bearer token, expired, retrying]
