@@ -197,6 +197,11 @@ KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_qu
   uv run python -m tools.eval.cli --full --search smart --output-dir docs/benchmarks/
 ```
 
+For the multi-KB retrieval battle suite, see
+[`docs/retrieval-modes.md`](docs/retrieval-modes.md). It compares BM25,
+semantic, hybrid, reranked, and smart retrieval across committed no-secret
+fixtures and documents when each mode wins.
+
 ## Development
 
 ```bash

@@ -32,7 +32,9 @@ class GoldenQuery:
             query=data["query"],
             category=data["category"],
             expected_path=data["expected_path"],
-            expected_keywords=data.get("expected_keywords", []),
+            expected_keywords=[
+                str(value) for value in data.get("expected_keywords", [])
+            ],
             file_type=data.get("file_type", ".md"),
             alternate_paths=data.get("alternate_paths", []),
             quick_set=data.get("quick_set", False),
@@ -96,6 +98,7 @@ class QueryResult:
     path_hit_within_max_rank: bool = False
     smart_strategy: str | None = None
     smart_fallback_used: bool | None = None
+    category: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -115,6 +118,7 @@ class QueryResult:
             "path_hit_within_max_rank": self.path_hit_within_max_rank,
             "smart_strategy": self.smart_strategy,
             "smart_fallback_used": self.smart_fallback_used,
+            "category": self.category,
         }
 
 
@@ -389,6 +393,9 @@ class EvaluationReport:
                     path_first_hit_rank=r.get("path_first_hit_rank"),
                     path_reciprocal_rank=r.get("path_reciprocal_rank", 0.0),
                     path_hit_within_max_rank=r.get("path_hit_within_max_rank", False),
+                    smart_strategy=r.get("smart_strategy"),
+                    smart_fallback_used=r.get("smart_fallback_used"),
+                    category=r.get("category", ""),
                 )
             )
 

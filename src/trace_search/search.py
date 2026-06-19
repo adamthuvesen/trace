@@ -41,6 +41,29 @@ logger = logging.getLogger(__name__)
 # are active. Keeps per-query latency bounded even on very large corpora.
 _FILTER_OVERSAMPLE = 5
 _MAX_OVERSAMPLE_FETCH = 500
+_SEMANTIC_OVERSAMPLE = 3
+_SEMANTIC_MAX_CANDIDATES = 50
+_SEMANTIC_STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "are",
+        "for",
+        "how",
+        "in",
+        "is",
+        "of",
+        "the",
+        "to",
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "why",
+    }
+)
 
 
 def _clamp_top_k(top_k: int, default: int = 10, max_val: int = 100) -> int:
@@ -224,6 +247,62 @@ def _candidate_fetch_size(top_k: int, filters: SearchFilters) -> int:
     return min(top_k * _FILTER_OVERSAMPLE, _MAX_OVERSAMPLE_FETCH)
 
 
+def _semantic_fetch_size(top_k: int, filters: SearchFilters) -> int:
+    """Fetch enough vector candidates for local lexical tie-breaking."""
+    semantic_top_k = max(
+        top_k,
+        min(top_k * _SEMANTIC_OVERSAMPLE, _SEMANTIC_MAX_CANDIDATES),
+    )
+    return _candidate_fetch_size(semantic_top_k, filters)
+
+
+def _normalize_rank_term(term: str) -> str:
+    term = term.lower()
+    return term[:-1] if len(term) > 3 and term.endswith("s") else term
+
+
+def _rank_terms(text: str, *, remove_stopwords: bool = False) -> set[str]:
+    terms = {
+        _normalize_rank_term(term)
+        for term in re.findall(r"[A-Za-z0-9_/-]+", text)
+        if len(term) > 1
+    }
+    if remove_stopwords:
+        terms -= _SEMANTIC_STOPWORDS
+    return terms
+
+
+def _semantic_lexical_boost(query: str, hit: dict[str, Any]) -> float:
+    """Small deterministic boost for exact lexical anchors in semantic results."""
+    query_terms = _rank_terms(query, remove_stopwords=True)
+    if not query_terms:
+        return 0.0
+
+    title_terms = _rank_terms(str(hit.get("title", "")))
+    path_terms = _rank_terms(str(hit.get("path", "")))
+    content_terms = _rank_terms(str(hit.get("content", "")))
+
+    boost = 0.0
+    if title_terms == query_terms:
+        boost += 0.20
+    elif query_terms and query_terms.issubset(title_terms):
+        boost += 0.08
+    elif title_terms:
+        boost += 0.04 * (len(query_terms & title_terms) / len(query_terms))
+
+    if path_terms:
+        boost += 0.04 * (len(query_terms & path_terms) / len(query_terms))
+
+    if content_terms:
+        content_overlap = len(query_terms & content_terms) / len(query_terms)
+        if len(query_terms) == 1:
+            boost += min(0.02, 0.02 * content_overlap)
+        else:
+            boost += min(0.18, 0.22 * content_overlap)
+
+    return min(boost, 0.30)
+
+
 class ChromaQueryCollection(Protocol):
     """Minimal Chroma collection surface used by semantic search."""
 
@@ -307,7 +386,7 @@ class SemanticSearch:
         filters = filters or SearchFilters()
 
         query_embedding = self._get_query_embedding(query)
-        n_results = _candidate_fetch_size(top_k, filters)
+        n_results = _semantic_fetch_size(top_k, filters)
         where = filters_to_chroma_where(filters)
 
         query_kwargs: dict[str, Any] = {
@@ -334,7 +413,15 @@ class SemanticSearch:
             )
 
         hits = apply_filters_to_hits(hits_to_dicts(built), filters)
-        return hits[:top_k]
+        ranked_hits: list[tuple[float, dict[str, Any]]] = []
+        for hit in hits:
+            boost = _semantic_lexical_boost(query, hit)
+            if boost:
+                hit["semantic_score"] = hit["score"]
+                hit["lexical_boost"] = boost
+            ranked_hits.append((float(hit.get("score", 0.0)) + boost, hit))
+        ranked_hits.sort(key=lambda item: item[0], reverse=True)
+        return [hit for _, hit in ranked_hits[:top_k]]
 
 
 class KeywordSearch:

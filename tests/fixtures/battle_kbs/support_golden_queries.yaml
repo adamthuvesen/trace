@@ -1,0 +1,45 @@
+version: "1.0"
+description: Support KB battle golden set for lexical, paraphrase, hybrid, and reranking behavior.
+queries:
+  - id: support-lex-refund-window
+    query: annual refund 30 day prorated credit
+    category: lexical
+    expected_path: billing/refund-policy.md
+    expected_keywords: [annual, prorated, credit]
+    quick_set: true
+  - id: support-lex-pager-window
+    query: PAGER_HANDOFF_WINDOW overlap
+    category: lexical
+    expected_path: ops/pager-handoff.md
+    expected_keywords: [PAGER_HANDOFF_WINDOW, overlap]
+    quick_set: true
+  - id: support-para-checkout-down
+    query: customers cannot finish paying after pressing the purchase button
+    category: paraphrase
+    expected_path: ops/checkout-sev2.md
+    expected_keywords: [checkout, payment, incident]
+  - id: support-para-seat-overage
+    query: what happens when a workspace invites more people than it bought
+    category: paraphrase
+    expected_path: product/seat-limits.md
+    expected_keywords: [seats, limit, pending]
+  - id: support-hybrid-tax-credit
+    query: tax mistake credit memo original invoice
+    category: hybrid
+    expected_path: billing/invoice-adjustments.md
+    expected_keywords: [tax, credit memo, invoice]
+  - id: support-hybrid-sso-cert
+    query: identity provider metadata signing certificate rotation
+    category: hybrid
+    expected_path: product/sso-rollout.md
+    expected_keywords: [identity provider, certificate, rotation]
+  - id: support-rerank-policy-not-template
+    query: which policy tells agents when annual refunds are allowed
+    category: rerank
+    expected_path: billing/refund-policy.md
+    expected_keywords: [policy, annual, refunds]
+  - id: support-ambiguous-checkout-not-pager
+    query: incident runbook for payment failures during checkout
+    category: ambiguous
+    expected_path: ops/checkout-sev2.md
+    expected_keywords: [checkout, incident, payment]

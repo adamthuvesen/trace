@@ -73,6 +73,7 @@ def load_golden_queries(
     file_types: list[str] | None = None,
     stress_only: bool = False,
     include_stress: bool = False,
+    golden_queries_path: Path | None = None,
 ) -> list[GoldenQuery]:
     """Load golden queries from YAML file with optional filtering.
 
@@ -80,7 +81,11 @@ def load_golden_queries(
     ``--full`` counts stay stable. Use ``--include-stress`` to add them, or
     ``--stress`` to run only the stress subset.
     """
-    path = get_golden_queries_path()
+    path = (
+        golden_queries_path.expanduser().resolve()
+        if golden_queries_path
+        else get_golden_queries_path()
+    )
     if not path.is_file():
         raise ValueError(_missing_golden_queries_message(path))
     try:
@@ -136,6 +141,8 @@ def create_searcher(
     if search_mode == "bm25":
         return KeywordSearch(indexer)
     if search_mode == "hybrid":
+        return HybridSearch(indexer, indexer.backend)
+    if search_mode == "reranked":
         return HybridSearch(indexer, indexer.backend)
     if search_mode == "smart":
         return SmartSearch(indexer, indexer.backend)
@@ -197,7 +204,7 @@ def evaluate_query(
     Args:
         query: The golden query to evaluate.
         searcher: The search engine to use.
-        search_mode: The search mode (semantic, bm25, hybrid).
+        search_mode: The search mode (semantic, bm25, hybrid, reranked, smart).
         top_k: Number of results to retrieve.
         min_keywords: Minimum keywords to count as a hit (unless overridden per query
             or by ``strict_keywords``).
@@ -222,6 +229,8 @@ def evaluate_query(
         smart_fallback_used = smart_result.route.fallback_used
     elif search_mode == "bm25":
         hits = searcher.search(query.query, max_results=top_k)
+    elif search_mode == "reranked":
+        hits = searcher.search(query.query, top_k=top_k, rerank=True)
     else:
         hits = searcher.search(query.query, top_k=top_k)
     latency_ms = (time.perf_counter() - start) * 1000
@@ -244,6 +253,7 @@ def evaluate_query(
             path_hit_within_max_rank=False,
             smart_strategy=smart_strategy,
             smart_fallback_used=smart_fallback_used,
+            category=query.category,
         )
 
     path_first_hit_rank: int | None = None
@@ -291,6 +301,7 @@ def evaluate_query(
         path_hit_within_max_rank=path_hit_within_max_rank,
         smart_strategy=smart_strategy,
         smart_fallback_used=smart_fallback_used,
+        category=query.category,
     )
 
 
@@ -371,6 +382,7 @@ def run_evaluation(
     include_stress: bool = False,
     strict_keywords: bool = False,
     strict_keywords_top1: bool = False,
+    golden_queries_path: Path | None = None,
 ) -> EvaluationReport:
     """Run the full evaluation and return a report."""
     from trace_search.config import settings
@@ -387,6 +399,7 @@ def run_evaluation(
         file_types=file_types,
         stress_only=stress_only,
         include_stress=include_stress,
+        golden_queries_path=golden_queries_path,
     )
 
     if not queries:
