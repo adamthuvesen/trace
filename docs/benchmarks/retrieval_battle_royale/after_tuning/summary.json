@@ -41,8 +41,8 @@
       "hit_at_1": 0.9428571428571428,
       "hit_at_5": 0.9714285714285714,
       "mrr": 0.9571428571428572,
-      "p50_ms": 0.1563748810440302,
-      "p95_ms": 0.4392080707475541,
+      "p50_ms": 0.14866702258586884,
+      "p95_ms": 0.3813335672020911,
       "failure_buckets": {
         "concepts": 1,
         "features": 1
@@ -56,8 +56,8 @@
       "hit_at_1": 0.9428571428571428,
       "hit_at_5": 1.0,
       "mrr": 0.9714285714285714,
-      "p50_ms": 11.468958109617233,
-      "p95_ms": 30.738387373276026,
+      "p50_ms": 34.589249873533845,
+      "p95_ms": 115.26696251239626,
       "failure_buckets": {
         "concepts": 1,
         "hybrid": 1
@@ -71,8 +71,8 @@
       "hit_at_1": 1.0,
       "hit_at_5": 1.0,
       "mrr": 1.0,
-      "p50_ms": 9.537915932014585,
-      "p95_ms": 31.594092096202054,
+      "p50_ms": 33.118374878540635,
+      "p95_ms": 100.71294635999931,
       "failure_buckets": {},
       "smart_fallback_rate": null
     },
@@ -83,8 +83,8 @@
       "hit_at_1": 1.0,
       "hit_at_5": 1.0,
       "mrr": 1.0,
-      "p50_ms": 9.57054179161787,
-      "p95_ms": 44.28873325232415,
+      "p50_ms": 29.943000059574842,
+      "p95_ms": 131.71877034474153,
       "failure_buckets": {},
       "smart_fallback_rate": null
     },
@@ -95,8 +95,8 @@
       "hit_at_1": 1.0,
       "hit_at_5": 1.0,
       "mrr": 1.0,
-      "p50_ms": 7.7740829437971115,
-      "p95_ms": 26.179224974475737,
+      "p50_ms": 19.200917100533843,
+      "p95_ms": 110.22019991651166,
       "failure_buckets": {},
       "smart_fallback_rate": 0.5142857142857142
     }
@@ -110,8 +110,8 @@
       "hit_at_1": 0.8947368421052632,
       "hit_at_5": 0.9473684210526315,
       "mrr": 0.9210526315789473,
-      "p50_ms": 0.15624985098838806,
-      "p95_ms": 0.48758317716419697,
+      "p50_ms": 0.14766701497137547,
+      "p95_ms": 0.35235793329775217,
       "smart_fallback_rate": null
     },
     {
@@ -122,8 +122,8 @@
       "hit_at_1": 0.9473684210526315,
       "hit_at_5": 1.0,
       "mrr": 0.9736842105263158,
-      "p50_ms": 11.77191617898643,
-      "p95_ms": 37.582232779823244,
+      "p50_ms": 28.886874904856086,
+      "p95_ms": 84.04402458108953,
       "smart_fallback_rate": null
     },
     {
@@ -134,8 +134,8 @@
       "hit_at_1": 1.0,
       "hit_at_5": 1.0,
       "mrr": 1.0,
-      "p50_ms": 12.622583890333772,
-      "p95_ms": 26.79239942226559,
+      "p50_ms": 33.26745796948671,
+      "p95_ms": 145.89752953033894,
       "smart_fallback_rate": null
     },
     {
@@ -146,8 +146,8 @@
       "hit_at_1": 1.0,
       "hit_at_5": 1.0,
       "mrr": 1.0,
-      "p50_ms": 9.311208967119455,
-      "p95_ms": 13.757162704132496,
+      "p50_ms": 33.03324989974499,
+      "p95_ms": 162.48419932089746,
       "smart_fallback_rate": null
     },
     {
@@ -158,8 +158,8 @@
       "hit_at_1": 1.0,
       "hit_at_5": 1.0,
       "mrr": 1.0,
-      "p50_ms": 7.829540874809027,
-      "p95_ms": 10.421946411952362,
+      "p50_ms": 25.1779998652637,
+      "p95_ms": 96.56937506515531,
       "smart_fallback_rate": 0.5263157894736842
     },
     {
@@ -170,8 +170,8 @@
       "hit_at_1": 1.0,
       "hit_at_5": 1.0,
       "mrr": 1.0,
-      "p50_ms": 0.17060455866158009,
-      "p95_ms": 0.37641872186213726,
+      "p50_ms": 0.15806197188794613,
+      "p95_ms": 0.3303057048469781,
       "smart_fallback_rate": null
     },
     {
@@ -182,8 +182,8 @@
       "hit_at_1": 1.0,
       "hit_at_5": 1.0,
       "mrr": 1.0,
-      "p50_ms": 9.245458408258855,
-      "p95_ms": 15.096603950951248,
+      "p50_ms": 36.25585441477597,
+      "p95_ms": 127.32380633242423,
       "smart_fallback_rate": null
     },
     {
@@ -194,8 +194,8 @@
       "hit_at_1": 1.0,
       "hit_at_5": 1.0,
       "mrr": 1.0,
-      "p50_ms": 22.999875131063163,
-      "p95_ms": 40.84316293010488,
+      "p50_ms": 34.871270414441824,
+      "p95_ms": 67.76409612502901,
       "smart_fallback_rate": null
     },
     {
@@ -206,8 +206,8 @@
       "hit_at_1": 1.0,
       "hit_at_5": 1.0,
       "mrr": 1.0,
-      "p50_ms": 26.85485454276204,
-      "p95_ms": 65.59967728098853,
+      "p50_ms": 26.186145492829382,
+      "p95_ms": 44.375960202887654,
       "smart_fallback_rate": null
     },
     {
@@ -218,8 +218,8 @@
       "hit_at_1": 1.0,
       "hit_at_5": 1.0,
       "mrr": 1.0,
-      "p50_ms": 8.847020915709436,
-      "p95_ms": 64.24216635059564,
+      "p50_ms": 9.784000576473773,
+      "p95_ms": 42.697891034185886,
       "smart_fallback_rate": 0.5
     },
     {
@@ -230,8 +230,8 @@
       "hit_at_1": 1.0,
       "hit_at_5": 1.0,
       "mrr": 1.0,
-      "p50_ms": 0.14910451136529446,
-      "p95_ms": 0.25892287958413357,
+      "p50_ms": 0.15225051902234554,
+      "p95_ms": 0.297475152183324,
       "smart_fallback_rate": null
     },
     {
@@ -242,8 +242,8 @@
       "hit_at_1": 0.875,
       "hit_at_5": 1.0,
       "mrr": 0.9375,
-      "p50_ms": 11.065416387282312,
-      "p95_ms": 18.493870459496975,
+      "p50_ms": 46.18658346589655,
+      "p95_ms": 110.01895407680422,
       "smart_fallback_rate": null
     },
     {
@@ -254,8 +254,8 @@
       "hit_at_1": 1.0,
       "hit_at_5": 1.0,
       "mrr": 1.0,
-      "p50_ms": 7.770999916829169,
-      "p95_ms": 8.935253554955125,
+      "p50_ms": 23.771437583491206,
+      "p95_ms": 40.99281270755455,
       "smart_fallback_rate": null
     },
     {
@@ -266,8 +266,8 @@
       "hit_at_1": 1.0,
       "hit_at_5": 1.0,
       "mrr": 1.0,
-      "p50_ms": 8.4156459197402,
-      "p95_ms": 10.134308424312621,
+      "p50_ms": 37.88218752015382,
+      "p95_ms": 94.13512487662953,
       "smart_fallback_rate": null
     },
     {
@@ -278,77 +278,9 @@
       "hit_at_1": 1.0,
       "hit_at_5": 1.0,
       "mrr": 1.0,
-      "p50_ms": 4.054437507875264,
-      "p95_ms": 13.267289940267798,
+      "p50_ms": 34.890937618911266,
+      "p95_ms": 143.79134379560128,
       "smart_fallback_rate": 0.5
     }
-  ],
-  "reports": {
-    "retrieval": {
-      "bm25": {
-        "json": "docs/benchmarks/retrieval_battle_royale/after_tuning/retrieval_bm25.json",
-        "md": "docs/benchmarks/retrieval_battle_royale/after_tuning/retrieval_bm25.md"
-      },
-      "semantic": {
-        "json": "docs/benchmarks/retrieval_battle_royale/after_tuning/retrieval_semantic.json",
-        "md": "docs/benchmarks/retrieval_battle_royale/after_tuning/retrieval_semantic.md"
-      },
-      "hybrid": {
-        "json": "docs/benchmarks/retrieval_battle_royale/after_tuning/retrieval_hybrid.json",
-        "md": "docs/benchmarks/retrieval_battle_royale/after_tuning/retrieval_hybrid.md"
-      },
-      "reranked": {
-        "json": "docs/benchmarks/retrieval_battle_royale/after_tuning/retrieval_reranked.json",
-        "md": "docs/benchmarks/retrieval_battle_royale/after_tuning/retrieval_reranked.md"
-      },
-      "smart": {
-        "json": "docs/benchmarks/retrieval_battle_royale/after_tuning/retrieval_smart.json",
-        "md": "docs/benchmarks/retrieval_battle_royale/after_tuning/retrieval_smart.md"
-      }
-    },
-    "support": {
-      "bm25": {
-        "json": "docs/benchmarks/retrieval_battle_royale/after_tuning/support_bm25.json",
-        "md": "docs/benchmarks/retrieval_battle_royale/after_tuning/support_bm25.md"
-      },
-      "semantic": {
-        "json": "docs/benchmarks/retrieval_battle_royale/after_tuning/support_semantic.json",
-        "md": "docs/benchmarks/retrieval_battle_royale/after_tuning/support_semantic.md"
-      },
-      "hybrid": {
-        "json": "docs/benchmarks/retrieval_battle_royale/after_tuning/support_hybrid.json",
-        "md": "docs/benchmarks/retrieval_battle_royale/after_tuning/support_hybrid.md"
-      },
-      "reranked": {
-        "json": "docs/benchmarks/retrieval_battle_royale/after_tuning/support_reranked.json",
-        "md": "docs/benchmarks/retrieval_battle_royale/after_tuning/support_reranked.md"
-      },
-      "smart": {
-        "json": "docs/benchmarks/retrieval_battle_royale/after_tuning/support_smart.json",
-        "md": "docs/benchmarks/retrieval_battle_royale/after_tuning/support_smart.md"
-      }
-    },
-    "api": {
-      "bm25": {
-        "json": "docs/benchmarks/retrieval_battle_royale/after_tuning/api_bm25.json",
-        "md": "docs/benchmarks/retrieval_battle_royale/after_tuning/api_bm25.md"
-      },
-      "semantic": {
-        "json": "docs/benchmarks/retrieval_battle_royale/after_tuning/api_semantic.json",
-        "md": "docs/benchmarks/retrieval_battle_royale/after_tuning/api_semantic.md"
-      },
-      "hybrid": {
-        "json": "docs/benchmarks/retrieval_battle_royale/after_tuning/api_hybrid.json",
-        "md": "docs/benchmarks/retrieval_battle_royale/after_tuning/api_hybrid.md"
-      },
-      "reranked": {
-        "json": "docs/benchmarks/retrieval_battle_royale/after_tuning/api_reranked.json",
-        "md": "docs/benchmarks/retrieval_battle_royale/after_tuning/api_reranked.md"
-      },
-      "smart": {
-        "json": "docs/benchmarks/retrieval_battle_royale/after_tuning/api_smart.json",
-        "md": "docs/benchmarks/retrieval_battle_royale/after_tuning/api_smart.md"
-      }
-    }
-  }
+  ]
 }

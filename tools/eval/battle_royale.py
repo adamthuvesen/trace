@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import statistics
 import tempfile
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -178,7 +178,7 @@ def _summary_json(
                 }
             )
 
-    return {
+    summary: dict[str, object] = {
         "label": label,
         "suite": str(suite_path),
         "description": description,
@@ -196,8 +196,10 @@ def _summary_json(
         ],
         "aggregate_by_mode": by_mode,
         "by_kb": by_kb,
-        "reports": saved_reports,
     }
+    if saved_reports:
+        summary["reports"] = saved_reports
+    return summary
 
 
 def _pct(value: float) -> str:
@@ -290,7 +292,7 @@ def _summary_markdown(summary: dict[str, object]) -> str:
     type=click.Path(path_type=Path),
     default=DEFAULT_OUTPUT_DIR,
     show_default=True,
-    help="Directory for summary and per-mode reports.",
+    help="Directory for summary reports.",
 )
 @click.option(
     "--label",
@@ -306,12 +308,18 @@ def _summary_markdown(summary: dict[str, object]) -> str:
     help="Limit to one or more modes. Defaults to suite modes.",
 )
 @click.option("--top-k", default=5, show_default=True, help="Results per query.")
+@click.option(
+    "--detail-reports",
+    is_flag=True,
+    help="Also write per-KB/per-mode JSON and Markdown reports.",
+)
 def main(
     suite: Path,
     output_dir: Path,
     label: str,
     requested_modes: tuple[str, ...],
     top_k: int,
+    detail_reports: bool,
 ) -> None:
     """Run the committed multi-KB retrieval battle suite."""
     description, kbs, suite_modes = load_suite(suite)
@@ -324,7 +332,7 @@ def main(
     from trace_search.server_app import warm_embedding_model
 
     reports_by_kb_mode = {}
-    saved_reports: dict[str, dict[str, dict[str, str]]] = defaultdict(dict)
+    saved_reports: dict[str, dict[str, dict[str, str]]] = {}
 
     with tempfile.TemporaryDirectory(prefix="trace-battle-") as tmp:
         tmp_root = Path(tmp)
@@ -354,9 +362,10 @@ def main(
                     golden_queries_path=kb.golden_queries_path,
                 )
                 reports_by_kb_mode[(kb.kb_id, mode)] = report
-                saved_reports[kb.kb_id][mode] = _write_mode_report(
-                    report, run_dir, kb.kb_id, mode
-                )
+                if detail_reports:
+                    saved_reports.setdefault(kb.kb_id, {})[mode] = _write_mode_report(
+                        report, run_dir, kb.kb_id, mode
+                    )
 
     summary = _summary_json(
         suite_path=suite,
