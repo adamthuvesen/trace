@@ -21,6 +21,35 @@ Python 3.11+ and `uv`.
 uv sync
 ```
 
+## No-secret demo
+
+This uses the committed fixture in `tests/fixtures/eval_kb`.
+
+```console
+$ KB_PATH=tests/fixtures/eval_kb TOKENIZERS_PARALLELISM=false uv run trace search "BM25 ranking" --top-k 2
+Found 2 results
+
+## Strategy
+- **Selected:** keyword
+- **Fallback used:** no
+- **Reason:** BM25 returned strong exact-match results
+
+## Context
+
+### 1. BM25
+- **Path:** `glossary/bm25.md`
+- **Folder:** glossary
+- **Source:** keyword
+
+**Snippet 1:** BM25
+- **Match evidence:** title matches: bm25; path matches: bm25; breadcrumb matches: bm25
+- **Matched terms:** `bm25`, `ranking`
+- **Best quote:** Document: BM25 Folder: glossary # BM25 BM25 is a classic **keyword** ranking function for lexical retrieval...
+
+## Suggested Follow-ups
+- `get_document(path="glossary/bm25.md")`
+```
+
 ## CLI
 
 `uv run trace ...` from the repo, or `trace ...` once installed.
