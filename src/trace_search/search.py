@@ -673,6 +673,8 @@ class SmartSearch:
 
         if best_score <= 0:
             return False, "BM25 best score was not positive"
+        if best_score < BM25_WEAK_BEST_SCORE:
+            return False, "BM25 best score was very low"
         runner_up = float(hits[1].get("score", 0) or 0) if len(hits) > 1 else 0.0
         if len(hits) > 1 and len(distinct_docs) == 1 and conceptual:
             return False, "BM25 results were duplicate-heavy for a conceptual query"
@@ -684,8 +686,6 @@ class SmartSearch:
             return True, "conceptual query had a decisive BM25 top hit"
         if conceptual and strong_hits < requested:
             return False, "conceptual query had too few strong BM25 hits"
-        if best_score < BM25_WEAK_BEST_SCORE:
-            return False, "BM25 best score was very low"
         if conceptual and strong_hits < top_k:
             return False, "conceptual query lacks enough strong BM25 hits"
         if (
