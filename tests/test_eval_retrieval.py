@@ -60,9 +60,10 @@ def test_run_evaluation_reports_reciprocal_rank(
         stress_only=True,
         include_stress=False,
     )
-    assert stress_report.total_queries == 2
+    assert stress_report.total_queries == 12
     sb = {r.query_id: r for r in stress_report.results}
     assert isinstance(sb["stress-bm25"].path_hit_within_max_rank, bool)
+    assert "stress-rrf-not-linear" in sb
     get_settings.cache_clear()
 
 

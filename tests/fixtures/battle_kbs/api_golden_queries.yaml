@@ -43,3 +43,61 @@ queries:
     category: ambiguous
     expected_path: errors/authentication.md
     expected_keywords: [bearer token, expired, retrying]
+  - id: api-stress-auth-not-rate
+    query: This is not a 429 throttle; the bearer token is expired.
+    category: contrast
+    expected_path: errors/authentication.md
+    expected_keywords: [bearer token, expired, 401]
+    difficulty: hard
+    stress_set: true
+  - id: api-stress-rate-not-auth
+    query: This is not an expired token; the API returned 429 with Retry-After.
+    category: contrast
+    expected_path: api/rate-limits.md
+    expected_keywords: [429, Retry-After, limit]
+    difficulty: hard
+    stress_set: true
+  - id: api-stress-webhook-not-auth
+    query: This is not bearer-token auth; verify the event callback signature header.
+    category: contrast
+    expected_path: api/webhooks.md
+    expected_keywords: [webhook, signature, header]
+    difficulty: hard
+    stress_set: true
+  - id: api-stress-idempotency-not-auth
+    query: This is not an authentication secret; which header makes retried creates safe after a timeout?
+    category: contrast
+    expected_path: api/idempotency-keys.md
+    expected_keywords: [Idempotency-Key, retry, timeout]
+    difficulty: hard
+    stress_set: true
+  - id: api-stress-retryable-not-validation
+    query: This is not a malformed payload; the server returned 503 and we should back off with jitter.
+    category: contrast
+    expected_path: errors/retryable-errors.md
+    expected_keywords: [503, backoff, jitter]
+    difficulty: hard
+    stress_set: true
+  - id: api-stress-validation-not-retryable
+    query: A CSV row has bad field values; where are row-level validation errors described?
+    category: contrast
+    expected_path: api/batch-imports.md
+    expected_keywords: [CSV, row, validation]
+    difficulty: hard
+    stress_set: true
+  - id: api-stress-filtering-not-pagination
+    query: I need to narrow list records before pagination, not continue with the next cursor.
+    category: contrast
+    expected_path: guides/filtering.md
+    expected_keywords: [filters, pagination, predicate]
+    difficulty: hard
+    stress_set: true
+    max_rank: 2
+  - id: api-stress-pagination-not-filtering
+    query: I already have a next_page_token and need the next list page, not a status predicate.
+    category: contrast
+    expected_path: guides/pagination.md
+    expected_keywords: [next_page_token, page_token, cursor]
+    difficulty: hard
+    stress_set: true
+    max_rank: 2

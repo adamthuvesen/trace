@@ -1,0 +1,24 @@
+version: "1.0"
+description: Larger contrast-heavy multi-KB retrieval challenge suite for no-secret local evaluation.
+modes:
+  - bm25
+  - semantic
+  - hybrid
+  - reranked
+  - smart
+knowledge_bases:
+  - id: retrieval
+    name: Retrieval concepts fixture with contrast stress queries
+    kb_path: eval_kb
+    golden_queries: eval_golden_queries.yaml
+    include_stress: true
+  - id: support
+    name: Support and operations fixture with contrast stress queries
+    kb_path: battle_kbs/support_kb
+    golden_queries: battle_kbs/support_golden_queries.yaml
+    include_stress: true
+  - id: api
+    name: API integration fixture with contrast stress queries
+    kb_path: battle_kbs/api_kb
+    golden_queries: battle_kbs/api_golden_queries.yaml
+    include_stress: true

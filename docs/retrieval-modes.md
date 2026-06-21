@@ -43,6 +43,37 @@ Full reports:
 No LLM judge is used. The suite uses deterministic expected-path metrics:
 Hit@1, Hit@5, MRR, latency, and top-1 failure buckets.
 
+## Challenge Suite
+
+The default battle suite is intentionally small enough for smoke testing and is
+now saturated for `smart` retrieval quality. Use the larger contrast-heavy suite
+when tuning retrieval ranking:
+
+```bash
+TOKENIZERS_PARALLELISM=false uv run python -m tools.eval.battle_royale \
+  --suite tests/fixtures/eval_battle_royale_challenge.yaml \
+  --label challenge_current
+```
+
+Current challenge aggregate:
+
+| Mode | Queries | Hit@1 | Hit@5 | MRR | p95 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `bm25` | 61 | 80.3% | 98.4% | 0.876 | 0.5ms |
+| `semantic` | 61 | 82.0% | 100.0% | 0.903 | 20.3ms |
+| `hybrid` | 61 | 86.9% | 100.0% | 0.929 | 39.2ms |
+| `reranked` | 61 | 86.9% | 100.0% | 0.929 | 20.4ms |
+| `smart` | 61 | 86.9% | 100.0% | 0.928 | 15.8ms |
+
+Full challenge summary:
+
+- Current: `docs/benchmarks/retrieval_battle_royale/challenge_current/summary.md`
+
+The challenge suite adds stress queries for contrast and negation-heavy asks,
+such as policy-versus-template, auth-versus-rate-limit, and RRF-versus-linear
+combination. It is still a no-secret fixture suite, so treat numbers as relative
+local signals rather than broad corpus claims.
+
 ## Defaults
 
 No environment-variable default changed. `smart` remains the default user-facing

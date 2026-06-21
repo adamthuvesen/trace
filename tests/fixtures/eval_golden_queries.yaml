@@ -192,3 +192,136 @@ queries:
   difficulty: hard
   stress_set: true
   max_rank: 3
+- id: stress-rrf-not-linear
+  query: >-
+    I do not want score normalization or hand tuned weights; which method
+    combines retriever rankings by position instead?
+  category: contrast
+  expected_path: glossary/rrf.md
+  expected_keywords:
+  - RRF
+  - rank
+  - fusion
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+  max_rank: 5
+- id: stress-linear-not-rrf
+  query: >-
+    I do not want reciprocal-rank fusion; which method adds weighted normalized
+    retriever scores?
+  category: contrast
+  expected_path: search/linear-combination.md
+  expected_keywords:
+  - linear combination
+  - normalized
+  - weights
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+  max_rank: 2
+- id: stress-dot-not-cosine
+  query: >-
+    I am not asking for cosine angle; which vector operation sums element-wise
+    products and is affected by magnitude?
+  category: contrast
+  expected_path: glossary/dot-product.md
+  expected_keywords:
+  - dot product
+  - magnitude
+  - vectors
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+- id: stress-cosine-not-dot
+  query: >-
+    I am not asking for dot product magnitude effects; which measure compares
+    vector direction by angle?
+  category: contrast
+  expected_path: glossary/cosine-similarity.md
+  expected_keywords:
+  - cosine
+  - angle
+  - direction
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+  max_rank: 2
+- id: stress-recall-not-precision
+  query: >-
+    Which metric asks how many relevant items we found, not just how clean the
+    returned list is?
+  category: contrast
+  expected_path: glossary/precision-recall.md
+  expected_keywords:
+  - recall
+  - relevant
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+- id: stress-crossencoder-not-reranking
+  query: >-
+    Which model architecture reads query and document together, rather than the
+    general act of reordering results?
+  category: contrast
+  expected_path: features/cross-encoder.md
+  expected_keywords:
+  - cross-encoder
+  - query
+  - document
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+  max_rank: 2
+- id: stress-chunk-size-not-overlap
+  query: >-
+    Which indexing knob changes passage length, not repeated boundary context?
+  category: contrast
+  expected_path: indexing/chunk-size.md
+  expected_keywords:
+  - chunk size
+  - passages
+  - relevance
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+- id: stress-overlap-not-size
+  query: >-
+    Which indexing knob repeats boundary text, not passage length?
+  category: contrast
+  expected_path: indexing/chunk-overlap.md
+  expected_keywords:
+  - overlap
+  - boundaries
+  - context
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+  max_rank: 2
+- id: stress-kb-path-not-index-path
+  query: >-
+    Which env var points at the source document tree, not where index files are
+    stored?
+  category: contrast
+  expected_path: config/kb-path.md
+  expected_keywords:
+  - KB_PATH
+  - knowledge base
+  - path
+  quick_set: false
+  difficulty: hard
+  stress_set: true
+  max_rank: 2
+- id: stress-index-path-not-kb-path
+  query: >-
+    Which env var stores index files outside the source tree, not the
+    knowledge-base root?
+  category: contrast
+  expected_path: config/index-path.md
+  expected_keywords:
+  - INDEX_PATH
+  - indexes
+  - root
+  quick_set: false
+  difficulty: hard
+  stress_set: true
