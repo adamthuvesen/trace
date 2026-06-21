@@ -43,3 +43,60 @@ queries:
     category: ambiguous
     expected_path: ops/checkout-sev2.md
     expected_keywords: [checkout, incident, payment]
+  - id: support-stress-policy-not-template
+    query: I do not need the canned reply; which document decides annual refund eligibility?
+    category: contrast
+    expected_path: billing/refund-policy.md
+    expected_keywords: [annual, eligibility, policy]
+    difficulty: hard
+    stress_set: true
+    max_rank: 3
+  - id: support-stress-template-not-policy
+    query: I do not need the eligibility rule; which document is the canned support reply after a decision?
+    category: contrast
+    expected_path: billing/refund-ticket-template.md
+    expected_keywords: [template, reply, decision]
+    difficulty: hard
+    stress_set: true
+  - id: support-stress-adjustment-not-refund
+    query: The customer has a duplicate charge correction, not a cancellation refund; which document should I use?
+    category: contrast
+    expected_path: billing/invoice-adjustments.md
+    expected_keywords: [duplicate, correction, invoice]
+    difficulty: hard
+    stress_set: true
+  - id: support-stress-refund-not-adjustment
+    query: The workspace cancelled after renewal, not a tax correction; which billing rule should I use?
+    category: contrast
+    expected_path: billing/refund-policy.md
+    expected_keywords: [renewal, refund, policy]
+    difficulty: hard
+    stress_set: true
+  - id: support-stress-handoff-not-incident
+    query: Checkout is not down; I just need the outgoing on-call overlap procedure.
+    category: contrast
+    expected_path: ops/pager-handoff.md
+    expected_keywords: [handoff, overlap, on-call]
+    difficulty: hard
+    stress_set: true
+  - id: support-stress-incident-not-handoff
+    query: This is not routine on-call overlap; customers cannot complete checkout payments.
+    category: contrast
+    expected_path: ops/checkout-sev2.md
+    expected_keywords: [checkout, payment, incident]
+    difficulty: hard
+    stress_set: true
+  - id: support-stress-sso-not-incident
+    query: This is not checkout incident response; I need certificate rotation during single sign-on rollout.
+    category: contrast
+    expected_path: product/sso-rollout.md
+    expected_keywords: [certificate, rotation, SSO]
+    difficulty: hard
+    stress_set: true
+  - id: support-stress-seats-not-invoice
+    query: Extra invited users are pending; this is not a refund or invoice correction.
+    category: contrast
+    expected_path: product/seat-limits.md
+    expected_keywords: [seats, pending, upgrade]
+    difficulty: hard
+    stress_set: true

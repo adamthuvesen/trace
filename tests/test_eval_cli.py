@@ -109,3 +109,14 @@ def test_battle_suite_resolves_fixture_paths():
     assert {"retrieval", "support", "api"} == {kb.kb_id for kb in kbs}
     assert "reranked" in modes
     assert all(kb.kb_path.exists() for kb in kbs)
+
+
+def test_challenge_battle_suite_includes_stress_queries():
+    description, kbs, modes = load_suite(
+        Path("tests/fixtures/eval_battle_royale_challenge.yaml")
+    )
+
+    assert "challenge" in description
+    assert {"retrieval", "support", "api"} == {kb.kb_id for kb in kbs}
+    assert all(kb.include_stress for kb in kbs)
+    assert modes == ("bm25", "semantic", "hybrid", "reranked", "smart")

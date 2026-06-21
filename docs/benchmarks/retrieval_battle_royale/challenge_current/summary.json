@@ -1,0 +1,294 @@
+{
+  "label": "challenge_current",
+  "suite": "tests/fixtures/eval_battle_royale_challenge.yaml",
+  "description": "Larger contrast-heavy multi-KB retrieval challenge suite for no-secret local evaluation.",
+  "judging": "deterministic expected-path metrics only; no LLM judges",
+  "modes": [
+    "bm25",
+    "semantic",
+    "hybrid",
+    "reranked",
+    "smart"
+  ],
+  "knowledge_bases": [
+    {
+      "id": "retrieval",
+      "name": "Retrieval concepts fixture with contrast stress queries",
+      "kb_path": "tests/fixtures/eval_kb",
+      "golden_queries": "tests/fixtures/eval_golden_queries.yaml",
+      "include_stress": true
+    },
+    {
+      "id": "support",
+      "name": "Support and operations fixture with contrast stress queries",
+      "kb_path": "tests/fixtures/battle_kbs/support_kb",
+      "golden_queries": "tests/fixtures/battle_kbs/support_golden_queries.yaml",
+      "include_stress": true
+    },
+    {
+      "id": "api",
+      "name": "API integration fixture with contrast stress queries",
+      "kb_path": "tests/fixtures/battle_kbs/api_kb",
+      "golden_queries": "tests/fixtures/battle_kbs/api_golden_queries.yaml",
+      "include_stress": true
+    }
+  ],
+  "aggregate_by_mode": {
+    "bm25": {
+      "mode": "bm25",
+      "knowledge_bases": 3,
+      "queries": 61,
+      "hit_at_1": 0.8032786885245902,
+      "hit_at_5": 0.9836065573770492,
+      "mrr": 0.8756830601092896,
+      "p50_ms": 0.19079200137639418,
+      "p95_ms": 0.48904199502430856,
+      "failure_buckets": {
+        "concepts": 1,
+        "contrast": 10,
+        "features": 1
+      },
+      "smart_fallback_rate": null
+    },
+    "semantic": {
+      "mode": "semantic",
+      "knowledge_bases": 3,
+      "queries": 61,
+      "hit_at_1": 0.819672131147541,
+      "hit_at_5": 1.0,
+      "mrr": 0.9030054644808743,
+      "p50_ms": 12.632459001906682,
+      "p95_ms": 20.321582996984944,
+      "failure_buckets": {
+        "concepts": 1,
+        "contrast": 9,
+        "hybrid": 1
+      },
+      "smart_fallback_rate": null
+    },
+    "hybrid": {
+      "mode": "hybrid",
+      "knowledge_bases": 3,
+      "queries": 61,
+      "hit_at_1": 0.8688524590163934,
+      "hit_at_5": 1.0,
+      "mrr": 0.9289617486338798,
+      "p50_ms": 14.254082998377271,
+      "p95_ms": 39.22437500295928,
+      "failure_buckets": {
+        "contrast": 8
+      },
+      "smart_fallback_rate": null
+    },
+    "reranked": {
+      "mode": "reranked",
+      "knowledge_bases": 3,
+      "queries": 61,
+      "hit_at_1": 0.8688524590163934,
+      "hit_at_5": 1.0,
+      "mrr": 0.9289617486338798,
+      "p50_ms": 14.842625001620036,
+      "p95_ms": 20.4281250044005,
+      "failure_buckets": {
+        "contrast": 8
+      },
+      "smart_fallback_rate": null
+    },
+    "smart": {
+      "mode": "smart",
+      "knowledge_bases": 3,
+      "queries": 61,
+      "hit_at_1": 0.8688524590163934,
+      "hit_at_5": 1.0,
+      "mrr": 0.9275956284153005,
+      "p50_ms": 0.4802919938811101,
+      "p95_ms": 15.7625000065309,
+      "failure_buckets": {
+        "contrast": 8
+      },
+      "smart_fallback_rate": 0.3442622950819672
+    }
+  },
+  "by_kb": [
+    {
+      "kb_id": "retrieval",
+      "kb_name": "Retrieval concepts fixture with contrast stress queries",
+      "mode": "bm25",
+      "queries": 29,
+      "hit_at_1": 0.6896551724137931,
+      "hit_at_5": 0.9655172413793104,
+      "mrr": 0.7959770114942528,
+      "p50_ms": 0.18820800323737785,
+      "p95_ms": 0.36670000263256947,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "retrieval",
+      "kb_name": "Retrieval concepts fixture with contrast stress queries",
+      "mode": "semantic",
+      "queries": 29,
+      "hit_at_1": 0.8275862068965517,
+      "hit_at_5": 1.0,
+      "mrr": 0.9051724137931034,
+      "p50_ms": 11.656458998913877,
+      "p95_ms": 15.541141798894387,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "retrieval",
+      "kb_name": "Retrieval concepts fixture with contrast stress queries",
+      "mode": "hybrid",
+      "queries": 29,
+      "hit_at_1": 0.8275862068965517,
+      "hit_at_5": 1.0,
+      "mrr": 0.9080459770114943,
+      "p50_ms": 13.96391700109234,
+      "p95_ms": 17.727125000965312,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "retrieval",
+      "kb_name": "Retrieval concepts fixture with contrast stress queries",
+      "mode": "reranked",
+      "queries": 29,
+      "hit_at_1": 0.8275862068965517,
+      "hit_at_5": 1.0,
+      "mrr": 0.9080459770114943,
+      "p50_ms": 14.842625001620036,
+      "p95_ms": 17.529783200006932,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "retrieval",
+      "kb_name": "Retrieval concepts fixture with contrast stress queries",
+      "mode": "smart",
+      "queries": 29,
+      "hit_at_1": 0.8275862068965517,
+      "hit_at_5": 1.0,
+      "mrr": 0.9051724137931034,
+      "p50_ms": 0.5067919992143288,
+      "p95_ms": 15.510799999174196,
+      "smart_fallback_rate": 0.41379310344827586
+    },
+    {
+      "kb_id": "support",
+      "kb_name": "Support and operations fixture with contrast stress queries",
+      "mode": "bm25",
+      "queries": 16,
+      "hit_at_1": 0.9375,
+      "hit_at_5": 1.0,
+      "mrr": 0.9583333333333334,
+      "p50_ms": 0.19331200019223616,
+      "p95_ms": 0.5063752469141036,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "support",
+      "kb_name": "Support and operations fixture with contrast stress queries",
+      "mode": "semantic",
+      "queries": 16,
+      "hit_at_1": 0.875,
+      "hit_at_5": 1.0,
+      "mrr": 0.9270833333333334,
+      "p50_ms": 15.713270498963539,
+      "p95_ms": 30.027728747882065,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "support",
+      "kb_name": "Support and operations fixture with contrast stress queries",
+      "mode": "hybrid",
+      "queries": 16,
+      "hit_at_1": 0.9375,
+      "hit_at_5": 1.0,
+      "mrr": 0.9583333333333334,
+      "p50_ms": 16.295187000650913,
+      "p95_ms": 58.355343751827604,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "support",
+      "kb_name": "Support and operations fixture with contrast stress queries",
+      "mode": "reranked",
+      "queries": 16,
+      "hit_at_1": 0.9375,
+      "hit_at_5": 1.0,
+      "mrr": 0.9583333333333334,
+      "p50_ms": 14.535895996232284,
+      "p95_ms": 23.220770750413067,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "support",
+      "kb_name": "Support and operations fixture with contrast stress queries",
+      "mode": "smart",
+      "queries": 16,
+      "hit_at_1": 0.9375,
+      "hit_at_5": 1.0,
+      "mrr": 0.9583333333333334,
+      "p50_ms": 0.5101454989926424,
+      "p95_ms": 15.75140600107261,
+      "smart_fallback_rate": 0.375
+    },
+    {
+      "kb_id": "api",
+      "kb_name": "API integration fixture with contrast stress queries",
+      "mode": "bm25",
+      "queries": 16,
+      "hit_at_1": 0.875,
+      "hit_at_5": 1.0,
+      "mrr": 0.9375,
+      "p50_ms": 0.19470850020297803,
+      "p95_ms": 0.5146982493897667,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "api",
+      "kb_name": "API integration fixture with contrast stress queries",
+      "mode": "semantic",
+      "queries": 16,
+      "hit_at_1": 0.75,
+      "hit_at_5": 1.0,
+      "mrr": 0.875,
+      "p50_ms": 13.271625502966344,
+      "p95_ms": 19.88857300057134,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "api",
+      "kb_name": "API integration fixture with contrast stress queries",
+      "mode": "hybrid",
+      "queries": 16,
+      "hit_at_1": 0.875,
+      "hit_at_5": 1.0,
+      "mrr": 0.9375,
+      "p50_ms": 14.3633334992046,
+      "p95_ms": 17.983739749979577,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "api",
+      "kb_name": "API integration fixture with contrast stress queries",
+      "mode": "reranked",
+      "queries": 16,
+      "hit_at_1": 0.875,
+      "hit_at_5": 1.0,
+      "mrr": 0.9375,
+      "p50_ms": 15.878458496445091,
+      "p95_ms": 20.78978125246067,
+      "smart_fallback_rate": null
+    },
+    {
+      "kb_id": "api",
+      "kb_name": "API integration fixture with contrast stress queries",
+      "mode": "smart",
+      "queries": 16,
+      "hit_at_1": 0.875,
+      "hit_at_5": 1.0,
+      "mrr": 0.9375,
+      "p50_ms": 0.44781199903809465,
+      "p95_ms": 17.165531749924412,
+      "smart_fallback_rate": 0.1875
+    }
+  ]
+}

@@ -40,6 +40,10 @@ BM25_STRONG_HIT_FRACTION = 0.5
 # vocabulary-mismatch query with no real keyword anchor — and vector search is the
 # safer route.
 BM25_DOMINANCE_MARGIN = 1.3
+# When the best BM25 hit is far ahead of the runner-up, trust it even for a
+# conceptual query with a short strong-hit list: that shape usually means the
+# query contains a grounded lexical anchor, not coincidental common words.
+BM25_DECISIVE_TOP_MARGIN = 1.8
 
 # HybridSearch default semantic weights
 WEIGHT_QUESTION = 0.7

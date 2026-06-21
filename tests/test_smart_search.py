@@ -112,6 +112,45 @@ def test_smart_search_falls_back_when_top_hit_is_not_dominant():
     smart.hybrid.search.assert_called_once()
 
 
+def test_smart_search_trusts_decisive_conceptual_keyword_hit():
+    """A conceptual query with a clear BM25 winner should avoid vector fallback."""
+    smart = SmartSearch.__new__(SmartSearch)
+    smart.keyword = MagicMock()
+    smart.hybrid = MagicMock()
+    smart.keyword.search.return_value = [
+        _hit(path="right.md", score=4.0),
+        _hit(path="runner-up.md", score=1.8),
+        _hit(path="tail.md", score=1.6),
+    ]
+
+    result = smart.search("how do agents keep sentences across chunk boundaries")
+
+    assert result.route.strategy == "keyword"
+    assert not result.route.fallback_used
+    smart.hybrid.search.assert_not_called()
+
+
+def test_smart_search_falls_back_for_weak_decisive_keyword_hit():
+    """A tiny BM25 score is not trustworthy just because the runner-up is tinier."""
+    smart = SmartSearch.__new__(SmartSearch)
+    smart.keyword = MagicMock()
+    smart.hybrid = MagicMock()
+    smart.keyword.search.return_value = [
+        _hit(path="weak.md", score=0.04),
+        _hit(path="weaker.md", score=0.01),
+    ]
+    smart.hybrid.search.return_value = [
+        _hit(path="semantic.md", score=0.7, source="hybrid")
+    ]
+
+    result = smart.search("how do agents keep sentences across chunk boundaries")
+
+    assert result.route.strategy == "hybrid"
+    assert result.route.reason == "BM25 best score was very low"
+    assert result.route.fallback_used
+    smart.hybrid.search.assert_called_once()
+
+
 def test_smart_search_empty_query_does_not_call_engines():
     smart = SmartSearch.__new__(SmartSearch)
     smart.keyword = MagicMock()
