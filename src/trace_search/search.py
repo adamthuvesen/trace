@@ -24,6 +24,7 @@ from trace_search.formatting import (  # noqa: F401 — package re-exports
 )
 from trace_search.query_profile import (
     BM25_DOMINANCE_MARGIN,
+    BM25_DECISIVE_TOP_MARGIN,
     BM25_STRONG_HIT_FRACTION,
     BM25_WEAK_BEST_SCORE,
     SMART_KEYWORD_STRENGTH_TOP_K,
@@ -41,7 +42,7 @@ logger = logging.getLogger(__name__)
 # are active. Keeps per-query latency bounded even on very large corpora.
 _FILTER_OVERSAMPLE = 5
 _MAX_OVERSAMPLE_FETCH = 500
-_SEMANTIC_OVERSAMPLE = 3
+_SEMANTIC_OVERSAMPLE = 1
 _SEMANTIC_MAX_CANDIDATES = 50
 _SEMANTIC_STOPWORDS = frozenset(
     {
@@ -672,15 +673,21 @@ class SmartSearch:
 
         if best_score <= 0:
             return False, "BM25 best score was not positive"
+        runner_up = float(hits[1].get("score", 0) or 0) if len(hits) > 1 else 0.0
+        if len(hits) > 1 and len(distinct_docs) == 1 and conceptual:
+            return False, "BM25 results were duplicate-heavy for a conceptual query"
+        if (
+            conceptual
+            and runner_up > 0
+            and best_score >= BM25_DECISIVE_TOP_MARGIN * runner_up
+        ):
+            return True, "conceptual query had a decisive BM25 top hit"
         if conceptual and strong_hits < requested:
             return False, "conceptual query had too few strong BM25 hits"
         if best_score < BM25_WEAK_BEST_SCORE:
             return False, "BM25 best score was very low"
-        if len(hits) > 1 and len(distinct_docs) == 1 and conceptual:
-            return False, "BM25 results were duplicate-heavy for a conceptual query"
         if conceptual and strong_hits < top_k:
             return False, "conceptual query lacks enough strong BM25 hits"
-        runner_up = float(hits[1].get("score", 0) or 0) if len(hits) > 1 else 0.0
         if (
             conceptual
             and runner_up > 0
