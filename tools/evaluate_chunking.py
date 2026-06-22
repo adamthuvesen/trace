@@ -606,7 +606,7 @@ def create_temp_index(
     """
     import tempfile
 
-    from trace_search import indexer as indexer_module
+    from trace_search.indexing import wiki_indexer as indexer_module
 
     temp_root = Path(tempfile.mkdtemp(prefix=f"wiki_test_{strategy_name}_"))
     if _temp_dirs is not None:

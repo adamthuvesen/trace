@@ -42,7 +42,7 @@ uv run python -m pytest -m "not slow"          # skip embedding tests
 
 # Evaluation — full wiki (local golden_queries.yaml + KB_PATH)
 cp tools/eval/golden_queries.example.yaml tools/eval/golden_queries.yaml
-KB_PATH=/path/to/your/docs uv run python -c "from trace_search.indexer import WikiIndexer; WikiIndexer().build_index(force=True)"
+KB_PATH=/path/to/your/docs uv run python -c "from trace_search import WikiIndexer; WikiIndexer().build_index(force=True)"
 KB_PATH=/path/to/your/docs uv run python -m tools.eval --quick
 KB_PATH=/path/to/your/docs uv run python -m tools.eval --full
 
