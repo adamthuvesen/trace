@@ -24,7 +24,7 @@ from tools.eval.models import (
 
 if TYPE_CHECKING:
     from trace_search.indexer import WikiIndexer
-    from trace_search.search import (
+    from trace_search.retrieval.search import (
         HybridSearch,
         KeywordSearch,
         SemanticSearch,
@@ -129,7 +129,7 @@ def create_searcher(
     indexer: WikiIndexer,
     search_mode: str,
 ) -> Searcher:
-    from trace_search.search import (
+    from trace_search.retrieval.search import (
         HybridSearch,
         KeywordSearch,
         SemanticSearch,
@@ -220,7 +220,7 @@ def evaluate_query(
 
     start = time.perf_counter()
     if search_mode == "smart":
-        from trace_search.search_types import SmartSearchResult
+        from trace_search.retrieval.search_types import SmartSearchResult
 
         smart_result = searcher.search(query.query, top_k=top_k)
         assert isinstance(smart_result, SmartSearchResult)
@@ -386,7 +386,7 @@ def run_evaluation(
 ) -> EvaluationReport:
     """Run the full evaluation and return a report."""
     from trace_search.config import settings
-    from trace_search.search import SemanticSearch
+    from trace_search.retrieval.search import SemanticSearch
 
     from tools.eval import load_thresholds
 

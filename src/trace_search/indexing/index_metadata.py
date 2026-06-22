@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from trace_search.config import settings
-from trace_search.corpus import iter_kb_files
+from trace_search.extraction.corpus import iter_kb_files
 
 INDEX_METADATA_VERSION = 2
 INDEX_METADATA_FILENAME = "index_metadata.json"

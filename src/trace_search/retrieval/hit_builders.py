@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from trace_search.index_paths import chunk_id
-from trace_search.models import HitDict, SearchHit
+from trace_search.indexing.index_paths import chunk_id
+from trace_search.retrieval.models import HitDict, SearchHit
 
 
 def hit_from_chroma(

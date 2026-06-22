@@ -322,9 +322,9 @@ def _run_ab(
     import os
 
     from trace_search.config import get_settings
-    from trace_search.embeddings import build_embedding_backend
+    from trace_search.indexing.embeddings import build_embedding_backend
     from trace_search.indexer import WikiIndexer
-    from trace_search.search import SemanticSearch
+    from trace_search.retrieval.search import SemanticSearch
     from trace_search.server_app import warm_embedding_model
 
     results: dict[str, dict] = {}

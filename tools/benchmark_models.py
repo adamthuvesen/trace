@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from trace_search.indexer import WikiIndexer
-    from trace_search.search import SemanticSearch, KeywordSearch, HybridSearch
+    from trace_search.retrieval.search import SemanticSearch, KeywordSearch, HybridSearch
 
 SEED = 42
 
@@ -432,7 +432,7 @@ def benchmark_model(
     """Benchmark a single embedding model."""
     from trace_search.config import SUPPORTED_MODELS
     from trace_search.indexer import WikiIndexer
-    from trace_search.search import SemanticSearch, KeywordSearch, HybridSearch
+    from trace_search.retrieval.search import SemanticSearch, KeywordSearch, HybridSearch
 
     mode_suffix = f" ({search_mode})" if search_mode != "semantic" else ""
     logger.info(f"\n{'=' * 60}")

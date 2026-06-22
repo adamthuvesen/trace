@@ -231,7 +231,7 @@ def run_retrieval_quality_test(indexer: WikiIndexer, top_k: int = 5) -> dict[str
 
     Target: >80% hit rate at top-1, 100% at top-5.
     """
-    from trace_search.search import SemanticSearch
+    from trace_search.retrieval.search import SemanticSearch
 
     logger.info("\n" + "=" * 60)
     logger.info("TEST 1: Retrieval Quality")

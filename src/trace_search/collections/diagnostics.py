@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from trace_search.config import settings
-from trace_search.index_metadata import (
+from trace_search.indexing.index_metadata import (
     INDEX_METADATA_VERSION,
     SourceChangeSet,
     categorize_source_changes,
@@ -19,9 +19,9 @@ from trace_search.index_metadata import (
     metadata_path,
     read_index_metadata,
 )
-from trace_search.corpus import iter_kb_files
-from trace_search.index_paths import bm25_dir, chroma_dir
-from trace_search.kb_paths import get_default_index_root, should_exclude_path
+from trace_search.extraction.corpus import iter_kb_files
+from trace_search.indexing.index_paths import bm25_dir, chroma_dir
+from trace_search.indexing.kb_paths import get_default_index_root, should_exclude_path
 
 SampleQueryRunner = Callable[[str, str | None], list[dict[str, Any]]]
 

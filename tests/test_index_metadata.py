@@ -3,7 +3,7 @@
 import json
 import os
 
-from trace_search.index_metadata import (
+from trace_search.indexing.index_metadata import (
     INDEX_METADATA_VERSION,
     SourceFileRecord,
     build_index_metadata,

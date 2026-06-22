@@ -7,8 +7,8 @@ from typing import Any
 
 from fastmcp import FastMCP
 
-from trace_search.collection_registry import CollectionRegistry
-from trace_search.operations import TraceOperations
+from trace_search.collections.collection_registry import CollectionRegistry
+from trace_search.collections.operations import TraceOperations
 
 
 def _build_multi_instructions(collection_names: list[str]) -> str:

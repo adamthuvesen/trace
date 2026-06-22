@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.scripts]
-trace = "trace_search.trace_server:main"
+trace = "trace_search.server.trace_server:main"
 
 [project.optional-dependencies]
 convert = [

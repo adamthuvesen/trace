@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from trace_search.corpus import iter_kb_files
+from trace_search.extraction.corpus import iter_kb_files
 
 
 def test_iter_kb_files_matches_fixture_layout(tmp_path: Path) -> None:

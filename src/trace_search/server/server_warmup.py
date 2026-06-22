@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 
-from trace_search.embeddings import EmbeddingBackend
+from trace_search.indexing.embeddings import EmbeddingBackend
 
 logger = logging.getLogger(__name__)
 

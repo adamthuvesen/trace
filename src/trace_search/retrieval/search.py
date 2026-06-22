@@ -14,15 +14,15 @@ from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 
 from sentence_transformers import CrossEncoder
 
-from trace_search.bm25_tokenize import tokenize_keywords
+from trace_search.retrieval.bm25_tokenize import tokenize_keywords
 from trace_search.config import settings
-from trace_search.embeddings import EmbeddingBackend, build_embedding_backend
-from trace_search.hit_builders import hit_from_bm25, hit_from_chroma, hits_to_dicts
-from trace_search.formatting import (  # noqa: F401 — package re-exports
+from trace_search.indexing.embeddings import EmbeddingBackend, build_embedding_backend
+from trace_search.retrieval.hit_builders import hit_from_bm25, hit_from_chroma, hits_to_dicts
+from trace_search.retrieval.formatting import (  # noqa: F401 — package re-exports
     format_context_packets,
     format_results,
 )
-from trace_search.query_profile import (
+from trace_search.retrieval.query_profile import (
     BM25_DOMINANCE_MARGIN,
     BM25_DECISIVE_TOP_MARGIN,
     BM25_STRONG_HIT_FRACTION,
@@ -31,7 +31,7 @@ from trace_search.query_profile import (
     classify_query,
     is_conceptual_query,
 )
-from trace_search.search_types import SearchRoute, SmartSearchResult
+from trace_search.retrieval.search_types import SearchRoute, SmartSearchResult
 
 if TYPE_CHECKING:
     from trace_search.indexer import WikiIndexer

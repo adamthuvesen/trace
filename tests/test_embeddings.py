@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from trace_search.config import get_settings
-from trace_search.embeddings import (
+from trace_search.indexing.embeddings import (
     EmbeddingBackend,
     OnnxBackend,
     TorchBackend,

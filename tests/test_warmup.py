@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from trace_search.config import get_settings
-from trace_search.search import SemanticSearch
+from trace_search.retrieval.search import SemanticSearch
 from trace_search.server_app import CollectionRegistry
 
 

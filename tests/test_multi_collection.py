@@ -304,10 +304,10 @@ class TestGetDocumentWarning:
 
         reg = CollectionRegistry({"docs": kb})
         with caplog.at_level(
-            logging.WARNING, logger="trace_search.collection_registry"
+            logging.WARNING, logger="trace_search.collections.collection_registry"
         ):
             with patch(
-                "trace_search.collection_registry.extract_content",
+                "trace_search.collections.collection_registry.extract_content",
                 side_effect=RuntimeError("disk read failed"),
             ):
                 result = reg.get_document("broken.md", "docs")
@@ -373,7 +373,7 @@ class TestMultiCollectionFilters:
         return registry
 
     def test_smart_search_path_prefix_scopes_each_collection(self, tmp_path):
-        from trace_search.search import parse_filters
+        from trace_search.retrieval.search import parse_filters
 
         registry = self._make_registry(tmp_path)
         result = registry.search_smart(
@@ -390,7 +390,7 @@ class TestMultiCollectionFilters:
         assert result.route.filters.path_prefix == ("architecture/",)
 
     def test_keyword_search_filters_respect_explicit_collection(self, tmp_path):
-        from trace_search.search import parse_filters
+        from trace_search.retrieval.search import parse_filters
 
         registry = self._make_registry(tmp_path)
         results = registry.search_keyword(
@@ -404,7 +404,7 @@ class TestMultiCollectionFilters:
             assert hit["path"].startswith("architecture/")
 
     def test_list_documents_path_prefix_scopes_each_collection(self, tmp_path):
-        from trace_search.search import parse_filters
+        from trace_search.retrieval.search import parse_filters
 
         registry = self._make_registry(tmp_path)
         rendered = registry.list_documents(
@@ -507,7 +507,7 @@ class TestResolveAllCaseInsensitive:
 
 class TestTraceServerImport:
     def test_import_succeeds(self):
-        import trace_search.trace_server as ks
+        import trace_search.server.trace_server as ks
 
         assert hasattr(ks, "main")
         assert callable(ks.main)

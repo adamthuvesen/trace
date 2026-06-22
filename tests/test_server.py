@@ -104,22 +104,22 @@ class TestMCPServer:
 
 class TestServerImports:
     def test_import_format_results(self):
-        from trace_search.search import format_results
+        from trace_search.retrieval.search import format_results
 
         assert callable(format_results)
 
     def test_import_semantic_search_class(self):
-        from trace_search.search import SemanticSearch
+        from trace_search.retrieval.search import SemanticSearch
 
         assert SemanticSearch is not None
 
     def test_import_keyword_search_class(self):
-        from trace_search.search import KeywordSearch
+        from trace_search.retrieval.search import KeywordSearch
 
         assert KeywordSearch is not None
 
     def test_import_hybrid_search_class(self):
-        from trace_search.search import HybridSearch
+        from trace_search.retrieval.search import HybridSearch
 
         assert HybridSearch is not None
 

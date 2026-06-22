@@ -3,19 +3,19 @@
 import bm25s  # noqa: F401 — patched in tests via trace_search.indexer
 import chromadb  # noqa: F401 — patched in tests via trace_search.indexer
 
-from trace_search.chunking import (
+from trace_search.extraction.chunking import (
     TokenCounter,
     chunk_by_headings,
     chunk_by_paragraphs,
     create_contextual_chunk,
 )
-from trace_search.chunking import (  # noqa: F401 — test_chunking imports via indexer
+from trace_search.extraction.chunking import (  # noqa: F401 — test_chunking imports via indexer
     _get_overlap_text,
     _get_size,
     _get_token_counter,
 )
-from trace_search.embeddings import build_embedding_backend  # noqa: F401
-from trace_search.extractors import (
+from trace_search.indexing.embeddings import build_embedding_backend  # noqa: F401
+from trace_search.extraction.extractors import (
     SUPPORTED_EXTENSIONS,
     SUPPORTED_EXTENSIONS_ORDERED,
     extract_code_content,
@@ -27,8 +27,8 @@ from trace_search.extractors import (
     extract_pptx_content,
     extract_title,
 )
-from trace_search.kb_paths import get_default_index_root, should_exclude_path
-from trace_search.wiki_indexer import WikiIndexer
+from trace_search.indexing.kb_paths import get_default_index_root, should_exclude_path
+from trace_search.indexing.wiki_indexer import WikiIndexer
 
 __all__ = [
     "SUPPORTED_EXTENSIONS",

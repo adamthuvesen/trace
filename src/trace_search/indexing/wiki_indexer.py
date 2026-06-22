@@ -12,21 +12,21 @@ import chromadb
 from chromadb.errors import NotFoundError
 from chromadb.config import Settings as ChromaSettings
 
-from trace_search.bm25_tokenize import english_stemmer
-from trace_search.chunking import (
+from trace_search.retrieval.bm25_tokenize import english_stemmer
+from trace_search.extraction.chunking import (
     chunk_by_headings,
     create_contextual_chunk,
     extract_breadcrumb,
 )
 from trace_search.config import settings
-from trace_search.corpus import iter_kb_files
-from trace_search.embeddings import EmbeddingBackend, build_embedding_backend
-from trace_search.extractors import (
+from trace_search.extraction.corpus import iter_kb_files
+from trace_search.indexing.embeddings import EmbeddingBackend, build_embedding_backend
+from trace_search.extraction.extractors import (
     SUPPORTED_EXTENSIONS,
     extract_content,
     extract_title,
 )
-from trace_search.index_metadata import (
+from trace_search.indexing.index_metadata import (
     build_index_metadata,
     categorize_source_changes,
     collect_source_files,
@@ -36,13 +36,13 @@ from trace_search.index_metadata import (
     utc_now_iso,
     write_index_metadata,
 )
-from trace_search.index_paths import (
+from trace_search.indexing.index_paths import (
     CHROMA_COLLECTION,
     bm25_dir,
     chroma_dir,
     chunk_id,
 )
-from trace_search.kb_paths import get_default_index_root, should_exclude_path
+from trace_search.indexing.kb_paths import get_default_index_root, should_exclude_path
 
 logger = logging.getLogger(__name__)
 

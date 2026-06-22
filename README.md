@@ -108,7 +108,7 @@ claude mcp add trace \
 ```bash
 # Inspector
 KB_COLLECTIONS="docs:/path/to/docs,team:/path/to/second-kb" \
-  uv run fastmcp dev src/trace_search/trace_server.py
+  uv run fastmcp dev src/trace_search/server/trace_server.py
 ```
 
 The tools map one-to-one onto the CLI:

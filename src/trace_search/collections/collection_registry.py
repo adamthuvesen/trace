@@ -8,26 +8,26 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from trace_search.config import settings
-from trace_search.corpus import iter_kb_files
-from trace_search.diagnostics import diagnose_collections, render_doctor_report
-from trace_search.embeddings import EmbeddingBackend, build_embedding_backend
-from trace_search.extractors import SUPPORTED_EXTENSIONS, extract_content, extract_title
-from trace_search.index_metadata import (
+from trace_search.extraction.corpus import iter_kb_files
+from trace_search.collections.diagnostics import diagnose_collections, render_doctor_report
+from trace_search.indexing.embeddings import EmbeddingBackend, build_embedding_backend
+from trace_search.extraction.extractors import SUPPORTED_EXTENSIONS, extract_content, extract_title
+from trace_search.indexing.index_metadata import (
     metadata_matches_active_model,
     read_index_metadata,
 )
-from trace_search.index_paths import bm25_dir, chroma_dir
-from trace_search.kb_paths import get_default_index_root, should_exclude_path
-from trace_search.search import (
+from trace_search.indexing.index_paths import bm25_dir, chroma_dir
+from trace_search.indexing.kb_paths import get_default_index_root, should_exclude_path
+from trace_search.retrieval.search import (
     HybridSearch,
     KeywordSearch,
     SearchFilters,
     SemanticSearch,
     SmartSearch,
 )
-from trace_search.search_types import SearchRoute, SmartSearchResult
-from trace_search.server_warmup import warm_embedding_model
-from trace_search.wiki_indexer import WikiIndexer
+from trace_search.retrieval.search_types import SearchRoute, SmartSearchResult
+from trace_search.server.server_warmup import warm_embedding_model
+from trace_search.indexing.wiki_indexer import WikiIndexer
 
 logger = logging.getLogger(__name__)
 

@@ -326,9 +326,9 @@ def main(
     modes = requested_modes or suite_modes
     run_dir = output_dir / label
 
-    from trace_search.embeddings import build_embedding_backend
+    from trace_search.indexing.embeddings import build_embedding_backend
     from trace_search.indexer import WikiIndexer
-    from trace_search.search import SemanticSearch
+    from trace_search.retrieval.search import SemanticSearch
     from trace_search.server_app import warm_embedding_model
 
     reports_by_kb_mode = {}

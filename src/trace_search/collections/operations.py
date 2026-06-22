@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from trace_search.config import get_settings
-from trace_search.formatting import format_context_packets, format_results
-from trace_search.search import SearchFilters, parse_filters
-from trace_search.collection_registry import CollectionRegistry
+from trace_search.retrieval.formatting import format_context_packets, format_results
+from trace_search.retrieval.search import SearchFilters, parse_filters
+from trace_search.collections.collection_registry import CollectionRegistry
 
 
 def _build_filters(

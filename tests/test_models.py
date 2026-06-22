@@ -1,6 +1,6 @@
 """Tests for SearchHit model."""
 
-from trace_search.models import SearchHit
+from trace_search.retrieval.models import SearchHit
 
 
 def test_search_hit_round_trip() -> None:

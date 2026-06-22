@@ -1,14 +1,14 @@
 """Tests for search module."""
 
 from trace_search.config import settings
-from trace_search.query_profile import (
+from trace_search.retrieval.query_profile import (
     WEIGHT_KEYWORD,
     WEIGHT_QUESTION,
     classify_query,
     is_conceptual_query,
     is_keywordish_query,
 )
-from trace_search.search import (
+from trace_search.retrieval.search import (
     HybridSearch,
     SearchFilters,
     _clamp_top_k,
@@ -87,7 +87,7 @@ class TestEmptyCorpusSearch:
     def test_empty_corpus_returns_empty_list(self):
         from unittest.mock import MagicMock, PropertyMock
 
-        from trace_search.search import KeywordSearch
+        from trace_search.retrieval.search import KeywordSearch
 
         mock_indexer = MagicMock()
         type(mock_indexer).bm25 = PropertyMock(return_value=MagicMock())
@@ -149,13 +149,13 @@ class TestHybridSearchFusion:
 
 class TestFormatResults:
     def test_format_results_empty_list(self):
-        from trace_search.search import format_results
+        from trace_search.retrieval.search import format_results
 
         result = format_results([])
         assert result == "No results found."
 
     def test_format_results_minimal_hit(self):
-        from trace_search.search import format_results
+        from trace_search.retrieval.search import format_results
 
         hits = [
             {"title": "Test Doc", "path": "test.md", "folder": "", "content": "text"}
@@ -165,7 +165,7 @@ class TestFormatResults:
         assert "test.md" in result
 
     def test_format_results_with_score(self):
-        from trace_search.search import format_results
+        from trace_search.retrieval.search import format_results
 
         hits = [
             {
@@ -182,7 +182,7 @@ class TestFormatResults:
         assert "Similarity" in result
 
     def test_format_results_hybrid_with_rrf(self):
-        from trace_search.search import format_results
+        from trace_search.retrieval.search import format_results
 
         hits = [
             {
@@ -200,7 +200,7 @@ class TestFormatResults:
         assert "0.0123" in result
 
     def test_format_results_truncates_long_content(self):
-        from trace_search.search import format_results
+        from trace_search.retrieval.search import format_results
 
         long_content = "x" * 600
         hits = [{"title": "T", "path": "t.md", "folder": "", "content": long_content}]
@@ -209,7 +209,7 @@ class TestFormatResults:
         assert long_content not in result
 
     def test_format_results_without_content(self):
-        from trace_search.search import format_results
+        from trace_search.retrieval.search import format_results
 
         hits = [{"title": "T", "path": "t.md", "folder": "", "content": "secret"}]
         result = format_results(hits, include_content=False)
@@ -218,7 +218,7 @@ class TestFormatResults:
 
 class TestSemanticSearchCacheStats:
     def test_cache_stats_structure(self):
-        from trace_search.search import SemanticSearch
+        from trace_search.retrieval.search import SemanticSearch
 
         stats = SemanticSearch.get_cache_stats()
         assert "cache_size" in stats
@@ -228,7 +228,7 @@ class TestSemanticSearchCacheStats:
         assert "cache_hit_rate" in stats
 
     def test_cache_stats_types(self):
-        from trace_search.search import SemanticSearch
+        from trace_search.retrieval.search import SemanticSearch
 
         stats = SemanticSearch.get_cache_stats()
         assert isinstance(stats["cache_size"], int)
@@ -277,7 +277,7 @@ class TestSemanticLexicalBoost:
 class TestFormatResultsPreviewTruncation:
     def test_preview_ends_on_word_boundary(self):
         """Content over 500 chars should be cut at the last space before 500."""
-        from trace_search.search import format_results
+        from trace_search.retrieval.search import format_results
 
         words = ["word"] * 200
         content = " ".join(words)
@@ -302,7 +302,7 @@ class TestFormatResultsPreviewTruncation:
         assert " " not in body[-5:] or body[-1] != " "
 
     def test_content_under_500_not_truncated(self):
-        from trace_search.search import format_results
+        from trace_search.retrieval.search import format_results
 
         content = "short content"
         hit = {
@@ -322,7 +322,7 @@ class TestSemanticSearchCacheIsolation:
     def test_cache_key_includes_model_slug(self):
         """Cache entries must be keyed by (model_slug, query), not just query."""
         from unittest.mock import MagicMock
-        from trace_search.search import SemanticSearch
+        from trace_search.retrieval.search import SemanticSearch
 
         SemanticSearch._embedding_cache.clear()
 
@@ -357,7 +357,7 @@ class TestSemanticSearchCacheIsolation:
 
     def test_same_model_reuses_cached_embedding(self):
         from unittest.mock import MagicMock
-        from trace_search.search import SemanticSearch
+        from trace_search.retrieval.search import SemanticSearch
 
         SemanticSearch._embedding_cache.clear()
         initial_hits = SemanticSearch._cache_hits

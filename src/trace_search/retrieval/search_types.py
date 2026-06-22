@@ -7,7 +7,7 @@ from typing import Any
 
 
 def _empty_filters():
-    from trace_search.search import SearchFilters
+    from trace_search.retrieval.search import SearchFilters
 
     return SearchFilters()
 

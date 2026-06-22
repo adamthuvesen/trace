@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1] / "src" / "trace_search"
 
 def main() -> int:
     failures: list[str] = []
-    for path in sorted(ROOT.glob("*.py")):
+    for path in sorted(ROOT.rglob("*.py")):
         if path.name in EXEMPT:
             continue
         line_count = len(path.read_text(encoding="utf-8").splitlines())

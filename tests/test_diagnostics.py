@@ -2,7 +2,7 @@
 
 import json
 
-from trace_search.diagnostics import (
+from trace_search.collections.diagnostics import (
     diagnose_collections,
     diagnose_index,
     invalid_config_report,
@@ -10,7 +10,7 @@ from trace_search.diagnostics import (
     scan_corpus,
 )
 from trace_search.config import settings
-from trace_search.index_metadata import (
+from trace_search.indexing.index_metadata import (
     build_index_metadata,
     metadata_path,
     utc_now_iso,
@@ -325,7 +325,7 @@ def test_registry_probe_uses_existing_indexes_without_rebuild(tmp_path):
     from unittest.mock import patch
 
     from tests.test_runtime_hardening import FakeBackend
-    from trace_search.search import SearchRoute, SmartSearchResult
+    from trace_search.retrieval.search import SearchRoute, SmartSearchResult
     from trace_search.server_app import CollectionRegistry
 
     kb = tmp_path / "kb"
