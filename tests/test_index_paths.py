@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from trace_search.index_paths import (
+from trace_search.indexing.index_paths import (
     CHROMA_COLLECTION,
     bm25_dir,
     chroma_dir,

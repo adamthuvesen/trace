@@ -6,15 +6,12 @@ from __future__ import annotations
 from pathlib import Path
 
 MAX_LINES = 1000
-EXEMPT = {"indexer.py"}  # public re-export shim only
 ROOT = Path(__file__).resolve().parents[1] / "src" / "trace_search"
 
 
 def main() -> int:
     failures: list[str] = []
-    for path in sorted(ROOT.glob("*.py")):
-        if path.name in EXEMPT:
-            continue
+    for path in sorted(ROOT.rglob("*.py")):
         line_count = len(path.read_text(encoding="utf-8").splitlines())
         if line_count > MAX_LINES:
             failures.append(f"{path.name}: {line_count} lines (max {MAX_LINES})")

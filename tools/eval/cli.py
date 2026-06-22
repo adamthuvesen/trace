@@ -228,7 +228,7 @@ def main(
 
     # Initialize indexer
     from trace_search.config import settings
-    from trace_search.indexer import WikiIndexer
+    from trace_search.indexing.wiki_indexer import WikiIndexer
 
     click.echo(f"Knowledge base: {settings.kb_path}")
     click.echo(f"Search mode: {search}")
@@ -255,7 +255,7 @@ def main(
     # Mirror production bootstrap: warm the embedding model so eval p95 reflects
     # what real MCP consumers see. Set EMBEDDING_WARMUP_ENABLED=false to
     # measure cold-path latency explicitly.
-    from trace_search.server_app import warm_embedding_model
+    from trace_search.server.server_warmup import warm_embedding_model
 
     warm_embedding_model(indexer.backend)
 
@@ -322,10 +322,10 @@ def _run_ab(
     import os
 
     from trace_search.config import get_settings
-    from trace_search.embeddings import build_embedding_backend
-    from trace_search.indexer import WikiIndexer
-    from trace_search.search import SemanticSearch
-    from trace_search.server_app import warm_embedding_model
+    from trace_search.indexing.embeddings import build_embedding_backend
+    from trace_search.indexing.wiki_indexer import WikiIndexer
+    from trace_search.retrieval.search import SemanticSearch
+    from trace_search.server.server_warmup import warm_embedding_model
 
     results: dict[str, dict] = {}
     per_query_top1: dict[str, dict[str, str]] = {}

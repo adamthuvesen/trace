@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from trace_search.cli import run_cli
+from trace_search.server.cli import run_cli
 
 
 _FILTER_KEYS = ("path_prefix", "extensions", "since")

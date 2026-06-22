@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from trace_search.search import (
+from trace_search.retrieval.search import (
     SearchRoute,
     SmartSearch,
     format_context_packets,
@@ -198,8 +198,9 @@ def test_context_packets_include_collection_in_followups():
 
 
 def test_default_search_tool_uses_smart_registry_path(tmp_path):
-    from trace_search.search import SmartSearchResult
-    from trace_search.server_app import CollectionRegistry, build_multi_mcp
+    from trace_search.retrieval.search import SmartSearchResult
+    from trace_search.collections.collection_registry import CollectionRegistry
+    from trace_search.server.mcp_tools import build_multi_mcp
 
     kb = tmp_path / "docs"
     kb.mkdir()
@@ -226,8 +227,8 @@ def test_default_search_tool_uses_smart_registry_path(tmp_path):
 def test_multi_collection_smart_search_batches_neighbor_fetches(tmp_path):
     """Multi-collection smart search should issue one ChromaDB get() per collection,
     not one per hit."""
-    from trace_search.search import SmartSearchResult
-    from trace_search.server_app import CollectionRegistry
+    from trace_search.retrieval.search import SmartSearchResult
+    from trace_search.collections.collection_registry import CollectionRegistry
 
     kb1 = tmp_path / "kb1"
     kb1.mkdir()
@@ -285,7 +286,8 @@ def test_multi_collection_smart_search_batches_neighbor_fetches(tmp_path):
 
 
 def test_specialist_keyword_tool_bypasses_smart_registry_path(tmp_path):
-    from trace_search.server_app import CollectionRegistry, build_multi_mcp
+    from trace_search.collections.collection_registry import CollectionRegistry
+    from trace_search.server.mcp_tools import build_multi_mcp
 
     kb = tmp_path / "docs"
     kb.mkdir()

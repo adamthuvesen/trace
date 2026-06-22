@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from trace_search.indexer import (
+from trace_search.extraction.extractors import (
     SUPPORTED_EXTENSIONS,
     extract_code_content,
     extract_csv_content,

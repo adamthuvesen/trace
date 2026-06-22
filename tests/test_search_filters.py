@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from tests.test_runtime_hardening import FakeBackend
-from trace_search.indexer import WikiIndexer
-from trace_search.search import (
+from trace_search.indexing.wiki_indexer import WikiIndexer
+from trace_search.retrieval.search import (
     HybridSearch,
     KeywordSearch,
     SearchFilters,

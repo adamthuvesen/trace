@@ -40,8 +40,12 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from trace_search.indexer import WikiIndexer
-    from trace_search.search import SemanticSearch, KeywordSearch, HybridSearch
+    from trace_search.indexing.wiki_indexer import WikiIndexer
+    from trace_search.retrieval.search import (
+        SemanticSearch,
+        KeywordSearch,
+        HybridSearch,
+    )
 
 SEED = 42
 
@@ -411,14 +415,14 @@ def analyze_file_type_coverage(
 def _activate_model(model_name: str):
     """Reload settings for a specific embedding model within this process."""
     from trace_search import config as config_module
-    from trace_search import indexer as indexer_module
-    from trace_search import search as search_module
+    from trace_search.indexing import wiki_indexer as wiki_indexer_module
+    from trace_search.retrieval import search as search_module
 
     os.environ["EMBEDDING_MODEL"] = model_name
     config_module.get_settings.cache_clear()
     new_settings = config_module.get_settings()
     config_module.settings = new_settings
-    indexer_module.settings = new_settings
+    wiki_indexer_module.settings = new_settings
     search_module.settings = new_settings
     return new_settings
 
@@ -431,8 +435,12 @@ def benchmark_model(
 ) -> BenchmarkResult:
     """Benchmark a single embedding model."""
     from trace_search.config import SUPPORTED_MODELS
-    from trace_search.indexer import WikiIndexer
-    from trace_search.search import SemanticSearch, KeywordSearch, HybridSearch
+    from trace_search.indexing.wiki_indexer import WikiIndexer
+    from trace_search.retrieval.search import (
+        SemanticSearch,
+        KeywordSearch,
+        HybridSearch,
+    )
 
     mode_suffix = f" ({search_mode})" if search_mode != "semantic" else ""
     logger.info(f"\n{'=' * 60}")

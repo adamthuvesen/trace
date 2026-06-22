@@ -6,7 +6,7 @@ import re
 from collections import defaultdict
 from typing import Any
 
-from trace_search.search_types import SearchRoute
+from trace_search.retrieval.search_types import SearchRoute
 
 
 def _query_terms(query: str) -> list[str]:

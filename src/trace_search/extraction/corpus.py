@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
-from trace_search.extractors import SUPPORTED_EXTENSIONS
-from trace_search.kb_paths import should_exclude_path
+from trace_search.extraction.extractors import SUPPORTED_EXTENSIONS
+from trace_search.indexing.kb_paths import should_exclude_path
 
 
 def iter_kb_files(

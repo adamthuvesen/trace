@@ -169,8 +169,12 @@ def analyze_queries(
     Returns:
         List of PathFix suggestions for queries that don't match.
     """
-    from trace_search.indexer import WikiIndexer
-    from trace_search.search import HybridSearch, KeywordSearch, SemanticSearch
+    from trace_search.indexing.wiki_indexer import WikiIndexer
+    from trace_search.retrieval.search import (
+        HybridSearch,
+        KeywordSearch,
+        SemanticSearch,
+    )
 
     queries = load_golden_queries(quick_only=False, include_stress=True)
     logger.info("Analyzing %d golden queries...", len(queries))

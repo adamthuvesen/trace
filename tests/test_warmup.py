@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from trace_search.config import get_settings
-from trace_search.search import SemanticSearch
-from trace_search.server_app import CollectionRegistry
+from trace_search.retrieval.search import SemanticSearch
+from trace_search.collections.collection_registry import CollectionRegistry
 
 
 FIXTURE_KB = Path(__file__).parent.parent / "tools" / "eval" / "fixture_kb"
@@ -40,7 +40,7 @@ def test_warmup_runs_when_enabled(tmp_path, caplog, monkeypatch):
     monkeypatch.setenv("EMBEDDING_WARMUP_ENABLED", "true")
     get_settings.cache_clear()
 
-    caplog.set_level(logging.INFO, logger="trace_search.server_app")
+    caplog.set_level(logging.INFO, logger="trace_search.server.server_warmup")
     reg = _registry(tmp_path)
     _ = reg.backend  # trigger lazy load + warmup
 
@@ -53,7 +53,7 @@ def test_warmup_runs_exactly_once(tmp_path, caplog, monkeypatch):
     monkeypatch.setenv("EMBEDDING_WARMUP_ENABLED", "true")
     get_settings.cache_clear()
 
-    caplog.set_level(logging.INFO, logger="trace_search.server_app")
+    caplog.set_level(logging.INFO, logger="trace_search.server.server_warmup")
     reg = _registry(tmp_path)
     _ = reg.backend
     _ = reg.backend
@@ -70,7 +70,7 @@ def test_warmup_skipped_when_disabled(tmp_path, caplog, monkeypatch):
     monkeypatch.setenv("EMBEDDING_WARMUP_ENABLED", "false")
     get_settings.cache_clear()
 
-    caplog.set_level(logging.INFO, logger="trace_search.server_app")
+    caplog.set_level(logging.INFO, logger="trace_search.server.server_warmup")
     reg = _registry(tmp_path)
     _ = reg.backend
 

@@ -53,7 +53,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from trace_search.config import settings
-from trace_search.indexer import WikiIndexer, chunk_by_headings
+from trace_search.extraction.chunking import chunk_by_headings
+from trace_search.indexing.wiki_indexer import WikiIndexer
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -231,7 +232,7 @@ def run_retrieval_quality_test(indexer: WikiIndexer, top_k: int = 5) -> dict[str
 
     Target: >80% hit rate at top-1, 100% at top-5.
     """
-    from trace_search.search import SemanticSearch
+    from trace_search.retrieval.search import SemanticSearch
 
     logger.info("\n" + "=" * 60)
     logger.info("TEST 1: Retrieval Quality")
@@ -605,7 +606,7 @@ def create_temp_index(
     """
     import tempfile
 
-    from trace_search import indexer as indexer_module
+    from trace_search.indexing import wiki_indexer as indexer_module
 
     temp_root = Path(tempfile.mkdtemp(prefix=f"wiki_test_{strategy_name}_"))
     if _temp_dirs is not None:

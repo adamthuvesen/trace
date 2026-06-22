@@ -122,7 +122,7 @@ class FakeBM25:
 @pytest.fixture
 def patched_indexer_runtime(monkeypatch):
     """Patch heavy indexer dependencies with lightweight fakes."""
-    import trace_search.indexer as indexer_module
+    import trace_search.indexing.wiki_indexer as indexer_module
 
     monkeypatch.setattr(indexer_module.chromadb, "PersistentClient", FakeChromaClient)
     monkeypatch.setattr(
@@ -201,7 +201,7 @@ def test_settings_load_kb_path_from_dotenv(tmp_path, monkeypatch):
 def test_runtime_requires_kb_path(monkeypatch):
     """Indexer runtime should fail with clear error if KB_PATH is missing."""
     from trace_search.config import get_settings
-    from trace_search.indexer import WikiIndexer
+    from trace_search.indexing.wiki_indexer import WikiIndexer
 
     monkeypatch.delenv("KB_PATH", raising=False)
     get_settings.cache_clear()

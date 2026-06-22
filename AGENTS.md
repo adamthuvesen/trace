@@ -11,9 +11,15 @@ Trace is an MCP server for semantic, keyword, and hybrid search over a local kno
 Start here:
 
 - Default entrypoint: `uv run trace`
-- Local inspector: `KB_PATH=/path/to/your/docs uv run fastmcp dev src/trace_search/trace_server.py`
-- Core package: `config.py`, `trace_server.py`, `search.py`, `indexer.py` (re-export shim), `index_metadata.py`
-- Internal modules: `wiki_indexer.py`, `extractors.py`, `chunking.py`, `collection_registry.py`, `formatting.py`, `corpus.py`, `models.py`
+- Local inspector: `KB_PATH=/path/to/your/docs uv run fastmcp dev src/trace_search/server/trace_server.py`
+- Package layout (`src/trace_search/`): `config.py` at root; subpackages
+  `extraction/` (extractors, chunking, corpus), `indexing/` (embeddings,
+  kb_paths, index_paths, index_metadata, wiki_indexer), `retrieval/` (search,
+  bm25_tokenize, query_profile, search_types, hit_builders, formatting, models),
+  `collections/` (collection_registry, operations, diagnostics), `server/`
+  (trace_server, cli, mcp_tools, server_warmup)
+- Public import surface stays flat via `trace_search/__init__.py` re-exports
+  (`WikiIndexer`, `SmartSearch`, `CollectionRegistry`, `format_results`, …)
 - Indexes live under the KB root unless `INDEX_PATH` is set
 - `reindex` is incremental by default (skips unchanged files); pass `--force` / `force=true` to rebuild from scratch
 - All search tools and `list_documents` accept `path_prefix`, `extensions`, and `since` filters
@@ -28,7 +34,7 @@ uv sync
 uv run trace
 
 # Dev mode (FastMCP inspector)
-KB_PATH=/path/to/your/docs uv run fastmcp dev src/trace_search/trace_server.py
+KB_PATH=/path/to/your/docs uv run fastmcp dev src/trace_search/server/trace_server.py
 
 # Tests
 KB_PATH=/path/to/your/docs uv run python -m pytest tests/ -v
@@ -36,7 +42,7 @@ uv run python -m pytest -m "not slow"          # skip embedding tests
 
 # Evaluation — full wiki (local golden_queries.yaml + KB_PATH)
 cp tools/eval/golden_queries.example.yaml tools/eval/golden_queries.yaml
-KB_PATH=/path/to/your/docs uv run python -c "from trace_search.indexer import WikiIndexer; WikiIndexer().build_index(force=True)"
+KB_PATH=/path/to/your/docs uv run python -c "from trace_search import WikiIndexer; WikiIndexer().build_index(force=True)"
 KB_PATH=/path/to/your/docs uv run python -m tools.eval --quick
 KB_PATH=/path/to/your/docs uv run python -m tools.eval --full
 
@@ -48,6 +54,6 @@ KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_qu
   uv run python -m tools.eval.cli --full --search smart
 # Optional: pytest uses the same golden file — uv run pytest tests/test_eval_retrieval.py -m slow
 
-# Module size guard (no file > 1000 lines except indexer shim)
+# Module size guard (no file > 1000 lines)
 uv run python scripts/check_module_sizes.py
 ```

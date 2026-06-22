@@ -10,12 +10,12 @@ import pytest
 
 from tests.test_runtime_hardening import FakeBackend
 from trace_search.config import settings
-from trace_search.index_metadata import (
+from trace_search.indexing.index_metadata import (
     INDEX_METADATA_VERSION,
     metadata_path,
     read_index_metadata,
 )
-from trace_search.indexer import WikiIndexer
+from trace_search.indexing.wiki_indexer import WikiIndexer
 
 
 @pytest.fixture
