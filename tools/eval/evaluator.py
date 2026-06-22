@@ -23,7 +23,7 @@ from tools.eval.models import (
 )
 
 if TYPE_CHECKING:
-    from trace_search.indexer import WikiIndexer
+    from trace_search.indexing.wiki_indexer import WikiIndexer
     from trace_search.retrieval.search import (
         HybridSearch,
         KeywordSearch,

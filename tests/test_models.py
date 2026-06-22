@@ -3,8 +3,8 @@
 from trace_search.retrieval.models import SearchHit
 
 
-def test_search_hit_round_trip() -> None:
-    original = SearchHit(
+def test_search_hit_to_dict_includes_set_fields() -> None:
+    hit = SearchHit(
         id="docs/a.md::0",
         path="docs/a.md",
         title="A",
@@ -20,21 +20,26 @@ def test_search_hit_round_trip() -> None:
         match_hints=["title matches: hello"],
         collection="wiki",
     )
-    restored = SearchHit.from_dict(original.to_dict())
-    assert restored == original
+    data = hit.to_dict()
+    assert data["path"] == "docs/a.md"
+    assert data["chunk_index"] == 0
+    assert data["breadcrumb"] == "A > Section"
+    assert data["match_hints"] == ["title matches: hello"]
+    assert data["collection"] == "wiki"
 
 
-def test_search_hit_from_dict_minimal() -> None:
-    hit = SearchHit.from_dict(
-        {
-            "id": "x.md::0",
-            "path": "x.md",
-            "title": "X",
-            "folder": "",
-            "content": "body",
-            "score": 1.0,
-            "source": "keyword",
-        }
+def test_search_hit_to_dict_omits_unset_optionals() -> None:
+    hit = SearchHit(
+        id="x.md",
+        path="x.md",
+        title="X",
+        folder="",
+        content="body",
+        score=1.0,
+        source="keyword",
     )
-    assert hit.chunk_index is None
-    assert hit.to_dict()["path"] == "x.md"
+    data = hit.to_dict()
+    assert data["path"] == "x.md"
+    assert "chunk_index" not in data
+    assert "rerank_score" not in data
+    assert "collection" not in data

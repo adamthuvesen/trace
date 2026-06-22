@@ -5,9 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-# Legacy alias for gradual migration away from untyped dict hits.
-HitDict = dict[str, Any]
-
 
 @dataclass
 class SearchHit:
@@ -30,9 +27,9 @@ class SearchHit:
     match_hints: list[str] | None = None
     collection: str | None = None
 
-    def to_dict(self) -> HitDict:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to the dict shape used by MCP tools and eval."""
-        data: HitDict = {
+        data: dict[str, Any] = {
             "id": self.id,
             "path": self.path,
             "title": self.title,
@@ -60,35 +57,3 @@ class SearchHit:
         if self.collection is not None:
             data["collection"] = self.collection
         return data
-
-    @classmethod
-    def from_dict(cls, data: HitDict) -> SearchHit:
-        """Build a SearchHit from a legacy result dict."""
-        return cls(
-            id=str(data["id"]),
-            path=str(data["path"]),
-            title=str(data.get("title", "")),
-            folder=str(data.get("folder", "")),
-            content=str(data.get("content", "")),
-            score=float(data.get("score", 0.0)),
-            source=str(data.get("source", "")),
-            chunk_index=data.get("chunk_index"),
-            chunk_count=data.get("chunk_count"),
-            breadcrumb=data.get("breadcrumb"),
-            extension=data.get("extension"),
-            source_mtime=(
-                float(data["source_mtime"])
-                if data.get("source_mtime") is not None
-                else None
-            ),
-            rerank_score=(
-                float(data["rerank_score"])
-                if data.get("rerank_score") is not None
-                else None
-            ),
-            rrf_score=(
-                float(data["rrf_score"]) if data.get("rrf_score") is not None else None
-            ),
-            match_hints=data.get("match_hints"),
-            collection=data.get("collection"),
-        )

@@ -14,7 +14,6 @@ from trace_search.indexing.index_metadata import (
     metadata_matches_active_model,
     metadata_path,
     read_index_metadata,
-    stale_source_paths,
     utc_now_iso,
     write_index_metadata,
 )
@@ -234,25 +233,6 @@ def test_categorize_source_changes_with_no_prior_metadata(tmp_path):
     assert changes.changed == []
     assert changes.removed == []
     assert changes.has_changes is True
-
-
-def test_stale_source_paths_compat_wrapper(tmp_path):
-    kb = tmp_path / "kb"
-    kb.mkdir()
-    doc = kb / "intro.md"
-    doc.write_text("# Intro\n\nOld", encoding="utf-8")
-    metadata = build_index_metadata(
-        kb_path=kb,
-        build_started_at=utc_now_iso(),
-        build_completed_at=utc_now_iso(),
-        document_count=1,
-        chunk_count=1,
-    )
-
-    doc.write_text("# Intro\n\nNew and longer", encoding="utf-8")
-    os.utime(doc, None)
-
-    assert stale_source_paths(kb, metadata) == ["intro.md"]
 
 
 def test_collect_source_files_skips_outside_symlink(tmp_path):

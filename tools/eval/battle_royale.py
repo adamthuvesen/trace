@@ -327,9 +327,9 @@ def main(
     run_dir = output_dir / label
 
     from trace_search.indexing.embeddings import build_embedding_backend
-    from trace_search.indexer import WikiIndexer
+    from trace_search.indexing.wiki_indexer import WikiIndexer
     from trace_search.retrieval.search import SemanticSearch
-    from trace_search.server_app import warm_embedding_model
+    from trace_search.server.server_warmup import warm_embedding_model
 
     reports_by_kb_mode = {}
     saved_reports: dict[str, dict[str, dict[str, str]]] = {}

@@ -2,7 +2,7 @@
 
 from trace_search.server.cli import run_cli
 from trace_search.config import configure_logging, get_settings
-from trace_search.server_app import build_multi_mcp
+from trace_search.server.mcp_tools import build_multi_mcp
 
 
 def run_server() -> None:

@@ -53,7 +53,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from trace_search.config import settings
-from trace_search.indexer import WikiIndexer, chunk_by_headings
+from trace_search.extraction.chunking import chunk_by_headings
+from trace_search.indexing.wiki_indexer import WikiIndexer
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)

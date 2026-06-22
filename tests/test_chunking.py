@@ -3,13 +3,7 @@
 import pytest
 
 from trace_search.config import settings
-from trace_search.indexer import (
-    _get_overlap_text,
-    _get_size,
-    _get_token_counter,
-    chunk_by_headings,
-    chunk_by_paragraphs,
-)
+from trace_search.extraction.chunking import _get_overlap_text, _get_size, _get_token_counter, chunk_by_headings, chunk_by_paragraphs
 
 
 # Sample markdown content for testing

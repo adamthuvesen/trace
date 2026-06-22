@@ -15,7 +15,7 @@ from trace_search.indexing.index_metadata import (
     metadata_path,
     read_index_metadata,
 )
-from trace_search.indexer import WikiIndexer
+from trace_search.indexing.wiki_indexer import WikiIndexer
 
 
 @pytest.fixture

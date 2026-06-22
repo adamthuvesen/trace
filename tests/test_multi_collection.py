@@ -133,7 +133,7 @@ class TestKBCollectionsParsing:
 
 class TestCollectionRegistry:
     def test_collection_names_sorted(self, tmp_path):
-        from trace_search.server_app import CollectionRegistry
+        from trace_search.collections.collection_registry import CollectionRegistry
 
         kb1 = tmp_path / "beta"
         kb2 = tmp_path / "alpha"
@@ -144,7 +144,7 @@ class TestCollectionRegistry:
         assert reg.collection_names == ["alpha", "beta"]
 
     def test_default_index_root_stays_inside_collection_kb(self, tmp_path):
-        from trace_search.server_app import CollectionRegistry
+        from trace_search.collections.collection_registry import CollectionRegistry
 
         kb = tmp_path / "docs"
         kb.mkdir()
@@ -153,7 +153,7 @@ class TestCollectionRegistry:
         assert reg.collections["docs"].index_path == kb / ".mcp-search" / "indexes"
 
     def test_explicit_index_root_uses_collection_subdir(self, tmp_path):
-        from trace_search.server_app import CollectionRegistry
+        from trace_search.collections.collection_registry import CollectionRegistry
 
         kb = tmp_path / "docs"
         index_root = tmp_path / "indexes"
@@ -163,7 +163,7 @@ class TestCollectionRegistry:
         assert reg.collections["docs"].index_path == index_root / "docs"
 
     def test_resolve_specific(self, tmp_path):
-        from trace_search.server_app import CollectionRegistry
+        from trace_search.collections.collection_registry import CollectionRegistry
 
         kb = tmp_path / "wiki"
         kb.mkdir()
@@ -174,7 +174,7 @@ class TestCollectionRegistry:
         assert cols[0].name == "wiki"
 
     def test_resolve_unknown_raises(self, tmp_path):
-        from trace_search.server_app import CollectionRegistry
+        from trace_search.collections.collection_registry import CollectionRegistry
 
         kb = tmp_path / "wiki"
         kb.mkdir()
@@ -184,7 +184,7 @@ class TestCollectionRegistry:
             reg._resolve("nope")
 
     def test_resolve_all(self, tmp_path):
-        from trace_search.server_app import CollectionRegistry
+        from trace_search.collections.collection_registry import CollectionRegistry
 
         kb1 = tmp_path / "a"
         kb2 = tmp_path / "b"
@@ -200,7 +200,7 @@ class TestCollectionReset:
     def test_reset_clears_all_slots(self, tmp_path):
         from unittest.mock import MagicMock
 
-        from trace_search.server_app import Collection
+        from trace_search.collections.collection_registry import Collection
 
         col = Collection(name="x", kb_path=tmp_path, index_path=tmp_path)
         col._indexer = MagicMock()
@@ -218,7 +218,7 @@ class TestCollectionReset:
 
 class TestListDocumentsLimit:
     def test_limit_respected_single_folder(self, tmp_path):
-        from trace_search.server_app import CollectionRegistry
+        from trace_search.collections.collection_registry import CollectionRegistry
 
         kb = tmp_path / "docs"
         kb.mkdir()
@@ -233,7 +233,7 @@ class TestListDocumentsLimit:
         assert len(listed) == 10
 
     def test_limit_larger_than_folder_returns_all(self, tmp_path):
-        from trace_search.server_app import CollectionRegistry
+        from trace_search.collections.collection_registry import CollectionRegistry
 
         kb = tmp_path / "docs"
         kb.mkdir()
@@ -249,7 +249,7 @@ class TestListDocumentsLimit:
 
     @pytest.mark.parametrize("limit", [0, -10])
     def test_invalid_limit_defaults_to_50(self, tmp_path, limit):
-        from trace_search.server_app import CollectionRegistry
+        from trace_search.collections.collection_registry import CollectionRegistry
 
         kb = tmp_path / "docs"
         kb.mkdir()
@@ -262,7 +262,7 @@ class TestListDocumentsLimit:
         assert len(listed) == 50
 
     def test_large_limit_caps_at_500(self, tmp_path):
-        from trace_search.server_app import CollectionRegistry
+        from trace_search.collections.collection_registry import CollectionRegistry
 
         kb = tmp_path / "docs"
         kb.mkdir()
@@ -279,13 +279,13 @@ class TestGetDocumentWarning:
     def test_traversal_rejection_emits_warning(self, tmp_path, caplog):
         import logging
 
-        from trace_search.server_app import CollectionRegistry
+        from trace_search.collections.collection_registry import CollectionRegistry
 
         kb = tmp_path / "docs"
         kb.mkdir()
 
         reg = CollectionRegistry({"docs": kb})
-        with caplog.at_level(logging.WARNING, logger="trace_search.server_app"):
+        with caplog.at_level(logging.WARNING, logger="trace_search.collections.collection_registry"):
             result = reg.get_document("../../etc/passwd", "docs")
 
         assert "rejected traversal" in caplog.text
@@ -295,7 +295,7 @@ class TestGetDocumentWarning:
         import logging
         from unittest.mock import patch
 
-        from trace_search.server_app import CollectionRegistry
+        from trace_search.collections.collection_registry import CollectionRegistry
 
         kb = tmp_path / "docs"
         kb.mkdir()
@@ -321,7 +321,7 @@ class TestGetDocumentWarning:
 
 class TestBuildMultiMcp:
     def test_tools_have_collection_param(self, tmp_path):
-        from trace_search.server_app import build_multi_mcp
+        from trace_search.server.mcp_tools import build_multi_mcp
 
         kb = tmp_path / "docs"
         kb.mkdir()
@@ -346,7 +346,7 @@ class TestMultiCollectionFilters:
 
     def _make_registry(self, tmp_path):
         from tests.test_runtime_hardening import FakeBackend
-        from trace_search.server_app import CollectionRegistry
+        from trace_search.collections.collection_registry import CollectionRegistry
 
         wiki = tmp_path / "wiki"
         brain = tmp_path / "brain"
@@ -418,7 +418,7 @@ class TestMultiCollectionFilters:
         assert "notes.md" not in rendered
 
     def test_instructions_list_collections(self, tmp_path):
-        from trace_search.server_app import _build_multi_instructions
+        from trace_search.server.mcp_tools import _build_multi_instructions
 
         result = _build_multi_instructions(["ai-context", "wiki"])
         assert '"ai-context"' in result
@@ -428,7 +428,7 @@ class TestMultiCollectionFilters:
 
 class TestMergeResults:
     def test_merge_interleaves_by_score(self):
-        from trace_search.server_app import CollectionRegistry
+        from trace_search.collections.collection_registry import CollectionRegistry
 
         results_a = [
             {"path": "a.md", "score": 5.0, "source": "keyword"},
@@ -451,7 +451,7 @@ class TestMergeResults:
         assert merged[2]["path"] == "b.md"
 
     def test_merge_respects_top_k(self):
-        from trace_search.server_app import CollectionRegistry
+        from trace_search.collections.collection_registry import CollectionRegistry
 
         results = [
             {"path": f"{i}.md", "score": float(i), "source": "keyword"}
@@ -465,7 +465,7 @@ class TestMergeResults:
 
 class TestResolveAllCaseInsensitive:
     def _make_registry(self, tmp_path):
-        from trace_search.server_app import CollectionRegistry
+        from trace_search.collections.collection_registry import CollectionRegistry
 
         wiki = tmp_path / "wiki"
         brain = tmp_path / "brain"

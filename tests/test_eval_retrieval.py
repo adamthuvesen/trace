@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from trace_search.config import get_settings
-from trace_search.indexer import WikiIndexer
+from trace_search.indexing.wiki_indexer import WikiIndexer
 from trace_search.retrieval.search import SemanticSearch
 from tools.eval.evaluator import run_evaluation
 from tools.eval.models import GoldenQuery

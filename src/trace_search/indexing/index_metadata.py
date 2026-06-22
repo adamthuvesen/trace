@@ -269,13 +269,3 @@ def categorize_source_changes(
         removed=removed,
         inventory=current,
     )
-
-
-def stale_source_paths(kb_path: Path, metadata: IndexMetadata) -> list[str]:
-    """Return visible source paths that are new, changed, or removed since indexing.
-
-    Thin compatibility wrapper over `categorize_source_changes` for callers that
-    just want a flat list of paths needing attention.
-    """
-    changes = categorize_source_changes(kb_path, metadata)
-    return sorted(set(changes.added + changes.changed + changes.removed))

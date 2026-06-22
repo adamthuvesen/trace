@@ -54,6 +54,6 @@ KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_qu
   uv run python -m tools.eval.cli --full --search smart
 # Optional: pytest uses the same golden file — uv run pytest tests/test_eval_retrieval.py -m slow
 
-# Module size guard (no file > 1000 lines except indexer shim)
+# Module size guard (no file > 1000 lines)
 uv run python scripts/check_module_sizes.py
 ```

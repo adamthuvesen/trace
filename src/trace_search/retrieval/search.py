@@ -34,7 +34,7 @@ from trace_search.retrieval.query_profile import (
 from trace_search.retrieval.search_types import SearchRoute, SmartSearchResult
 
 if TYPE_CHECKING:
-    from trace_search.indexer import WikiIndexer
+    from trace_search.indexing.wiki_indexer import WikiIndexer
 
 logger = logging.getLogger(__name__)
 

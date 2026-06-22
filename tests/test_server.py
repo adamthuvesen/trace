@@ -3,14 +3,8 @@
 import pytest
 
 from trace_search.config import settings
-from trace_search.indexer import (
-    SUPPORTED_EXTENSIONS,
-    extract_csv_content,
-    extract_docx_content,
-    extract_pdf_content,
-    extract_pptx_content,
-)
-from trace_search.server_app import build_multi_mcp
+from trace_search.extraction.extractors import SUPPORTED_EXTENSIONS, extract_csv_content, extract_docx_content, extract_pdf_content, extract_pptx_content
+from trace_search.server.mcp_tools import build_multi_mcp
 
 SERVER_TOOL_NAMES = (
     "search",
@@ -124,7 +118,7 @@ class TestServerImports:
         assert HybridSearch is not None
 
     def test_import_wiki_indexer(self):
-        from trace_search.indexer import WikiIndexer
+        from trace_search.indexing.wiki_indexer import WikiIndexer
 
         assert WikiIndexer is not None
 
@@ -134,7 +128,7 @@ class TestServerImports:
         assert hasattr(settings, "embedding_model")
 
     def test_import_collection_registry(self):
-        from trace_search.server_app import CollectionRegistry
+        from trace_search.collections.collection_registry import CollectionRegistry
 
         assert CollectionRegistry is not None
 
@@ -269,7 +263,7 @@ class TestCollectionRebuild:
         from unittest.mock import MagicMock, patch
 
         from tests.test_runtime_hardening import FakeBackend
-        from trace_search.server_app import Collection
+        from trace_search.collections.collection_registry import Collection
 
         col = Collection(
             name="test",
@@ -290,7 +284,7 @@ class TestCollectionRebuild:
         from unittest.mock import MagicMock, patch
 
         from tests.test_runtime_hardening import FakeBackend
-        from trace_search.server_app import Collection
+        from trace_search.collections.collection_registry import Collection
 
         col = Collection(
             name="test",
@@ -312,7 +306,7 @@ class TestCollectionRebuild:
         """rebuild(force=True) must clear all four caches and return the new chunk count."""
         from unittest.mock import MagicMock, patch
 
-        from trace_search.server_app import Collection
+        from trace_search.collections.collection_registry import Collection
 
         kb = tmp_path / "kb"
         kb.mkdir()
@@ -347,7 +341,7 @@ class TestCollectionRebuild:
         """rebuild() defaults to incremental and preserves cached search components."""
         from unittest.mock import MagicMock, patch
 
-        from trace_search.server_app import Collection
+        from trace_search.collections.collection_registry import Collection
 
         kb = tmp_path / "kb"
         kb.mkdir()
@@ -390,7 +384,7 @@ class TestReindexForceFlag:
         _, tools = build_multi_mcp("force-test", {"docs": kb})
 
         with patch(
-            "trace_search.server_app.Collection.rebuild",
+            "trace_search.collections.collection_registry.Collection.rebuild",
             return_value=7,
             autospec=True,
         ) as rebuild_mock:
@@ -413,7 +407,7 @@ class TestReindexForceFlag:
         _, tools = build_multi_mcp("incremental-test", {"docs": kb})
 
         with patch(
-            "trace_search.server_app.Collection.rebuild",
+            "trace_search.collections.collection_registry.Collection.rebuild",
             return_value=2,
             autospec=True,
         ) as rebuild_mock:

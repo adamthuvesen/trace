@@ -16,7 +16,7 @@ from trace_search.indexing.index_metadata import (
     utc_now_iso,
     write_index_metadata,
 )
-from trace_search.indexer import get_default_index_root
+from trace_search.indexing.kb_paths import get_default_index_root
 
 
 def _create_index_dirs(index_root):
@@ -277,7 +277,7 @@ def test_diagnose_collections_reports_zero_result_probe(tmp_path):
 def test_registry_probe_skips_missing_indexes(tmp_path):
     import pytest
 
-    from trace_search.server_app import CollectionRegistry
+    from trace_search.collections.collection_registry import CollectionRegistry
 
     kb = tmp_path / "kb"
     kb.mkdir()
@@ -290,7 +290,7 @@ def test_registry_probe_skips_missing_indexes(tmp_path):
 def test_registry_probe_skips_incompatible_indexes(tmp_path):
     import pytest
 
-    from trace_search.server_app import CollectionRegistry
+    from trace_search.collections.collection_registry import CollectionRegistry
 
     kb = tmp_path / "kb"
     kb.mkdir()
@@ -326,7 +326,7 @@ def test_registry_probe_uses_existing_indexes_without_rebuild(tmp_path):
 
     from tests.test_runtime_hardening import FakeBackend
     from trace_search.retrieval.search import SearchRoute, SmartSearchResult
-    from trace_search.server_app import CollectionRegistry
+    from trace_search.collections.collection_registry import CollectionRegistry
 
     kb = tmp_path / "kb"
     kb.mkdir()
