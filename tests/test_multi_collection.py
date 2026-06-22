@@ -285,7 +285,9 @@ class TestGetDocumentWarning:
         kb.mkdir()
 
         reg = CollectionRegistry({"docs": kb})
-        with caplog.at_level(logging.WARNING, logger="trace_search.collections.collection_registry"):
+        with caplog.at_level(
+            logging.WARNING, logger="trace_search.collections.collection_registry"
+        ):
             result = reg.get_document("../../etc/passwd", "docs")
 
         assert "rejected traversal" in caplog.text

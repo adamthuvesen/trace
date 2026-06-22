@@ -6,7 +6,10 @@ import argparse
 import sys
 from collections.abc import Callable, Sequence
 
-from trace_search.collections.diagnostics import invalid_config_report, render_doctor_report
+from trace_search.collections.diagnostics import (
+    invalid_config_report,
+    render_doctor_report,
+)
 from trace_search.collections.operations import TraceOperations
 
 OperationsFactory = Callable[[], TraceOperations]

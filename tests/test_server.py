@@ -3,7 +3,13 @@
 import pytest
 
 from trace_search.config import settings
-from trace_search.extraction.extractors import SUPPORTED_EXTENSIONS, extract_csv_content, extract_docx_content, extract_pdf_content, extract_pptx_content
+from trace_search.extraction.extractors import (
+    SUPPORTED_EXTENSIONS,
+    extract_csv_content,
+    extract_docx_content,
+    extract_pdf_content,
+    extract_pptx_content,
+)
 from trace_search.server.mcp_tools import build_multi_mcp
 
 SERVER_TOOL_NAMES = (

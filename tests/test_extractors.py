@@ -5,7 +5,16 @@ from pathlib import Path
 
 import pytest
 
-from trace_search.extraction.extractors import SUPPORTED_EXTENSIONS, extract_code_content, extract_csv_content, extract_docx_content, extract_notebook_content, extract_pdf_content, extract_pptx_content, extract_title
+from trace_search.extraction.extractors import (
+    SUPPORTED_EXTENSIONS,
+    extract_code_content,
+    extract_csv_content,
+    extract_docx_content,
+    extract_notebook_content,
+    extract_pdf_content,
+    extract_pptx_content,
+    extract_title,
+)
 
 
 class TestSupportedExtensions:

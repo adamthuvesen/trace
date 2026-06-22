@@ -9,9 +9,16 @@ from pathlib import Path
 
 from trace_search.config import settings
 from trace_search.extraction.corpus import iter_kb_files
-from trace_search.collections.diagnostics import diagnose_collections, render_doctor_report
+from trace_search.collections.diagnostics import (
+    diagnose_collections,
+    render_doctor_report,
+)
 from trace_search.indexing.embeddings import EmbeddingBackend, build_embedding_backend
-from trace_search.extraction.extractors import SUPPORTED_EXTENSIONS, extract_content, extract_title
+from trace_search.extraction.extractors import (
+    SUPPORTED_EXTENSIONS,
+    extract_content,
+    extract_title,
+)
 from trace_search.indexing.index_metadata import (
     metadata_matches_active_model,
     read_index_metadata,

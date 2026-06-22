@@ -17,7 +17,11 @@ from sentence_transformers import CrossEncoder
 from trace_search.retrieval.bm25_tokenize import tokenize_keywords
 from trace_search.config import settings
 from trace_search.indexing.embeddings import EmbeddingBackend, build_embedding_backend
-from trace_search.retrieval.hit_builders import hit_from_bm25, hit_from_chroma, hits_to_dicts
+from trace_search.retrieval.hit_builders import (
+    hit_from_bm25,
+    hit_from_chroma,
+    hits_to_dicts,
+)
 from trace_search.retrieval.formatting import (  # noqa: F401 — package re-exports
     format_context_packets,
     format_results,
