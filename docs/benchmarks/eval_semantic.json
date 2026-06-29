@@ -138,8 +138,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null
     },
     {
       "query_id": "easy-embeddings",
@@ -160,8 +160,8 @@
       "path_first_hit_rank": 2,
       "path_reciprocal_rank": 0.5,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null
     },
     {
       "query_id": "lex-embedding-backend",
@@ -182,8 +182,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null
     },
     {
       "query_id": "lex-index-path",
@@ -203,8 +203,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null
     },
     {
       "query_id": "lex-reranker-flag",
@@ -224,8 +224,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null
     },
     {
       "query_id": "lex-mutually-exclusive",
@@ -245,8 +245,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null
     },
     {
       "query_id": "lex-saturation",
@@ -266,8 +266,8 @@
       "path_first_hit_rank": 2,
       "path_reciprocal_rank": 0.5,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null
     },
     {
       "query_id": "para-overlap",
@@ -287,8 +287,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null
     },
     {
       "query_id": "para-rerank",
@@ -308,8 +308,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null
     },
     {
       "query_id": "para-rrf",
@@ -329,8 +329,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null
     },
     {
       "query_id": "para-cosine",
@@ -350,8 +350,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null
     },
     {
       "query_id": "para-ann",
@@ -371,8 +371,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null
     },
     {
       "query_id": "para-mrr",
@@ -392,8 +392,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null
     },
     {
       "query_id": "para-crossenc",
@@ -413,8 +413,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null
     },
     {
       "query_id": "para-idf",
@@ -434,8 +434,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null
     },
     {
       "query_id": "amb-hybrid",
@@ -455,8 +455,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null
     },
     {
       "query_id": "amb-ndcg",
@@ -476,8 +476,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null
     }
   ],
   "regression": null,
@@ -485,5 +485,5 @@
   "stress_only": false,
   "strict_keywords": false,
   "strict_keywords_top1": false,
-  "smart_fallback_rate": null
+  "adaptive_fallback_rate": null
 }

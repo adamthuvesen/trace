@@ -8,7 +8,7 @@
     "semantic",
     "hybrid",
     "reranked",
-    "smart"
+    "adaptive"
   ],
   "knowledge_bases": [
     {
@@ -47,7 +47,7 @@
         "concepts": 1,
         "features": 1
       },
-      "smart_fallback_rate": null
+      "adaptive_fallback_rate": null
     },
     "semantic": {
       "mode": "semantic",
@@ -62,7 +62,7 @@
         "concepts": 1,
         "hybrid": 1
       },
-      "smart_fallback_rate": null
+      "adaptive_fallback_rate": null
     },
     "hybrid": {
       "mode": "hybrid",
@@ -74,7 +74,7 @@
       "p50_ms": 35.4778750333935,
       "p95_ms": 122.84857500344502,
       "failure_buckets": {},
-      "smart_fallback_rate": null
+      "adaptive_fallback_rate": null
     },
     "reranked": {
       "mode": "reranked",
@@ -86,10 +86,10 @@
       "p50_ms": 37.09233389236033,
       "p95_ms": 151.79295421112326,
       "failure_buckets": {},
-      "smart_fallback_rate": null
+      "adaptive_fallback_rate": null
     },
-    "smart": {
-      "mode": "smart",
+    "adaptive": {
+      "mode": "adaptive",
       "knowledge_bases": 3,
       "queries": 35,
       "hit_at_1": 1.0,
@@ -98,7 +98,7 @@
       "p50_ms": 8.502457989379764,
       "p95_ms": 51.54149637091905,
       "failure_buckets": {},
-      "smart_fallback_rate": 0.5142857142857142
+      "adaptive_fallback_rate": 0.5142857142857142
     }
   },
   "by_kb": [
@@ -112,7 +112,7 @@
       "mrr": 0.9210526315789473,
       "p50_ms": 0.14579202979803085,
       "p95_ms": 0.31365873292088364,
-      "smart_fallback_rate": null
+      "adaptive_fallback_rate": null
     },
     {
       "kb_id": "retrieval",
@@ -124,7 +124,7 @@
       "mrr": 0.9736842105263158,
       "p50_ms": 34.69124995172024,
       "p95_ms": 86.00084134377536,
-      "smart_fallback_rate": null
+      "adaptive_fallback_rate": null
     },
     {
       "kb_id": "retrieval",
@@ -136,7 +136,7 @@
       "mrr": 1.0,
       "p50_ms": 37.1032499242574,
       "p95_ms": 163.44549553468806,
-      "smart_fallback_rate": null
+      "adaptive_fallback_rate": null
     },
     {
       "kb_id": "retrieval",
@@ -148,19 +148,19 @@
       "mrr": 1.0,
       "p50_ms": 31.68679098598659,
       "p95_ms": 150.0801753252744,
-      "smart_fallback_rate": null
+      "adaptive_fallback_rate": null
     },
     {
       "kb_id": "retrieval",
       "kb_name": "Retrieval concepts fixture",
-      "mode": "smart",
+      "mode": "adaptive",
       "queries": 19,
       "hit_at_1": 1.0,
       "hit_at_5": 1.0,
       "mrr": 1.0,
       "p50_ms": 13.160374946892262,
       "p95_ms": 55.49666248261921,
-      "smart_fallback_rate": 0.5263157894736842
+      "adaptive_fallback_rate": 0.5263157894736842
     },
     {
       "kb_id": "support",
@@ -172,7 +172,7 @@
       "mrr": 1.0,
       "p50_ms": 0.16368785873055458,
       "p95_ms": 0.61484994366765,
-      "smart_fallback_rate": null
+      "adaptive_fallback_rate": null
     },
     {
       "kb_id": "support",
@@ -184,7 +184,7 @@
       "mrr": 1.0,
       "p50_ms": 43.36206300649792,
       "p95_ms": 114.4162749056704,
-      "smart_fallback_rate": null
+      "adaptive_fallback_rate": null
     },
     {
       "kb_id": "support",
@@ -196,7 +196,7 @@
       "mrr": 1.0,
       "p50_ms": 34.25456245895475,
       "p95_ms": 69.24494823906568,
-      "smart_fallback_rate": null
+      "adaptive_fallback_rate": null
     },
     {
       "kb_id": "support",
@@ -208,19 +208,19 @@
       "mrr": 1.0,
       "p50_ms": 40.788521408103406,
       "p95_ms": 50.631714158225805,
-      "smart_fallback_rate": null
+      "adaptive_fallback_rate": null
     },
     {
       "kb_id": "support",
       "kb_name": "Support and operations fixture",
-      "mode": "smart",
+      "mode": "adaptive",
       "queries": 8,
       "hit_at_1": 1.0,
       "hit_at_5": 1.0,
       "mrr": 1.0,
       "p50_ms": 4.524854011833668,
       "p95_ms": 19.632050022482872,
-      "smart_fallback_rate": 0.5
+      "adaptive_fallback_rate": 0.5
     },
     {
       "kb_id": "api",
@@ -232,7 +232,7 @@
       "mrr": 1.0,
       "p50_ms": 0.1451045973226428,
       "p95_ms": 0.2778779016807675,
-      "smart_fallback_rate": null
+      "adaptive_fallback_rate": null
     },
     {
       "kb_id": "api",
@@ -244,7 +244,7 @@
       "mrr": 0.9375,
       "p50_ms": 33.02893694490194,
       "p95_ms": 59.95017685927451,
-      "smart_fallback_rate": null
+      "adaptive_fallback_rate": null
     },
     {
       "kb_id": "api",
@@ -256,7 +256,7 @@
       "mrr": 1.0,
       "p50_ms": 33.802645397372544,
       "p95_ms": 90.87749355239791,
-      "smart_fallback_rate": null
+      "adaptive_fallback_rate": null
     },
     {
       "kb_id": "api",
@@ -268,19 +268,19 @@
       "mrr": 1.0,
       "p50_ms": 44.730521040037274,
       "p95_ms": 147.6748244022019,
-      "smart_fallback_rate": null
+      "adaptive_fallback_rate": null
     },
     {
       "kb_id": "api",
       "kb_name": "API integration fixture",
-      "mode": "smart",
+      "mode": "adaptive",
       "queries": 8,
       "hit_at_1": 1.0,
       "hit_at_5": 1.0,
       "mrr": 1.0,
       "p50_ms": 9.479020955041051,
       "p95_ms": 43.42146657872944,
-      "smart_fallback_rate": 0.5
+      "adaptive_fallback_rate": 0.5
     }
   ]
 }

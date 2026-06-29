@@ -14,7 +14,7 @@ def _empty_filters():
 
 @dataclass(frozen=True)
 class SearchRoute:
-    """Routing metadata for smart search."""
+    """Routing metadata for adaptive search."""
 
     strategy: str
     reason: str
@@ -23,8 +23,8 @@ class SearchRoute:
 
 
 @dataclass(frozen=True)
-class SmartSearchResult:
-    """Smart search hits plus transparent routing metadata."""
+class AdaptiveSearchResult:
+    """Adaptive search hits plus transparent routing metadata."""
 
     hits: list[dict[str, Any]]
     route: SearchRoute

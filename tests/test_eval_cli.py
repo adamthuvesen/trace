@@ -119,4 +119,4 @@ def test_challenge_battle_suite_includes_stress_queries():
     assert "challenge" in description
     assert {"retrieval", "support", "api"} == {kb.kb_id for kb in kbs}
     assert all(kb.include_stress for kb in kbs)
-    assert modes == ("bm25", "semantic", "hybrid", "reranked", "smart")
+    assert modes == ("bm25", "semantic", "hybrid", "reranked", "adaptive")

@@ -1,32 +1,32 @@
 {
-  "timestamp": "2026-06-21T19:31:16.904958+00:00",
-  "search_mode": "smart",
+  "timestamp": "2026-06-21T19:37:05.259350+00:00",
+  "search_mode": "adaptive",
   "embedding_model": "all-MiniLM-L6-v2",
-  "total_queries": 17,
+  "total_queries": 19,
   "quick_set_only": false,
   "top_1_path_accuracy": 1.0,
   "top_5_path_accuracy": 1.0,
-  "top_1_keyword_accuracy": 0.47058823529411764,
-  "top_5_keyword_accuracy": 0.5294117647058824,
+  "top_1_keyword_accuracy": 0.3157894736842105,
+  "top_5_keyword_accuracy": 0.3157894736842105,
   "mean_reciprocal_rank": 1.0,
   "within_max_rank_path_accuracy": 1.0,
-  "latency_p50_ms": 16.125750000355765,
-  "latency_p95_ms": 26.941508402524047,
-  "latency_p99_ms": 29.380735283193644,
-  "latency_mean_ms": 10.763541588590563,
+  "latency_p50_ms": 0.4777909998665564,
+  "latency_p95_ms": 16.40685860256781,
+  "latency_p99_ms": 16.79433811819763,
+  "latency_mean_ms": 5.247572315152195,
   "by_category": {
     "concepts": {
       "category": "concepts",
-      "query_count": 6,
-      "top_1_path_hits": 6,
-      "top_5_path_hits": 6,
-      "top_1_keyword_hits": 2,
-      "top_5_keyword_hits": 2,
+      "query_count": 8,
+      "top_1_path_hits": 8,
+      "top_5_path_hits": 8,
+      "top_1_keyword_hits": 3,
+      "top_5_keyword_hits": 3,
       "top_1_path_accuracy": 1.0,
       "top_5_path_accuracy": 1.0,
-      "top_1_keyword_accuracy": 0.3333333333333333,
-      "top_5_keyword_accuracy": 0.3333333333333333,
-      "avg_latency_ms": 5.942978999276723
+      "top_1_keyword_accuracy": 0.375,
+      "top_5_keyword_accuracy": 0.375,
+      "avg_latency_ms": 6.378161375323543
     },
     "config": {
       "category": "config",
@@ -39,7 +39,7 @@
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 0.0,
       "top_5_keyword_accuracy": 0.0,
-      "avg_latency_ms": 0.32590266831296805
+      "avg_latency_ms": 0.30580566575129825
     },
     "troubleshooting": {
       "category": "troubleshooting",
@@ -52,20 +52,20 @@
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 0.0,
       "top_5_keyword_accuracy": 0.0,
-      "avg_latency_ms": 0.18312500469619408
+      "avg_latency_ms": 0.36754099710378796
     },
     "indexing": {
       "category": "indexing",
       "query_count": 1,
       "top_1_path_hits": 1,
       "top_5_path_hits": 1,
-      "top_1_keyword_hits": 1,
-      "top_5_keyword_hits": 1,
+      "top_1_keyword_hits": 0,
+      "top_5_keyword_hits": 0,
       "top_1_path_accuracy": 1.0,
       "top_5_path_accuracy": 1.0,
-      "top_1_keyword_accuracy": 1.0,
-      "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 26.179250002314802
+      "top_1_keyword_accuracy": 0.0,
+      "top_5_keyword_accuracy": 0.0,
+      "avg_latency_ms": 0.2948749970528297
     },
     "features": {
       "category": "features",
@@ -78,44 +78,44 @@
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 1.0,
       "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 23.188500003016088
+      "avg_latency_ms": 15.532125500612892
     },
     "search": {
       "category": "search",
       "query_count": 2,
       "top_1_path_hits": 2,
       "top_5_path_hits": 2,
-      "top_1_keyword_hits": 2,
-      "top_5_keyword_hits": 2,
+      "top_1_keyword_hits": 1,
+      "top_5_keyword_hits": 1,
       "top_1_path_accuracy": 1.0,
       "top_5_path_accuracy": 1.0,
-      "top_1_keyword_accuracy": 1.0,
-      "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 16.782291499112034
+      "top_1_keyword_accuracy": 0.5,
+      "top_5_keyword_accuracy": 0.5,
+      "avg_latency_ms": 7.446166498993989
     },
     "metrics": {
       "category": "metrics",
       "query_count": 2,
       "top_1_path_hits": 2,
       "top_5_path_hits": 2,
-      "top_1_keyword_hits": 1,
-      "top_5_keyword_hits": 2,
+      "top_1_keyword_hits": 0,
+      "top_5_keyword_hits": 0,
       "top_1_path_accuracy": 1.0,
       "top_5_path_accuracy": 1.0,
-      "top_1_keyword_accuracy": 0.5,
-      "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 20.02033349708654
+      "top_1_keyword_accuracy": 0.0,
+      "top_5_keyword_accuracy": 0.0,
+      "avg_latency_ms": 0.5710829973395448
     }
   },
   "by_file_type": {
     ".md": {
       "file_type": ".md",
-      "query_count": 17,
-      "top_1_path_hits": 17,
-      "top_5_path_hits": 17,
+      "query_count": 19,
+      "top_1_path_hits": 19,
+      "top_5_path_hits": 19,
       "top_1_accuracy": 1.0,
       "top_5_accuracy": 1.0,
-      "avg_latency_ms": 10.763541588590563
+      "avg_latency_ms": 5.247572315152195
     }
   },
   "results": [
@@ -128,7 +128,7 @@
       "top_5_keyword_hit": false,
       "retrieved_path": "glossary/bm25.md",
       "retrieved_score": 2.0011212825775146,
-      "latency_ms": 0.7099170034052804,
+      "latency_ms": 0.5000419987482019,
       "keywords_found": [],
       "keywords_missing": [
         "BM25",
@@ -138,8 +138,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false,
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
       "category": "concepts"
     },
     {
@@ -151,7 +151,7 @@
       "top_5_keyword_hit": false,
       "retrieved_path": "glossary/embeddings.md",
       "retrieved_score": 2.3108747005462646,
-      "latency_ms": 0.3954579951823689,
+      "latency_ms": 0.4108749999431893,
       "keywords_found": [],
       "keywords_missing": [
         "embeddings",
@@ -161,8 +161,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false,
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
       "category": "concepts"
     },
     {
@@ -174,7 +174,7 @@
       "top_5_keyword_hit": false,
       "retrieved_path": "config/embedding-backend.md",
       "retrieved_score": 4.359013080596924,
-      "latency_ms": 0.5148749987711199,
+      "latency_ms": 0.24254200252471492,
       "keywords_found": [],
       "keywords_missing": [
         "EMBEDDING_BACKEND",
@@ -184,8 +184,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false,
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
       "category": "config"
     },
     {
@@ -197,7 +197,7 @@
       "top_5_keyword_hit": false,
       "retrieved_path": "config/index-path.md",
       "retrieved_score": 1.2808901071548462,
-      "latency_ms": 0.19600000086938962,
+      "latency_ms": 0.20720799511764199,
       "keywords_found": [],
       "keywords_missing": [
         "INDEX_PATH",
@@ -206,8 +206,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false,
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
       "category": "config"
     },
     {
@@ -219,7 +219,7 @@
       "top_5_keyword_hit": false,
       "retrieved_path": "config/reranker.md",
       "retrieved_score": 2.612452745437622,
-      "latency_ms": 0.2668330052983947,
+      "latency_ms": 0.4676669996115379,
       "keywords_found": [],
       "keywords_missing": [
         "RERANKER_ENABLED",
@@ -228,8 +228,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false,
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
       "category": "config"
     },
     {
@@ -241,7 +241,7 @@
       "top_5_keyword_hit": false,
       "retrieved_path": "troubleshooting/conflicting-roots.md",
       "retrieved_score": 5.6030049324035645,
-      "latency_ms": 0.18312500469619408,
+      "latency_ms": 0.36754099710378796,
       "keywords_found": [],
       "keywords_missing": [
         "mutually exclusive",
@@ -250,8 +250,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false,
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
       "category": "troubleshooting"
     },
     {
@@ -263,7 +263,7 @@
       "top_5_keyword_hit": false,
       "retrieved_path": "glossary/bm25.md",
       "retrieved_score": 5.51276969909668,
-      "latency_ms": 0.21445799939101562,
+      "latency_ms": 0.3257080024923198,
       "keywords_found": [],
       "keywords_missing": [
         "term frequency",
@@ -272,8 +272,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false,
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
       "category": "concepts"
     },
     {
@@ -281,21 +281,21 @@
       "query": "keep sentences from being cut off where two chunks meet",
       "top_1_path_hit": true,
       "top_5_path_hit": true,
-      "top_1_keyword_hit": true,
-      "top_5_keyword_hit": true,
+      "top_1_keyword_hit": false,
+      "top_5_keyword_hit": false,
       "retrieved_path": "indexing/chunk-overlap.md",
-      "retrieved_score": 0.6519870758056641,
-      "latency_ms": 26.179250002314802,
-      "keywords_found": [
+      "retrieved_score": 4.257432460784912,
+      "latency_ms": 0.2948749970528297,
+      "keywords_found": [],
+      "keywords_missing": [
         "overlap",
         "chunk"
       ],
-      "keywords_missing": [],
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true,
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
       "category": "indexing"
     },
     {
@@ -307,7 +307,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "features/reranking.md",
       "retrieved_score": 0.3964656591415405,
-      "latency_ms": 29.990542003361043,
+      "latency_ms": 14.711208998051006,
       "keywords_found": [
         "reranking",
         "relevance"
@@ -316,8 +316,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true,
+      "adaptive_strategy": "hybrid",
+      "adaptive_fallback_used": true,
       "category": "features"
     },
     {
@@ -325,21 +325,21 @@
       "query": "blend two ranked result lists without any training",
       "top_1_path_hit": true,
       "top_5_path_hit": true,
-      "top_1_keyword_hit": true,
-      "top_5_keyword_hit": true,
+      "top_1_keyword_hit": false,
+      "top_5_keyword_hit": false,
       "retrieved_path": "glossary/rrf.md",
-      "retrieved_score": 0.516713559627533,
-      "latency_ms": 16.125750000355765,
-      "keywords_found": [
+      "retrieved_score": 7.7935590744018555,
+      "latency_ms": 0.41149999742629007,
+      "keywords_found": [],
+      "keywords_missing": [
         "rank",
         "fusion"
       ],
-      "keywords_missing": [],
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true,
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
       "category": "search"
     },
     {
@@ -351,7 +351,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "glossary/cosine-similarity.md",
       "retrieved_score": 0.4904261827468872,
-      "latency_ms": 17.107457999372855,
+      "latency_ms": 16.891207997105084,
       "keywords_found": [
         "cosine",
         "angle"
@@ -360,8 +360,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true,
+      "adaptive_strategy": "hybrid",
+      "adaptive_fallback_used": true,
       "category": "concepts"
     },
     {
@@ -373,7 +373,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "glossary/ann-search.md",
       "retrieved_score": 0.5742923617362976,
-      "latency_ms": 16.89629199972842,
+      "latency_ms": 15.763750001497101,
       "keywords_found": [
         "nearest neighbor",
         "vector"
@@ -382,8 +382,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true,
+      "adaptive_strategy": "hybrid",
+      "adaptive_fallback_used": true,
       "category": "concepts"
     },
     {
@@ -391,21 +391,21 @@
       "query": "metric that only cares how high the first correct answer lands",
       "top_1_path_hit": true,
       "top_5_path_hit": true,
-      "top_1_keyword_hit": true,
-      "top_5_keyword_hit": true,
+      "top_1_keyword_hit": false,
+      "top_5_keyword_hit": false,
       "retrieved_path": "glossary/mrr.md",
-      "retrieved_score": 0.40917056798934937,
-      "latency_ms": 19.314458993903827,
-      "keywords_found": [
+      "retrieved_score": 2.4661121368408203,
+      "latency_ms": 0.6643749948125333,
+      "keywords_found": [],
+      "keywords_missing": [
         "reciprocal",
         "rank"
       ],
-      "keywords_missing": [],
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true,
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
       "category": "metrics"
     },
     {
@@ -417,7 +417,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "features/cross-encoder.md",
       "retrieved_score": 0.5048666000366211,
-      "latency_ms": 16.386458002671134,
+      "latency_ms": 16.353042003174778,
       "keywords_found": [
         "cross-encoder",
         "relevance"
@@ -426,8 +426,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true,
+      "adaptive_strategy": "hybrid",
+      "adaptive_fallback_used": true,
       "category": "features"
     },
     {
@@ -439,7 +439,7 @@
       "top_5_keyword_hit": false,
       "retrieved_path": "glossary/tf-idf.md",
       "retrieved_score": 3.401020050048828,
-      "latency_ms": 0.3342909985803999,
+      "latency_ms": 0.7174580023274757,
       "keywords_found": [],
       "keywords_missing": [
         "inverse document frequency",
@@ -448,8 +448,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false,
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
       "category": "concepts"
     },
     {
@@ -461,7 +461,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "search/hybrid-search.md",
       "retrieved_score": 0.46570277214050293,
-      "latency_ms": 17.438832997868303,
+      "latency_ms": 14.480833000561688,
       "keywords_found": [
         "hybrid",
         "semantic"
@@ -470,8 +470,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true,
+      "adaptive_strategy": "hybrid",
+      "adaptive_fallback_used": true,
       "category": "search"
     },
     {
@@ -480,27 +480,73 @@
       "top_1_path_hit": true,
       "top_5_path_hit": true,
       "top_1_keyword_hit": false,
-      "top_5_keyword_hit": true,
+      "top_5_keyword_hit": false,
       "retrieved_path": "glossary/ndcg.md",
-      "retrieved_score": 0.46332597732543945,
-      "latency_ms": 20.726208000269253,
-      "keywords_found": [
+      "retrieved_score": 4.345420837402344,
+      "latency_ms": 0.4777909998665564,
+      "keywords_found": [],
+      "keywords_missing": [
         "relevance",
         "rank"
+      ],
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
+      "path_hit_within_max_rank": true,
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
+      "category": "metrics"
+    },
+    {
+      "query_id": "stress-bm25",
+      "query": "Which bag-of-words scoring model dampens term frequency and normalizes by document length?",
+      "top_1_path_hit": true,
+      "top_5_path_hit": true,
+      "top_1_keyword_hit": false,
+      "top_5_keyword_hit": false,
+      "retrieved_path": "glossary/bm25.md",
+      "retrieved_score": 7.082035064697266,
+      "latency_ms": 0.4685000021709129,
+      "keywords_found": [],
+      "keywords_missing": [
+        "BM25",
+        "keyword",
+        "ranking"
+      ],
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
+      "path_hit_within_max_rank": true,
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
+      "category": "concepts"
+    },
+    {
+      "query_id": "stress-hybrid",
+      "query": "I need both lexical overlap and semantic similarity in one result list\u2014what pattern should I read about first?",
+      "top_1_path_hit": true,
+      "top_5_path_hit": true,
+      "top_1_keyword_hit": true,
+      "top_5_keyword_hit": true,
+      "retrieved_path": "search/hybrid-search.md",
+      "retrieved_score": 0.46949803829193115,
+      "latency_ms": 15.947749998304062,
+      "keywords_found": [
+        "hybrid search",
+        "semantic",
+        "keyword"
       ],
       "keywords_missing": [],
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true,
-      "category": "metrics"
+      "adaptive_strategy": "hybrid",
+      "adaptive_fallback_used": true,
+      "category": "concepts"
     }
   ],
   "regression": null,
-  "include_stress": false,
+  "include_stress": true,
   "stress_only": false,
   "strict_keywords": false,
   "strict_keywords_top1": false,
-  "smart_fallback_rate": 0.5294117647058824
+  "adaptive_fallback_rate": 0.3157894736842105
 }

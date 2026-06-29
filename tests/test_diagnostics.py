@@ -325,7 +325,7 @@ def test_registry_probe_uses_existing_indexes_without_rebuild(tmp_path):
     from unittest.mock import patch
 
     from tests.test_runtime_hardening import FakeBackend
-    from trace_search.retrieval.search import SearchRoute, SmartSearchResult
+    from trace_search.retrieval.search import SearchRoute, AdaptiveSearchResult
     from trace_search.collections.collection_registry import CollectionRegistry
 
     kb = tmp_path / "kb"
@@ -346,8 +346,8 @@ def test_registry_probe_uses_existing_indexes_without_rebuild(tmp_path):
         chunk_count=0,
     )
     write_index_metadata(col.index_path, metadata)
-    fake_smart = SimpleNamespace(
-        search=lambda query, top_k: SmartSearchResult(
+    fake_adaptive = SimpleNamespace(
+        search=lambda query, top_k: AdaptiveSearchResult(
             hits=[{"path": "intro.md", "score": 1.0}],
             route=SearchRoute(
                 strategy="keyword",
@@ -357,8 +357,8 @@ def test_registry_probe_uses_existing_indexes_without_rebuild(tmp_path):
         )
     )
 
-    with patch.object(col, "get_smart", return_value=fake_smart) as get_smart:
+    with patch.object(col, "get_adaptive", return_value=fake_adaptive) as get_adaptive:
         hits = registry.probe_search("intro", 5, "docs")
 
     assert hits == [{"path": "intro.md", "score": 1.0}]
-    get_smart.assert_called_once_with(registry.backend, skip_build=True)
+    get_adaptive.assert_called_once_with(registry.backend, skip_build=True)

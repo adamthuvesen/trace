@@ -263,7 +263,7 @@ class TestGetDocumentErrorEnvelope:
 
 
 class TestCollectionRebuild:
-    def test_get_smart_can_skip_implicit_index_build(self, tmp_path):
+    def test_get_adaptive_can_skip_implicit_index_build(self, tmp_path):
         """Doctor probes need existing indexes without triggering reindex."""
         from types import SimpleNamespace
         from unittest.mock import MagicMock, patch
@@ -279,12 +279,12 @@ class TestCollectionRebuild:
         fake_indexer = SimpleNamespace(collection=MagicMock(), backend=FakeBackend())
 
         with patch.object(col, "ensure_index", return_value=fake_indexer) as ensure:
-            col.get_smart(skip_build=True)
+            col.get_adaptive(skip_build=True)
 
         ensure.assert_called_once_with(None, skip_build=True)
-        assert col._smart is None
+        assert col._adaptive is None
 
-    def test_get_smart_after_skip_build_uses_normal_cached_path(self, tmp_path):
+    def test_get_adaptive_after_skip_build_uses_normal_cached_path(self, tmp_path):
         """A doctor probe must not poison later normal search initialization."""
         from types import SimpleNamespace
         from unittest.mock import MagicMock, patch
@@ -300,13 +300,13 @@ class TestCollectionRebuild:
         fake_indexer = SimpleNamespace(collection=MagicMock(), backend=FakeBackend())
 
         with patch.object(col, "ensure_index", return_value=fake_indexer) as ensure:
-            col.get_smart(skip_build=True)
-            col.get_smart()
+            col.get_adaptive(skip_build=True)
+            col.get_adaptive()
 
         assert ensure.call_args_list[0].kwargs == {"skip_build": True}
         assert ensure.call_args_list[1].args == (None,)
         assert ensure.call_args_list[1].kwargs == {}
-        assert col._smart is not None
+        assert col._adaptive is not None
 
     def test_rebuild_force_clears_caches_and_returns_chunk_count(self, tmp_path):
         """rebuild(force=True) must clear all four caches and return the new chunk count."""

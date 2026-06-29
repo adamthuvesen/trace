@@ -10,7 +10,7 @@ __all__ = [
     "SemanticSearch",
     "KeywordSearch",
     "HybridSearch",
-    "SmartSearch",
+    "AdaptiveSearch",
     "format_results",
     "format_context_packets",
     "CollectionRegistry",
@@ -27,7 +27,7 @@ def __getattr__(name: str):
         "SemanticSearch",
         "KeywordSearch",
         "HybridSearch",
-        "SmartSearch",
+        "AdaptiveSearch",
         "format_results",
         "format_context_packets",
     }:

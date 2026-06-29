@@ -112,8 +112,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "lexical"
     },
     {
@@ -134,8 +134,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "lexical"
     },
     {
@@ -157,8 +157,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "paraphrase"
     },
     {
@@ -180,8 +180,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "paraphrase"
     },
     {
@@ -203,8 +203,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "hybrid"
     },
     {
@@ -226,8 +226,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "hybrid"
     },
     {
@@ -249,8 +249,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "rerank"
     },
     {
@@ -272,8 +272,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "ambiguous"
     }
   ],
@@ -282,5 +282,5 @@
   "stress_only": false,
   "strict_keywords": false,
   "strict_keywords_top1": false,
-  "smart_fallback_rate": null
+  "adaptive_fallback_rate": null
 }

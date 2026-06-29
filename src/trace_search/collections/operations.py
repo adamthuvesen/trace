@@ -46,7 +46,9 @@ class TraceOperations:
         since: str | None = None,
     ) -> str:
         filters = _build_filters(path_prefix, extensions, since)
-        result = self.registry.search_smart(query, top_k, collection, filters=filters)
+        result = self.registry.search_adaptive(
+            query, top_k, collection, filters=filters
+        )
         return format_context_packets(result.hits, query=query, route=result.route)
 
     def semantic_search(

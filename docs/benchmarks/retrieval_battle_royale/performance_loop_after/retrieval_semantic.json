@@ -138,8 +138,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "concepts"
     },
     {
@@ -161,8 +161,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "concepts"
     },
     {
@@ -184,8 +184,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "config"
     },
     {
@@ -206,8 +206,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "config"
     },
     {
@@ -228,8 +228,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "config"
     },
     {
@@ -250,8 +250,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "troubleshooting"
     },
     {
@@ -272,8 +272,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "concepts"
     },
     {
@@ -294,8 +294,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "indexing"
     },
     {
@@ -316,8 +316,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "features"
     },
     {
@@ -338,8 +338,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "search"
     },
     {
@@ -360,8 +360,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "concepts"
     },
     {
@@ -382,8 +382,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "concepts"
     },
     {
@@ -404,8 +404,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "metrics"
     },
     {
@@ -426,8 +426,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "features"
     },
     {
@@ -448,8 +448,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "concepts"
     },
     {
@@ -470,8 +470,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "search"
     },
     {
@@ -492,8 +492,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "metrics"
     },
     {
@@ -515,8 +515,8 @@
       "path_first_hit_rank": 2,
       "path_reciprocal_rank": 0.5,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "concepts"
     },
     {
@@ -538,8 +538,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": null,
-      "smart_fallback_used": null,
+      "adaptive_strategy": null,
+      "adaptive_fallback_used": null,
       "category": "concepts"
     }
   ],
@@ -548,5 +548,5 @@
   "stress_only": false,
   "strict_keywords": false,
   "strict_keywords_top1": false,
-  "smart_fallback_rate": null
+  "adaptive_fallback_rate": null
 }

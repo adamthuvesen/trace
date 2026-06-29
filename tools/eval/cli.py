@@ -47,7 +47,11 @@ from pathlib import Path
 
 import click
 
-from tools.eval.evaluator import load_golden_queries, run_evaluation
+from tools.eval.evaluator import (
+    SEARCH_MODES,
+    load_golden_queries,
+    run_evaluation,
+)
 from tools.eval.regression import (
     check_ci_thresholds,
     compare_results,
@@ -99,12 +103,12 @@ def resolve_eval_scope(
 )
 @click.option(
     "--search",
-    type=click.Choice(["semantic", "bm25", "hybrid", "reranked", "smart"]),
+    type=click.Choice(SEARCH_MODES),
     default="hybrid",
     help=(
         "Search mode to evaluate "
         "(default: hybrid; reranked forces cross-encoder reranking; "
-        "smart matches MCP default)"
+        "adaptive matches MCP default)"
     ),
 )
 @click.option(

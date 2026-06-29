@@ -1,11 +1,11 @@
 # Wiki Search Evaluation Report
 
-**Timestamp:** 2026-06-21T19:37:28.640412+00:00
-**Search Mode:** smart
+**Timestamp:** 2026-06-21T19:30:54.414935+00:00
+**Search Mode:** adaptive
 **Embedding Model:** all-MiniLM-L6-v2
-**Total Queries:** 17
+**Total Queries:** 8
 **Quick Set Only:** No
-**Smart fallback rate:** 29.4%
+**Adaptive fallback rate:** 50.0%
 
 ## Overall Metrics
 
@@ -13,8 +13,8 @@
 |--------|-------|--------|--------|
 | Top-1 Path Accuracy | 100.0% | ✓ | ≥75% |
 | Top-5 Path Accuracy | 100.0% | ✓ | ≥95% |
-| Top-1 Keyword Accuracy | 94.1% | ✓ | ≥80% |
-| Top-5 Keyword Accuracy | 100.0% | ✓ | ≥95% |
+| Top-1 Keyword Accuracy | 50.0% | ✗ | ≥80% |
+| Top-5 Keyword Accuracy | 50.0% | ✗ | ≥95% |
 | Mean Reciprocal Rank (path) | 1.000 | - | - |
 | Within max_rank Path | 100.0% | - | - |
 
@@ -22,25 +22,23 @@
 
 | Percentile | Value | Target |
 |------------|-------|--------|
-| p50 | 0.4ms | ≤20ms |
-| p95 | 18.9ms | ≤50ms |
-| p99 | 21.0ms | ≤100ms |
-| mean | 5.9ms | - |
+| p50 | 10.6ms | ≤20ms |
+| p95 | 46.2ms | ≤50ms |
+| p99 | 52.2ms | ≤100ms |
+| mean | 16.9ms | - |
 
 ## By Category
 
 | Category | Queries | Top-1 Path | Top-5 Path | Top-1 KW | Latency |
 |----------|---------|------------|------------|----------|---------|
-| concepts | 6 | 100% | 100% | 100% | 8.6ms |
-| config | 3 | 100% | 100% | 100% | 0.3ms |
-| features | 2 | 100% | 100% | 100% | 17.0ms |
-| indexing | 1 | 100% | 100% | 100% | 0.3ms |
-| metrics | 2 | 100% | 100% | 50% | 0.3ms |
-| search | 2 | 100% | 100% | 100% | 6.6ms |
-| troubleshooting | 1 | 100% | 100% | 100% | 0.4ms |
+| ambiguous | 1 | 100% | 100% | 100% | 53.6ms |
+| hybrid | 2 | 100% | 100% | 0% | 0.5ms |
+| lexical | 2 | 100% | 100% | 0% | 0.4ms |
+| paraphrase | 2 | 100% | 100% | 100% | 23.8ms |
+| rerank | 1 | 100% | 100% | 100% | 32.4ms |
 
 ## By File Type
 
 | Type | Queries | Top-1 | Top-5 | Latency |
 |------|---------|-------|-------|---------|
-| .md | 17 | 100% | 100% | 5.9ms |
+| .md | 8 | 100% | 100% | 16.9ms |

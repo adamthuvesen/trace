@@ -374,11 +374,11 @@ class TestMultiCollectionFilters:
             col.ensure_index(registry.backend)
         return registry
 
-    def test_smart_search_path_prefix_scopes_each_collection(self, tmp_path):
+    def test_adaptive_search_path_prefix_scopes_each_collection(self, tmp_path):
         from trace_search.retrieval.search import parse_filters
 
         registry = self._make_registry(tmp_path)
-        result = registry.search_smart(
+        result = registry.search_adaptive(
             "router",
             top_k=5,
             collection=None,

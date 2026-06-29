@@ -1,11 +1,11 @@
 # Wiki Search Evaluation Report
 
 **Timestamp:** 2026-06-21T19:37:06.759227+00:00
-**Search Mode:** smart
+**Search Mode:** adaptive
 **Embedding Model:** all-MiniLM-L6-v2
 **Total Queries:** 8
 **Quick Set Only:** No
-**Smart fallback rate:** 12.5%
+**Adaptive fallback rate:** 12.5%
 
 ## Overall Metrics
 

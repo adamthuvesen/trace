@@ -5,7 +5,7 @@ modes:
   - semantic
   - hybrid
   - reranked
-  - smart
+  - adaptive
 knowledge_bases:
   - id: retrieval
     name: Retrieval concepts fixture
