@@ -47,7 +47,12 @@ from pathlib import Path
 
 import click
 
-from tools.eval.evaluator import load_golden_queries, run_evaluation
+from tools.eval.evaluator import (
+    SEARCH_MODES,
+    load_golden_queries,
+    normalize_search_mode,
+    run_evaluation,
+)
 from tools.eval.regression import (
     check_ci_thresholds,
     compare_results,
@@ -99,12 +104,12 @@ def resolve_eval_scope(
 )
 @click.option(
     "--search",
-    type=click.Choice(["semantic", "bm25", "hybrid", "reranked", "smart"]),
+    type=click.Choice(SEARCH_MODES),
     default="hybrid",
     help=(
         "Search mode to evaluate "
         "(default: hybrid; reranked forces cross-encoder reranking; "
-        "smart matches MCP default)"
+        "adaptive matches MCP default; smart is a deprecated alias)"
     ),
 )
 @click.option(
@@ -204,6 +209,8 @@ def main(
         raise click.UsageError("Cannot specify both --ci and --ci-stress")
     if strict_keywords_top1 and not strict_keywords:
         raise click.UsageError("--strict-keywords-top1 requires --strict-keywords")
+
+    search = normalize_search_mode(search)
 
     ci_mode = ci or ci_stress
     quick_only, stress_only, include_stress_queries = resolve_eval_scope(

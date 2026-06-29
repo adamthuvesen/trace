@@ -8,7 +8,7 @@ Trace has five evaluated retrieval modes:
 | `semantic` | Natural-language paraphrases and conceptual lookups when exact terms are missing. Semantic search now applies a small lexical tie-break across its vector candidates so exact titles and headers are not buried by near-topic matches. | You need deterministic exact-token behavior for API headers, status codes, env vars, or highly confusable adjacent concepts. |
 | `hybrid` | Mixed lexical and semantic queries, especially technical noun phrases and queries with identifiers plus prose. | Ultra-low latency matters more than first-rank quality. |
 | `reranked` | Final-quality shortlist ranking when a cross-encoder is acceptable. It uses the hybrid candidate set, then reranks candidates. | Default interactive search; the battle suite showed the same Hit@1 as hybrid with higher latency. |
-| `smart` | Default MCP/CLI search. It starts with BM25, trusts strong lexical hits, and falls back to hybrid for conceptual or weak keyword results. | You are debugging one retrieval method in isolation. Use the specialist modes instead. |
+| `adaptive` | Default MCP/CLI search. It starts with BM25, trusts strong lexical hits, and falls back to hybrid for conceptual or weak keyword results. | You are debugging one retrieval method in isolation. Use the specialist modes instead. |
 
 ## Battle Results
 
@@ -33,7 +33,7 @@ Final after-tuning aggregate:
 | `semantic` | 35 | 94.3% | 100.0% | 0.971 | 30.7ms |
 | `hybrid` | 35 | 100.0% | 100.0% | 1.000 | 31.6ms |
 | `reranked` | 35 | 100.0% | 100.0% | 1.000 | 44.3ms |
-| `smart` | 35 | 100.0% | 100.0% | 1.000 | 26.2ms |
+| `adaptive` | 35 | 100.0% | 100.0% | 1.000 | 26.2ms |
 
 Full reports:
 
@@ -46,7 +46,7 @@ Hit@1, Hit@5, MRR, latency, and top-1 failure buckets.
 ## Challenge Suite
 
 The default battle suite is intentionally small enough for smoke testing and is
-now saturated for `smart` retrieval quality. Use the larger contrast-heavy suite
+now saturated for `adaptive` retrieval quality. Use the larger contrast-heavy suite
 when tuning retrieval ranking:
 
 ```bash
@@ -63,7 +63,7 @@ Current challenge aggregate:
 | `semantic` | 61 | 82.0% | 100.0% | 0.903 | 20.3ms |
 | `hybrid` | 61 | 86.9% | 100.0% | 0.929 | 39.2ms |
 | `reranked` | 61 | 86.9% | 100.0% | 0.929 | 20.4ms |
-| `smart` | 61 | 86.9% | 100.0% | 0.928 | 15.8ms |
+| `adaptive` | 61 | 86.9% | 100.0% | 0.928 | 15.8ms |
 
 Full challenge summary:
 
@@ -76,12 +76,12 @@ local signals rather than broad corpus claims.
 
 ## Defaults
 
-No environment-variable default changed. `smart` remains the default user-facing
-search path.
+No environment-variable default changed. `adaptive` remains the default user-facing
+search path. `smart` is still accepted as a deprecated compatibility alias for `adaptive`.
 
 Two default heuristics changed because the battle suite showed repeatable misses:
 
 - Identifier-heavy and dense technical noun-phrase queries now favor lexical
-  weighting in hybrid/smart routing.
+  weighting in hybrid/adaptive routing.
 - Semantic search over-fetches a small vector candidate pool and applies a
   bounded lexical tie-break for exact titles, paths, and content overlap.

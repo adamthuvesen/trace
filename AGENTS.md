@@ -27,7 +27,7 @@ Start here:
   cli, mcp_tools, server_warmup)
 - Public import surface stays flat via
   [`trace_search/__init__.py`](src/trace_search/__init__.py) re-exports
-  (`WikiIndexer`, `SmartSearch`, `CollectionRegistry`, `format_results`, …)
+  (`WikiIndexer`, `AdaptiveSearch`, `CollectionRegistry`, `format_results`, …)
 - Indexes live under the KB root unless `INDEX_PATH` is set
 - `reindex` is incremental by default (skips unchanged files); pass `--force` / `force=true` to rebuild from scratch
 - All search tools and `list_documents` accept `path_prefix`, `extensions`, and `since` filters
@@ -36,11 +36,11 @@ Start here:
 
 Before editing a subsystem, read the matching doc:
 
-- **Retrieval modes (bm25/semantic/hybrid/smart)** → [docs/retrieval-modes.md](docs/retrieval-modes.md)
+- **Retrieval modes (bm25/semantic/hybrid/adaptive)** → [docs/retrieval-modes.md](docs/retrieval-modes.md)
 - **Running the eval harness** → [docs/evaluation.md](docs/evaluation.md)
 - **Eval / benchmark results** → [docs/benchmarks/](docs/benchmarks/)
 
-`smart` is the production MCP default: BM25-first, with semantic/hybrid fallback.
+`adaptive` is the production MCP default: BM25-first, with semantic/hybrid fallback.
 See [`retrieval/search.py`](src/trace_search/retrieval/search.py) and
 [`retrieval/bm25_tokenize.py`](src/trace_search/retrieval/bm25_tokenize.py).
 
@@ -68,7 +68,7 @@ uv run ruff format --check .
 
 # Evaluation — smoke test against the committed fixture (full guide: docs/evaluation.md)
 KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
-  uv run python -m tools.eval.cli --full --search smart
+  uv run python -m tools.eval.cli --full --search adaptive
 
 # Module size guard (no file > 1000 lines)
 uv run python scripts/check_module_sizes.py

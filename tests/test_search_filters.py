@@ -14,7 +14,7 @@ from trace_search.retrieval.search import (
     KeywordSearch,
     SearchFilters,
     SemanticSearch,
-    SmartSearch,
+    AdaptiveSearch,
     apply_filters_to_hits,
     filters_to_chroma_where,
     parse_filters,
@@ -296,10 +296,10 @@ class TestHybridSearchFilters:
         assert all(h["path"].startswith("architecture/") for h in hits)
 
 
-class TestSmartSearchFilters:
+class TestAdaptiveSearchFilters:
     def test_route_reports_active_filters(self, filter_kb):
         indexer, _ = filter_kb
-        searcher = SmartSearch(indexer, indexer.backend)
+        searcher = AdaptiveSearch(indexer, indexer.backend)
         filters = parse_filters(path_prefix="architecture/")
         result = searcher.search("router", top_k=5, filters=filters)
         assert result.route.filters.path_prefix == ("architecture/",)
@@ -307,6 +307,6 @@ class TestSmartSearchFilters:
 
     def test_default_search_has_empty_route_filters(self, filter_kb):
         indexer, _ = filter_kb
-        searcher = SmartSearch(indexer, indexer.backend)
+        searcher = AdaptiveSearch(indexer, indexer.backend)
         result = searcher.search("router", top_k=5)
         assert result.route.filters.is_empty

@@ -96,8 +96,8 @@ class QueryResult:
     path_first_hit_rank: int | None = None
     path_reciprocal_rank: float = 0.0
     path_hit_within_max_rank: bool = False
-    smart_strategy: str | None = None
-    smart_fallback_used: bool | None = None
+    adaptive_strategy: str | None = None
+    adaptive_fallback_used: bool | None = None
     category: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -116,8 +116,8 @@ class QueryResult:
             "path_first_hit_rank": self.path_first_hit_rank,
             "path_reciprocal_rank": self.path_reciprocal_rank,
             "path_hit_within_max_rank": self.path_hit_within_max_rank,
-            "smart_strategy": self.smart_strategy,
-            "smart_fallback_used": self.smart_fallback_used,
+            "adaptive_strategy": self.adaptive_strategy,
+            "adaptive_fallback_used": self.adaptive_fallback_used,
             "category": self.category,
         }
 
@@ -298,7 +298,7 @@ class EvaluationReport:
     stress_only: bool = False
     strict_keywords: bool = False
     strict_keywords_top1: bool = False
-    smart_fallback_rate: float | None = None
+    adaptive_fallback_rate: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -325,7 +325,7 @@ class EvaluationReport:
             "stress_only": self.stress_only,
             "strict_keywords": self.strict_keywords,
             "strict_keywords_top1": self.strict_keywords_top1,
-            "smart_fallback_rate": self.smart_fallback_rate,
+            "adaptive_fallback_rate": self.adaptive_fallback_rate,
         }
 
     @classmethod
@@ -393,8 +393,8 @@ class EvaluationReport:
                     path_first_hit_rank=r.get("path_first_hit_rank"),
                     path_reciprocal_rank=r.get("path_reciprocal_rank", 0.0),
                     path_hit_within_max_rank=r.get("path_hit_within_max_rank", False),
-                    smart_strategy=r.get("smart_strategy"),
-                    smart_fallback_used=r.get("smart_fallback_used"),
+                    adaptive_strategy=r.get("adaptive_strategy"),
+                    adaptive_fallback_used=r.get("adaptive_fallback_used"),
                     category=r.get("category", ""),
                 )
             )
@@ -425,4 +425,5 @@ class EvaluationReport:
             stress_only=data.get("stress_only", False),
             strict_keywords=data.get("strict_keywords", False),
             strict_keywords_top1=data.get("strict_keywords_top1", False),
+            adaptive_fallback_rate=data.get("adaptive_fallback_rate"),
         )

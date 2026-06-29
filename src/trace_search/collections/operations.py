@@ -46,8 +46,29 @@ class TraceOperations:
         since: str | None = None,
     ) -> str:
         filters = _build_filters(path_prefix, extensions, since)
-        result = self.registry.search_smart(query, top_k, collection, filters=filters)
+        result = self.registry.search_adaptive(
+            query, top_k, collection, filters=filters
+        )
         return format_context_packets(result.hits, query=query, route=result.route)
+
+    def search_smart(
+        self,
+        query: str,
+        top_k: int = 10,
+        collection: str | None = None,
+        path_prefix: str | list[str] | None = None,
+        extensions: str | list[str] | None = None,
+        since: str | None = None,
+    ) -> str:
+        """Deprecated alias for search()."""
+        return self.search(
+            query,
+            top_k,
+            collection,
+            path_prefix=path_prefix,
+            extensions=extensions,
+            since=since,
+        )
 
     def semantic_search(
         self,

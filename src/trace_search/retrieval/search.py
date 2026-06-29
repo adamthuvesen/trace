@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import heapq
 import logging
+import math
 import re
 from collections import OrderedDict, defaultdict
 from collections.abc import Callable
@@ -27,15 +28,16 @@ from trace_search.retrieval.formatting import (  # noqa: F401 — package re-exp
     format_results,
 )
 from trace_search.retrieval.query_profile import (
+    ADAPTIVE_KEYWORD_STRENGTH_TOP_K,
     BM25_DOMINANCE_MARGIN,
     BM25_DECISIVE_TOP_MARGIN,
     BM25_STRONG_HIT_FRACTION,
     BM25_WEAK_BEST_SCORE,
-    SMART_KEYWORD_STRENGTH_TOP_K,
     classify_query,
     is_conceptual_query,
+    is_keywordish_query,
 )
-from trace_search.retrieval.search_types import SearchRoute, SmartSearchResult
+from trace_search.retrieval.search_types import AdaptiveSearchResult, SearchRoute
 
 if TYPE_CHECKING:
     from trace_search.indexing.wiki_indexer import WikiIndexer
@@ -46,6 +48,11 @@ logger = logging.getLogger(__name__)
 # are active. Keeps per-query latency bounded even on very large corpora.
 _FILTER_OVERSAMPLE = 5
 _MAX_OVERSAMPLE_FETCH = 500
+_BM25_FILE_OVERSAMPLE = 6
+_BM25_MIN_FILE_FETCH = 50
+_BM25_WEAK_FILE_SCORE_LOG_FACTOR = 0.72
+_BM25_WEAK_METADATA_OVERLAP = 0.20
+_ADAPTIVE_MIN_FALLBACK_SEMANTIC_SCORE = 0.40
 _SEMANTIC_OVERSAMPLE = 1
 _SEMANTIC_MAX_CANDIDATES = 50
 _SEMANTIC_STOPWORDS = frozenset(
@@ -267,11 +274,14 @@ def _normalize_rank_term(term: str) -> str:
 
 
 def _rank_terms(text: str, *, remove_stopwords: bool = False) -> set[str]:
-    terms = {
-        _normalize_rank_term(term)
-        for term in re.findall(r"[A-Za-z0-9_/-]+", text)
-        if len(term) > 1
-    }
+    terms: set[str] = set()
+    for term in re.findall(r"[A-Za-z0-9_/-]+", text):
+        if len(term) <= 1:
+            continue
+        terms.add(_normalize_rank_term(term))
+        for part in re.split(r"[/_-]+", term):
+            if len(part) > 1:
+                terms.add(_normalize_rank_term(part))
     if remove_stopwords:
         terms -= _SEMANTIC_STOPWORDS
     return terms
@@ -306,6 +316,99 @@ def _semantic_lexical_boost(query: str, hit: dict[str, Any]) -> float:
             boost += min(0.18, 0.22 * content_overlap)
 
     return min(boost, 0.30)
+
+
+def _metadata_overlap(query_terms: set[str], hit: dict[str, Any]) -> float:
+    if not query_terms:
+        return 0.0
+    metadata_terms = (
+        _rank_terms(str(hit.get("title", "")))
+        | _rank_terms(str(hit.get("path", "")))
+        | _rank_terms(str(hit.get("breadcrumb", "")))
+        | _rank_terms(str(hit.get("folder", "")))
+    )
+    if not metadata_terms:
+        return 0.0
+    return len(query_terms & metadata_terms) / len(query_terms)
+
+
+def _keyword_fetch_size(max_results: int, filters: SearchFilters) -> int:
+    fetch_n = _candidate_fetch_size(max_results, filters)
+    if filters.is_empty:
+        fetch_n = max(fetch_n, max_results * _BM25_FILE_OVERSAMPLE)
+        fetch_n = max(fetch_n, _BM25_MIN_FILE_FETCH)
+    return min(fetch_n, _MAX_OVERSAMPLE_FETCH)
+
+
+def _weak_file_score(corpus_size: int) -> float:
+    """Scale weak-hit abstention to the BM25 score range of the corpus."""
+    return max(1.0, _BM25_WEAK_FILE_SCORE_LOG_FACTOR * math.log(max(corpus_size, 2)))
+
+
+def _aggregate_keyword_hits(
+    query: str,
+    hits: list[dict[str, Any]],
+    max_results: int,
+    *,
+    corpus_size: int,
+    require_anchor_for_weak_hits: bool = True,
+) -> list[dict[str, Any]]:
+    """Promote files with multiple good chunks while returning one hit per file."""
+    if not hits:
+        return []
+
+    query_terms = _rank_terms(query, remove_stopwords=True)
+    grouped: dict[str, dict[str, Any]] = {}
+    for rank, hit in enumerate(hits):
+        path = str(hit.get("path", ""))
+        if not path:
+            continue
+        score = float(hit.get("score", 0.0) or 0.0)
+        overlap = _metadata_overlap(query_terms, hit)
+        group = grouped.setdefault(
+            path,
+            {
+                "best_hit": hit,
+                "best_score": score,
+                "support_score": 0.0,
+                "metadata_overlap": overlap,
+                "chunk_count": 0,
+            },
+        )
+        group["chunk_count"] += 1
+        group["metadata_overlap"] = max(float(group["metadata_overlap"]), overlap)
+        if score > float(group["best_score"]):
+            group["best_hit"] = hit
+            group["best_score"] = score
+        if rank > 0:
+            group["support_score"] += score / (rank + 1)
+
+    weak_score = _weak_file_score(corpus_size)
+    ranked: list[tuple[float, int, dict[str, Any]]] = []
+    for order, group in enumerate(grouped.values()):
+        best_score = float(group["best_score"])
+        overlap = float(group["metadata_overlap"])
+        support_boost = min(2.0, 0.18 * float(group["support_score"]))
+        metadata_boost = best_score * min(0.35, 0.45 * overlap)
+        file_score = best_score + support_boost + metadata_boost
+
+        if (
+            require_anchor_for_weak_hits
+            and file_score < weak_score
+            and overlap < _BM25_WEAK_METADATA_OVERLAP
+        ):
+            continue
+
+        hit = dict(group["best_hit"])
+        hit["bm25_chunk_score"] = best_score
+        hit["bm25_file_score"] = file_score
+        hit["bm25_file_support"] = int(group["chunk_count"])
+        hit["bm25_metadata_overlap"] = overlap
+        hit["score"] = file_score
+        ranked.append((file_score, -order, hit))
+
+    ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return [hit for _, _, hit in ranked[:max_results]]
 
 
 class ChromaQueryCollection(Protocol):
@@ -460,9 +563,9 @@ class KeywordSearch:
 
         query_tokens = tokenize_keywords(keyword)
 
-        # Over-fetch when filters are active so we can return `max_results`
-        # in-scope hits after dropping out-of-scope ones.
-        fetch_n = _candidate_fetch_size(max_results, filters)
+        # Fetch a wider chunk pool so sibling chunks can vote for a file-level
+        # result before truncation.
+        fetch_n = _keyword_fetch_size(max_results, filters)
         fetch_n = min(fetch_n, len(metadata_list))
         results, scores = bm25.retrieve(query_tokens, k=fetch_n)
 
@@ -486,7 +589,13 @@ class KeywordSearch:
             built.append(hit_from_bm25(metadata, doc_content, score))
 
         hits = apply_filters_to_hits(hits_to_dicts(built), filters)
-        return hits[:max_results]
+        return _aggregate_keyword_hits(
+            keyword,
+            hits,
+            max_results,
+            corpus_size=len(metadata_list),
+            require_anchor_for_weak_hits=filters.is_empty,
+        )
 
 
 class HybridSearch:
@@ -645,12 +754,19 @@ def add_match_hints(query: str, hits: list[dict[str, Any]]) -> list[dict[str, An
     return hinted
 
 
-class SmartSearch:
-    """BM25-first search orchestration with transparent fallback behavior."""
+class AdaptiveSearch:
+    """BM25-first adaptive search with transparent fallback behavior."""
 
     def __init__(self, indexer: WikiIndexer, backend: EmbeddingBackend | None = None):
         self.keyword = KeywordSearch(indexer)
         self.hybrid = HybridSearch(indexer, backend)
+
+    @staticmethod
+    def _fallback_confident(hits: list[dict[str, Any]]) -> bool:
+        if not hits:
+            return False
+        best_score = float(hits[0].get("score", 0) or 0)
+        return best_score >= _ADAPTIVE_MIN_FALLBACK_SEMANTIC_SCORE
 
     @staticmethod
     def _keyword_strength(
@@ -663,12 +779,12 @@ class SmartSearch:
 
         best_score = float(hits[0].get("score", 0) or 0)
         distinct_docs = {hit.get("path") for hit in hits}
-        requested = max(1, min(top_k, SMART_KEYWORD_STRENGTH_TOP_K))
+        requested = max(1, min(top_k, ADAPTIVE_KEYWORD_STRENGTH_TOP_K))
         conceptual = is_conceptual_query(query)
         # Confidence for conceptual queries is the count of *strong* hits, not the
         # raw hit count: a common query word (e.g. "set" in "how do I set X")
         # matches many docs weakly and would otherwise look like a confident BM25
-        # result, letting smart skip a fallback it should take.
+        # result, letting adaptive search skip a fallback it should take.
         strong_hits = sum(
             1
             for hit in hits
@@ -680,6 +796,9 @@ class SmartSearch:
         if best_score < BM25_WEAK_BEST_SCORE:
             return False, "BM25 best score was very low"
         runner_up = float(hits[1].get("score", 0) or 0) if len(hits) > 1 else 0.0
+        metadata_overlap = float(hits[0].get("bm25_metadata_overlap", 0) or 0)
+        if conceptual and metadata_overlap > 0:
+            return True, "conceptual query had an anchored BM25 file hit"
         if len(hits) > 1 and len(distinct_docs) == 1 and conceptual:
             return False, "BM25 results were duplicate-heavy for a conceptual query"
         if (
@@ -706,11 +825,11 @@ class SmartSearch:
         query: str,
         top_k: int = 10,
         filters: SearchFilters | None = None,
-    ) -> SmartSearchResult:
+    ) -> AdaptiveSearchResult:
         """Run BM25 first, then fall back to hybrid retrieval when needed."""
         filters = filters or SearchFilters()
         if not query or not query.strip():
-            return SmartSearchResult(
+            return AdaptiveSearchResult(
                 hits=[],
                 route=SearchRoute(
                     strategy="keyword",
@@ -722,10 +841,21 @@ class SmartSearch:
 
         top_k = _clamp_top_k(top_k)
         keyword_hits = self.keyword.search(query, max_results=top_k, filters=filters)
+        if not keyword_hits and is_keywordish_query(query):
+            return AdaptiveSearchResult(
+                hits=[],
+                route=SearchRoute(
+                    strategy="keyword",
+                    reason="keyword query had no meaningful BM25 hits",
+                    fallback_used=False,
+                    filters=filters,
+                ),
+            )
+
         strong, reason = self._keyword_strength(query, keyword_hits, top_k)
 
         if strong:
-            return SmartSearchResult(
+            return AdaptiveSearchResult(
                 hits=add_match_hints(query, keyword_hits),
                 route=SearchRoute(
                     strategy="keyword",
@@ -736,7 +866,21 @@ class SmartSearch:
             )
 
         hybrid_hits = self.hybrid.search(query, top_k=top_k, filters=filters)
-        return SmartSearchResult(
+        if (
+            not keyword_hits
+            and filters.is_empty
+            and not self._fallback_confident(hybrid_hits)
+        ):
+            return AdaptiveSearchResult(
+                hits=[],
+                route=SearchRoute(
+                    strategy="hybrid",
+                    reason="hybrid fallback confidence was too low",
+                    fallback_used=True,
+                    filters=filters,
+                ),
+            )
+        return AdaptiveSearchResult(
             hits=add_match_hints(query, hybrid_hits),
             route=SearchRoute(
                 strategy="hybrid",
@@ -745,3 +889,7 @@ class SmartSearch:
                 filters=filters,
             ),
         )
+
+
+SmartSearch = AdaptiveSearch
+SmartSearchResult = AdaptiveSearchResult

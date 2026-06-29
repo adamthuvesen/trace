@@ -61,8 +61,8 @@ def generate_markdown_report(report: EvaluationReport) -> str:
         f"**Total Queries:** {report.total_queries}",
         f"**Quick Set Only:** {'Yes' if report.quick_set_only else 'No'}",
     ]
-    if report.smart_fallback_rate is not None:
-        lines.append(f"**Smart fallback rate:** {report.smart_fallback_rate:.1%}")
+    if report.adaptive_fallback_rate is not None:
+        lines.append(f"**Adaptive fallback rate:** {report.adaptive_fallback_rate:.1%}")
     lines.append("")
 
     t1_path_status = get_status_indicator(

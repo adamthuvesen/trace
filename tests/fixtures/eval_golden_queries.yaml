@@ -5,7 +5,7 @@
 # a single doc is the "right" answer but several are plausible distractors.
 #
 # Queries fall into three buckets:
-#   - lexical / exact-term  -> BM25 should win (and smart should take the fast path)
+#   - lexical / exact-term  -> BM25 should win (and adaptive should take the fast path)
 #   - paraphrase / vocab-mismatch -> the answer doc shares few surface words, so
 #     pure keyword search struggles and vector retrieval earns its keep
 #   - ambiguous -> a distractor competes hard, so ranking (MRR) suffers
@@ -14,7 +14,7 @@
 #
 #   KB_PATH=tests/fixtures/eval_kb \
 #   EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
-#   uv run python -m tools.eval.cli --full --search smart
+#   uv run python -m tools.eval.cli --full --search adaptive
 #
 # Add --include-stress to include the paraphrase stress queries at the bottom.
 version: '1.0'
@@ -39,7 +39,7 @@ queries:
   - vectors
   - meaning
   quick_set: false
-# --- Lexical / exact-term: BM25 wins, smart should take the fast path ---------
+# --- Lexical / exact-term: BM25 wins, adaptive should take the fast path ------
 - id: lex-embedding-backend
   query: EMBEDDING_BACKEND onnx torch
   category: config

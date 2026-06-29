@@ -1,32 +1,32 @@
 {
-  "timestamp": "2026-06-13T11:15:55.846202+00:00",
-  "search_mode": "smart",
+  "timestamp": "2026-06-21T19:37:28.640412+00:00",
+  "search_mode": "adaptive",
   "embedding_model": "all-MiniLM-L6-v2",
   "total_queries": 17,
   "quick_set_only": false,
-  "top_1_path_accuracy": 0.8823529411764706,
+  "top_1_path_accuracy": 1.0,
   "top_5_path_accuracy": 1.0,
-  "top_1_keyword_accuracy": 0.8235294117647058,
+  "top_1_keyword_accuracy": 0.9411764705882353,
   "top_5_keyword_accuracy": 1.0,
-  "mean_reciprocal_rank": 0.9411764705882353,
+  "mean_reciprocal_rank": 1.0,
   "within_max_rank_path_accuracy": 1.0,
-  "latency_p50_ms": 7.200292078778148,
-  "latency_p95_ms": 10.556216491386284,
-  "latency_p99_ms": 19.143843306228515,
-  "latency_mean_ms": 6.47957347716917,
+  "latency_p50_ms": 0.42799999937415123,
+  "latency_p95_ms": 18.943075201241296,
+  "latency_p99_ms": 21.025181444128975,
+  "latency_mean_ms": 5.927573471340378,
   "by_category": {
     "concepts": {
       "category": "concepts",
       "query_count": 6,
-      "top_1_path_hits": 4,
+      "top_1_path_hits": 6,
       "top_5_path_hits": 6,
-      "top_1_keyword_hits": 4,
+      "top_1_keyword_hits": 6,
       "top_5_keyword_hits": 6,
-      "top_1_path_accuracy": 0.6666666666666666,
+      "top_1_path_accuracy": 1.0,
       "top_5_path_accuracy": 1.0,
-      "top_1_keyword_accuracy": 0.6666666666666666,
+      "top_1_keyword_accuracy": 1.0,
       "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 9.680777904577553
+      "avg_latency_ms": 8.587868166311333
     },
     "config": {
       "category": "config",
@@ -39,7 +39,7 @@
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 1.0,
       "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 0.16319425776600838
+      "avg_latency_ms": 0.2775830022680263
     },
     "troubleshooting": {
       "category": "troubleshooting",
@@ -52,7 +52,7 @@
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 1.0,
       "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 0.15870784409344196
+      "avg_latency_ms": 0.42799999937415123
     },
     "indexing": {
       "category": "indexing",
@@ -65,7 +65,7 @@
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 1.0,
       "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 7.369874976575375
+      "avg_latency_ms": 0.2561250003054738
     },
     "features": {
       "category": "features",
@@ -78,7 +78,7 @@
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 1.0,
       "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 7.609270513057709
+      "avg_latency_ms": 16.967770501651103
     },
     "search": {
       "category": "search",
@@ -91,7 +91,7 @@
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 1.0,
       "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 7.125625037588179
+      "avg_latency_ms": 6.619271000090521
     },
     "metrics": {
       "category": "metrics",
@@ -104,18 +104,18 @@
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 0.5,
       "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 7.290062494575977
+      "avg_latency_ms": 0.2752915024757385
     }
   },
   "by_file_type": {
     ".md": {
       "file_type": ".md",
       "query_count": 17,
-      "top_1_path_hits": 15,
+      "top_1_path_hits": 17,
       "top_5_path_hits": 17,
-      "top_1_accuracy": 0.8823529411764706,
+      "top_1_accuracy": 1.0,
       "top_5_accuracy": 1.0,
-      "avg_latency_ms": 6.47957347716917
+      "avg_latency_ms": 5.927573471340378
     }
   },
   "results": [
@@ -127,8 +127,8 @@
       "top_1_keyword_hit": true,
       "top_5_keyword_hit": true,
       "retrieved_path": "glossary/bm25.md",
-      "retrieved_score": 0.6521896719932556,
-      "latency_ms": 21.290750009939075,
+      "retrieved_score": 2.0011212825775146,
+      "latency_ms": 17.098416996304877,
       "keywords_found": [
         "BM25",
         "keyword",
@@ -138,30 +138,32 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
+      "category": "concepts"
     },
     {
       "query_id": "easy-embeddings",
       "query": "What are embeddings?",
-      "top_1_path_hit": false,
+      "top_1_path_hit": true,
       "top_5_path_hit": true,
-      "top_1_keyword_hit": false,
+      "top_1_keyword_hit": true,
       "top_5_keyword_hit": true,
-      "retrieved_path": "config/embedding-backend.md",
-      "retrieved_score": 0.45955538749694824,
-      "latency_ms": 7.872583111748099,
+      "retrieved_path": "glossary/embeddings.md",
+      "retrieved_score": 2.3108747005462646,
+      "latency_ms": 0.4825830037589185,
       "keywords_found": [
         "embeddings",
         "vectors",
         "meaning"
       ],
       "keywords_missing": [],
-      "path_first_hit_rank": 2,
-      "path_reciprocal_rank": 0.5,
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
+      "category": "concepts"
     },
     {
       "query_id": "lex-embedding-backend",
@@ -172,7 +174,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "config/embedding-backend.md",
       "retrieved_score": 4.359013080596924,
-      "latency_ms": 0.19766693003475666,
+      "latency_ms": 0.4198750029900111,
       "keywords_found": [
         "EMBEDDING_BACKEND",
         "onnx",
@@ -182,8 +184,9 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
+      "category": "config"
     },
     {
       "query_id": "lex-index-path",
@@ -194,7 +197,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "config/index-path.md",
       "retrieved_score": 1.2808901071548462,
-      "latency_ms": 0.14658295549452305,
+      "latency_ms": 0.22170800366438925,
       "keywords_found": [
         "INDEX_PATH",
         "index"
@@ -203,8 +206,9 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
+      "category": "config"
     },
     {
       "query_id": "lex-reranker-flag",
@@ -215,7 +219,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "config/reranker.md",
       "retrieved_score": 2.612452745437622,
-      "latency_ms": 0.14533288776874542,
+      "latency_ms": 0.19116600014967844,
       "keywords_found": [
         "RERANKER_ENABLED",
         "cross-encoder"
@@ -224,8 +228,9 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
+      "category": "config"
     },
     {
       "query_id": "lex-mutually-exclusive",
@@ -236,7 +241,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "troubleshooting/conflicting-roots.md",
       "retrieved_score": 5.6030049324035645,
-      "latency_ms": 0.15870784409344196,
+      "latency_ms": 0.42799999937415123,
       "keywords_found": [
         "mutually exclusive",
         "KB_COLLECTIONS"
@@ -245,29 +250,31 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
+      "category": "troubleshooting"
     },
     {
       "query_id": "lex-saturation",
       "query": "term frequency saturation document length normalization",
-      "top_1_path_hit": false,
+      "top_1_path_hit": true,
       "top_5_path_hit": true,
-      "top_1_keyword_hit": false,
+      "top_1_keyword_hit": true,
       "top_5_keyword_hit": true,
-      "retrieved_path": "glossary/tf-idf.md",
-      "retrieved_score": 0.38447141647338867,
-      "latency_ms": 7.554457988590002,
+      "retrieved_path": "glossary/bm25.md",
+      "retrieved_score": 5.51276969909668,
+      "latency_ms": 0.3038750000996515,
       "keywords_found": [
         "term frequency",
         "normalization"
       ],
       "keywords_missing": [],
-      "path_first_hit_rank": 2,
-      "path_reciprocal_rank": 0.5,
+      "path_first_hit_rank": 1,
+      "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
+      "category": "concepts"
     },
     {
       "query_id": "para-overlap",
@@ -277,8 +284,8 @@
       "top_1_keyword_hit": true,
       "top_5_keyword_hit": true,
       "retrieved_path": "indexing/chunk-overlap.md",
-      "retrieved_score": 0.6519870758056641,
-      "latency_ms": 7.369874976575375,
+      "retrieved_score": 4.257432460784912,
+      "latency_ms": 0.2561250003054738,
       "keywords_found": [
         "overlap",
         "chunk"
@@ -287,8 +294,9 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
+      "category": "indexing"
     },
     {
       "query_id": "para-rerank",
@@ -299,7 +307,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "features/reranking.md",
       "retrieved_score": 0.3964656591415405,
-      "latency_ms": 7.856749929487705,
+      "latency_ms": 21.545708004850894,
       "keywords_found": [
         "reranking",
         "relevance"
@@ -308,8 +316,9 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
+      "adaptive_strategy": "hybrid",
+      "adaptive_fallback_used": true,
+      "category": "features"
     },
     {
       "query_id": "para-rrf",
@@ -319,8 +328,8 @@
       "top_1_keyword_hit": true,
       "top_5_keyword_hit": true,
       "retrieved_path": "glossary/rrf.md",
-      "retrieved_score": 0.516713559627533,
-      "latency_ms": 7.200292078778148,
+      "retrieved_score": 7.7935590744018555,
+      "latency_ms": 0.2782079973258078,
       "keywords_found": [
         "rank",
         "fusion"
@@ -329,8 +338,9 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
+      "category": "search"
     },
     {
       "query_id": "para-cosine",
@@ -341,7 +351,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "glossary/cosine-similarity.md",
       "retrieved_score": 0.4904261827468872,
-      "latency_ms": 6.992209004238248,
+      "latency_ms": 18.2924170003389,
       "keywords_found": [
         "cosine",
         "angle"
@@ -350,8 +360,9 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
+      "adaptive_strategy": "hybrid",
+      "adaptive_fallback_used": true,
+      "category": "concepts"
     },
     {
       "query_id": "para-ann",
@@ -362,7 +373,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "glossary/ann-search.md",
       "retrieved_score": 0.5742923617362976,
-      "latency_ms": 7.1362091694027185,
+      "latency_ms": 14.62037499732105,
       "keywords_found": [
         "nearest neighbor",
         "vector"
@@ -371,8 +382,9 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
+      "adaptive_strategy": "hybrid",
+      "adaptive_fallback_used": true,
+      "category": "concepts"
     },
     {
       "query_id": "para-mrr",
@@ -382,8 +394,8 @@
       "top_1_keyword_hit": true,
       "top_5_keyword_hit": true,
       "retrieved_path": "glossary/mrr.md",
-      "retrieved_score": 0.40917056798934937,
-      "latency_ms": 7.68487504683435,
+      "retrieved_score": 2.4661121368408203,
+      "latency_ms": 0.2926660017692484,
       "keywords_found": [
         "reciprocal",
         "rank"
@@ -392,8 +404,9 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
+      "category": "metrics"
     },
     {
       "query_id": "para-crossenc",
@@ -404,7 +417,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "features/cross-encoder.md",
       "retrieved_score": 0.5048666000366211,
-      "latency_ms": 7.361791096627712,
+      "latency_ms": 12.389832998451311,
       "keywords_found": [
         "cross-encoder",
         "relevance"
@@ -413,8 +426,9 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
+      "adaptive_strategy": "hybrid",
+      "adaptive_fallback_used": true,
+      "category": "features"
     },
     {
       "query_id": "para-idf",
@@ -424,8 +438,8 @@
       "top_1_keyword_hit": true,
       "top_5_keyword_hit": true,
       "retrieved_path": "glossary/tf-idf.md",
-      "retrieved_score": 0.6682261824607849,
-      "latency_ms": 7.238458143547177,
+      "retrieved_score": 3.401020050048828,
+      "latency_ms": 0.7295420000446029,
       "keywords_found": [
         "inverse document frequency",
         "rare"
@@ -434,8 +448,9 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
+      "category": "concepts"
     },
     {
       "query_id": "amb-hybrid",
@@ -446,7 +461,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "search/hybrid-search.md",
       "retrieved_score": 0.46570277214050293,
-      "latency_ms": 7.0509579963982105,
+      "latency_ms": 12.960334002855234,
       "keywords_found": [
         "hybrid",
         "semantic"
@@ -455,8 +470,9 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
+      "adaptive_strategy": "hybrid",
+      "adaptive_fallback_used": true,
+      "category": "search"
     },
     {
       "query_id": "amb-ndcg",
@@ -466,8 +482,8 @@
       "top_1_keyword_hit": false,
       "top_5_keyword_hit": true,
       "retrieved_path": "glossary/ndcg.md",
-      "retrieved_score": 0.46332597732543945,
-      "latency_ms": 6.895249942317605,
+      "retrieved_score": 4.345420837402344,
+      "latency_ms": 0.25791700318222865,
       "keywords_found": [
         "relevance",
         "rank"
@@ -476,8 +492,9 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
+      "category": "metrics"
     }
   ],
   "regression": null,
@@ -485,5 +502,5 @@
   "stress_only": false,
   "strict_keywords": false,
   "strict_keywords_top1": false,
-  "smart_fallback_rate": 0.7647058823529411
+  "adaptive_fallback_rate": 0.29411764705882354
 }

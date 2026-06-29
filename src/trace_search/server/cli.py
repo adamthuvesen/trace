@@ -62,7 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("serve", help="start the Trace MCP server")
 
-    search = subparsers.add_parser("search", help="smart search")
+    search = subparsers.add_parser("search", help="adaptive search")
     search.add_argument("query")
     search.add_argument("--top-k", type=positive_int, default=10)
     search.add_argument("--collection")

@@ -1,4 +1,4 @@
-"""Query classification helpers for hybrid and smart search."""
+"""Query classification helpers for hybrid and adaptive search."""
 
 from __future__ import annotations
 
@@ -27,9 +27,9 @@ LEXICAL_STOPWORDS = frozenset(
     }
 )
 
-# SmartSearch keyword-strength heuristics
+# AdaptiveSearch keyword-strength heuristics
 BM25_WEAK_BEST_SCORE = 0.05
-SMART_KEYWORD_STRENGTH_TOP_K = 3
+ADAPTIVE_KEYWORD_STRENGTH_TOP_K = 3
 # A hit counts toward BM25 "confidence" only if its score is at least this
 # fraction of the best hit's. A common word in a conceptual query can match many
 # documents weakly and inflate the raw hit count; this keeps the long weak tail

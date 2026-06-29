@@ -25,13 +25,13 @@ from tools.eval.models import (
 if TYPE_CHECKING:
     from trace_search.indexing.wiki_indexer import WikiIndexer
     from trace_search.retrieval.search import (
+        AdaptiveSearch,
         HybridSearch,
         KeywordSearch,
         SemanticSearch,
-        SmartSearch,
     )
 
-    Searcher = SemanticSearch | KeywordSearch | HybridSearch | SmartSearch
+    Searcher = SemanticSearch | KeywordSearch | HybridSearch | AdaptiveSearch
 else:
     Searcher = object
 
@@ -40,6 +40,12 @@ logger = logging.getLogger(__name__)
 EVAL_DIR = Path(__file__).parent
 DEFAULT_GOLDEN_QUERIES_PATH = EVAL_DIR / "golden_queries.yaml"
 EXAMPLE_GOLDEN_QUERIES_PATH = EVAL_DIR / "golden_queries.example.yaml"
+SEARCH_MODES = ("semantic", "bm25", "hybrid", "reranked", "adaptive", "smart")
+
+
+def normalize_search_mode(search_mode: str) -> str:
+    """Map deprecated eval mode aliases to their canonical names."""
+    return "adaptive" if search_mode == "smart" else search_mode
 
 
 def get_golden_queries_path() -> Path:
@@ -129,11 +135,12 @@ def create_searcher(
     indexer: WikiIndexer,
     search_mode: str,
 ) -> Searcher:
+    search_mode = normalize_search_mode(search_mode)
     from trace_search.retrieval.search import (
+        AdaptiveSearch,
         HybridSearch,
         KeywordSearch,
         SemanticSearch,
-        SmartSearch,
     )
 
     if search_mode == "semantic":
@@ -144,8 +151,8 @@ def create_searcher(
         return HybridSearch(indexer, indexer.backend)
     if search_mode == "reranked":
         return HybridSearch(indexer, indexer.backend)
-    if search_mode == "smart":
-        return SmartSearch(indexer, indexer.backend)
+    if search_mode == "adaptive":
+        return AdaptiveSearch(indexer, indexer.backend)
     raise ValueError(f"Unknown search mode: {search_mode}")
 
 
@@ -204,7 +211,7 @@ def evaluate_query(
     Args:
         query: The golden query to evaluate.
         searcher: The search engine to use.
-        search_mode: The search mode (semantic, bm25, hybrid, reranked, smart).
+        search_mode: The search mode (semantic, bm25, hybrid, reranked, adaptive, smart).
         top_k: Number of results to retrieve.
         min_keywords: Minimum keywords to count as a hit (unless overridden per query
             or by ``strict_keywords``).
@@ -213,20 +220,21 @@ def evaluate_query(
         strict_keywords_top1: Evaluate keyword hits using only the top-1 chunk body
             (applies to both top-1 and top-5 keyword metrics).
     """
+    search_mode = normalize_search_mode(search_mode)
     need = _effective_min_keywords(query, min_keywords, strict_keywords)
 
-    smart_strategy: str | None = None
-    smart_fallback_used: bool | None = None
+    adaptive_strategy: str | None = None
+    adaptive_fallback_used: bool | None = None
 
     start = time.perf_counter()
-    if search_mode == "smart":
-        from trace_search.retrieval.search_types import SmartSearchResult
+    if search_mode == "adaptive":
+        from trace_search.retrieval.search_types import AdaptiveSearchResult
 
-        smart_result = searcher.search(query.query, top_k=top_k)
-        assert isinstance(smart_result, SmartSearchResult)
-        hits = smart_result.hits
-        smart_strategy = smart_result.route.strategy
-        smart_fallback_used = smart_result.route.fallback_used
+        adaptive_result = searcher.search(query.query, top_k=top_k)
+        assert isinstance(adaptive_result, AdaptiveSearchResult)
+        hits = adaptive_result.hits
+        adaptive_strategy = adaptive_result.route.strategy
+        adaptive_fallback_used = adaptive_result.route.fallback_used
     elif search_mode == "bm25":
         hits = searcher.search(query.query, max_results=top_k)
     elif search_mode == "reranked":
@@ -251,8 +259,8 @@ def evaluate_query(
             path_first_hit_rank=None,
             path_reciprocal_rank=0.0,
             path_hit_within_max_rank=False,
-            smart_strategy=smart_strategy,
-            smart_fallback_used=smart_fallback_used,
+            adaptive_strategy=adaptive_strategy,
+            adaptive_fallback_used=adaptive_fallback_used,
             category=query.category,
         )
 
@@ -299,8 +307,8 @@ def evaluate_query(
         path_first_hit_rank=path_first_hit_rank,
         path_reciprocal_rank=reciprocal,
         path_hit_within_max_rank=path_hit_within_max_rank,
-        smart_strategy=smart_strategy,
-        smart_fallback_used=smart_fallback_used,
+        adaptive_strategy=adaptive_strategy,
+        adaptive_fallback_used=adaptive_fallback_used,
         category=query.category,
     )
 
@@ -393,6 +401,8 @@ def run_evaluation(
     thresholds = load_thresholds()
     min_keywords = thresholds.get("keyword_match", {}).get("min_keywords", 2)
 
+    search_mode = normalize_search_mode(search_mode)
+
     queries = load_golden_queries(
         quick_only=quick_only,
         categories=categories,
@@ -461,13 +471,15 @@ def run_evaluation(
     by_category = compute_category_metrics(queries, results)
     by_file_type = compute_file_type_metrics(queries, results)
 
-    smart_fallback_rate: float | None = None
-    if search_mode == "smart":
+    adaptive_fallback_rate: float | None = None
+    if search_mode == "adaptive":
         fallback_flags = [
-            r.smart_fallback_used for r in results if r.smart_fallback_used is not None
+            r.adaptive_fallback_used
+            for r in results
+            if r.adaptive_fallback_used is not None
         ]
         if fallback_flags:
-            smart_fallback_rate = sum(1 for flag in fallback_flags if flag) / len(
+            adaptive_fallback_rate = sum(1 for flag in fallback_flags if flag) / len(
                 fallback_flags
             )
 
@@ -497,5 +509,5 @@ def run_evaluation(
         stress_only=stress_only,
         strict_keywords=strict_keywords,
         strict_keywords_top1=strict_keywords_top1,
-        smart_fallback_rate=smart_fallback_rate,
+        adaptive_fallback_rate=adaptive_fallback_rate,
     )

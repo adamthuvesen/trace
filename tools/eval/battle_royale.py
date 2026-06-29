@@ -13,10 +13,13 @@ from pathlib import Path
 import click
 import yaml
 
-from tools.eval.evaluator import percentile, run_evaluation
+from tools.eval.evaluator import (
+    SEARCH_MODES,
+    percentile,
+    run_evaluation,
+)
 from tools.eval.reporter import generate_json_report, generate_markdown_report
 
-SEARCH_MODES = ("bm25", "semantic", "hybrid", "reranked", "smart")
 DEFAULT_SUITE = Path("tests/fixtures/eval_battle_royale.yaml")
 DEFAULT_OUTPUT_DIR = Path("docs/benchmarks/retrieval_battle_royale")
 
@@ -109,10 +112,10 @@ def _aggregate_mode(mode: str, reports) -> dict[str, object]:
     results = [result for report in reports for result in report.results]
     total = len(results)
     latencies = sorted(result.latency_ms for result in results)
-    smart_flags = [
-        result.smart_fallback_used
+    adaptive_flags = [
+        result.adaptive_fallback_used
         for result in results
-        if result.smart_fallback_used is not None
+        if result.adaptive_fallback_used is not None
     ]
     return {
         "mode": mode,
@@ -136,9 +139,9 @@ def _aggregate_mode(mode: str, reports) -> dict[str, object]:
         "p50_ms": percentile(latencies, 50),
         "p95_ms": percentile(latencies, 95),
         "failure_buckets": _failure_buckets(reports),
-        "smart_fallback_rate": (
-            sum(1 for flag in smart_flags if flag) / len(smart_flags)
-            if smart_flags
+        "adaptive_fallback_rate": (
+            sum(1 for flag in adaptive_flags if flag) / len(adaptive_flags)
+            if adaptive_flags
             else None
         ),
     }
@@ -174,7 +177,7 @@ def _summary_json(
                     "mrr": report.mean_reciprocal_rank,
                     "p50_ms": report.latency_p50_ms,
                     "p95_ms": report.latency_p95_ms,
-                    "smart_fallback_rate": report.smart_fallback_rate,
+                    "adaptive_fallback_rate": report.adaptive_fallback_rate,
                 }
             )
 
@@ -213,7 +216,7 @@ def _summary_markdown(summary: dict[str, object]) -> str:
         row = by_mode[mode]
         failure_buckets = row["failure_buckets"] or {}
         failures = ", ".join(f"{k}: {v}" for k, v in failure_buckets.items()) or "-"
-        fallback = row.get("smart_fallback_rate")
+        fallback = row.get("adaptive_fallback_rate")
         fallback_text = "-" if fallback is None else _pct(float(fallback))
         mode_rows.append(
             "| {mode} | {queries} | {hit1} | {hit5} | {mrr:.3f} | "
@@ -232,7 +235,7 @@ def _summary_markdown(summary: dict[str, object]) -> str:
 
     kb_rows = []
     for row in summary["by_kb"]:
-        fallback = row.get("smart_fallback_rate")
+        fallback = row.get("adaptive_fallback_rate")
         fallback_text = "-" if fallback is None else _pct(float(fallback))
         kb_rows.append(
             "| {kb} | {mode} | {queries} | {hit1} | {hit5} | {mrr:.3f} | "
@@ -258,13 +261,13 @@ def _summary_markdown(summary: dict[str, object]) -> str:
         "",
         "## Aggregate by Mode",
         "",
-        "| Mode | Queries | Hit@1 | Hit@5 | MRR | p50 ms | p95 ms | Smart fallback | Top-1 failure buckets |",
+        "| Mode | Queries | Hit@1 | Hit@5 | MRR | p50 ms | p95 ms | Adaptive fallback | Top-1 failure buckets |",
         "|------|---------|-------|-------|-----|--------|--------|----------------|-----------------------|",
         *mode_rows,
         "",
         "## By Knowledge Base",
         "",
-        "| KB | Mode | Queries | Hit@1 | Hit@5 | MRR | p50 ms | p95 ms | Smart fallback |",
+        "| KB | Mode | Queries | Hit@1 | Hit@5 | MRR | p50 ms | p95 ms | Adaptive fallback |",
         "|----|------|---------|-------|-------|-----|--------|--------|----------------|",
         *kb_rows,
         "",

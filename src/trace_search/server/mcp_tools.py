@@ -17,7 +17,7 @@ def _build_multi_instructions(collection_names: list[str]) -> str:
     return f"""Knowledge search server with multiple collections: {names}.
 
 Use these tools to search across knowledge bases:
-- search: **DEFAULT** - Smart BM25-first search with semantic/hybrid fallback
+- search: **DEFAULT** - Adaptive BM25-first search with semantic/hybrid fallback
 - semantic_search: Find documents by meaning/concept (for vague natural language)
 - search_hybrid: Combined semantic + keyword with ranking (slower, use if search fails)
 - get_document: Retrieve full document content
@@ -57,7 +57,7 @@ def build_multi_mcp(
         extensions: list[str] | None = None,
         since: str | None = None,
     ) -> str:
-        """Search knowledge bases. Default: BM25-first with semantic/hybrid fallback.
+        """Search knowledge bases. Default: adaptive BM25-first search with semantic/hybrid fallback.
 
         Set `collection` to target a specific knowledge base, or omit to search all.
         Optional filters: `path_prefix`, `extensions`, `since` (ISO 8601).

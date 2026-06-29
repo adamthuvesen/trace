@@ -1,19 +1,19 @@
 {
-  "timestamp": "2026-06-21T19:37:05.856392+00:00",
-  "search_mode": "smart",
+  "timestamp": "2026-06-21T19:30:54.414935+00:00",
+  "search_mode": "adaptive",
   "embedding_model": "all-MiniLM-L6-v2",
   "total_queries": 8,
   "quick_set_only": false,
   "top_1_path_accuracy": 1.0,
   "top_5_path_accuracy": 1.0,
-  "top_1_keyword_accuracy": 0.25,
-  "top_5_keyword_accuracy": 0.25,
+  "top_1_keyword_accuracy": 0.5,
+  "top_5_keyword_accuracy": 0.5,
   "mean_reciprocal_rank": 1.0,
   "within_max_rank_path_accuracy": 1.0,
-  "latency_p50_ms": 0.31381249937112443,
-  "latency_p95_ms": 17.226660750020528,
-  "latency_p99_ms": 17.99116574882646,
-  "latency_mean_ms": 4.423693000717321,
+  "latency_p50_ms": 10.560958497080719,
+  "latency_p95_ms": 46.19953585461188,
+  "latency_p99_ms": 52.152674375611234,
+  "latency_mean_ms": 16.94038562618516,
   "by_category": {
     "lexical": {
       "category": "lexical",
@@ -26,20 +26,20 @@
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 0.0,
       "top_5_keyword_accuracy": 0.0,
-      "avg_latency_ms": 0.41052099913940765
+      "avg_latency_ms": 0.40620849904371426
     },
     "paraphrase": {
       "category": "paraphrase",
       "query_count": 2,
       "top_1_path_hits": 2,
       "top_5_path_hits": 2,
-      "top_1_keyword_hits": 0,
-      "top_5_keyword_hits": 0,
+      "top_1_keyword_hits": 2,
+      "top_5_keyword_hits": 2,
       "top_1_path_accuracy": 1.0,
       "top_5_path_accuracy": 1.0,
-      "top_1_keyword_accuracy": 0.0,
-      "top_5_keyword_accuracy": 0.0,
-      "avg_latency_ms": 0.24131250029313378
+      "top_1_keyword_accuracy": 1.0,
+      "top_5_keyword_accuracy": 1.0,
+      "avg_latency_ms": 23.81958350088098
     },
     "hybrid": {
       "category": "hybrid",
@@ -52,7 +52,7 @@
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 0.0,
       "top_5_keyword_accuracy": 0.0,
-      "avg_latency_ms": 0.2258340027765371
+      "avg_latency_ms": 0.5253960007394198
     },
     "rerank": {
       "category": "rerank",
@@ -65,7 +65,7 @@
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 1.0,
       "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 18.182291998527944
+      "avg_latency_ms": 32.379750002291985
     },
     "ambiguous": {
       "category": "ambiguous",
@@ -78,7 +78,7 @@
       "top_5_path_accuracy": 1.0,
       "top_1_keyword_accuracy": 1.0,
       "top_5_keyword_accuracy": 1.0,
-      "avg_latency_ms": 15.45191700279247
+      "avg_latency_ms": 53.64095900586108
     }
   },
   "by_file_type": {
@@ -89,7 +89,7 @@
       "top_5_path_hits": 8,
       "top_1_accuracy": 1.0,
       "top_5_accuracy": 1.0,
-      "avg_latency_ms": 4.423693000717321
+      "avg_latency_ms": 16.94038562618516
     }
   },
   "results": [
@@ -102,7 +102,7 @@
       "top_5_keyword_hit": false,
       "retrieved_path": "billing/refund-policy.md",
       "retrieved_score": 3.661093235015869,
-      "latency_ms": 0.4399169993121177,
+      "latency_ms": 0.5393750034272671,
       "keywords_found": [],
       "keywords_missing": [
         "annual",
@@ -112,8 +112,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false,
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
       "category": "lexical"
     },
     {
@@ -125,7 +125,7 @@
       "top_5_keyword_hit": false,
       "retrieved_path": "ops/pager-handoff.md",
       "retrieved_score": 1.370267391204834,
-      "latency_ms": 0.3811249989666976,
+      "latency_ms": 0.27304199466016144,
       "keywords_found": [],
       "keywords_missing": [
         "PAGER_HANDOFF_WINDOW",
@@ -134,8 +134,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false,
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
       "category": "lexical"
     },
     {
@@ -143,22 +143,22 @@
       "query": "customers cannot finish paying after pressing the purchase button",
       "top_1_path_hit": true,
       "top_5_path_hit": true,
-      "top_1_keyword_hit": false,
-      "top_5_keyword_hit": false,
+      "top_1_keyword_hit": true,
+      "top_5_keyword_hit": true,
       "retrieved_path": "ops/checkout-sev2.md",
-      "retrieved_score": 3.0878119468688965,
-      "latency_ms": 0.24649999977555126,
-      "keywords_found": [],
-      "keywords_missing": [
+      "retrieved_score": 0.40087318420410156,
+      "latency_ms": 20.488124995608814,
+      "keywords_found": [
         "checkout",
         "payment",
         "incident"
       ],
+      "keywords_missing": [],
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false,
+      "adaptive_strategy": "hybrid",
+      "adaptive_fallback_used": true,
       "category": "paraphrase"
     },
     {
@@ -166,22 +166,22 @@
       "query": "what happens when a workspace invites more people than it bought",
       "top_1_path_hit": true,
       "top_5_path_hit": true,
-      "top_1_keyword_hit": false,
-      "top_5_keyword_hit": false,
+      "top_1_keyword_hit": true,
+      "top_5_keyword_hit": true,
       "retrieved_path": "product/seat-limits.md",
-      "retrieved_score": 2.544071912765503,
-      "latency_ms": 0.2361250008107163,
-      "keywords_found": [],
-      "keywords_missing": [
+      "retrieved_score": 0.5780896544456482,
+      "latency_ms": 27.151042006153148,
+      "keywords_found": [
         "seats",
         "limit",
         "pending"
       ],
+      "keywords_missing": [],
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false,
+      "adaptive_strategy": "hybrid",
+      "adaptive_fallback_used": true,
       "category": "paraphrase"
     },
     {
@@ -193,7 +193,7 @@
       "top_5_keyword_hit": false,
       "retrieved_path": "billing/invoice-adjustments.md",
       "retrieved_score": 3.896735191345215,
-      "latency_ms": 0.23370900453301147,
+      "latency_ms": 0.6337919985526241,
       "keywords_found": [],
       "keywords_missing": [
         "tax",
@@ -203,8 +203,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false,
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
       "category": "hybrid"
     },
     {
@@ -216,7 +216,7 @@
       "top_5_keyword_hit": false,
       "retrieved_path": "product/sso-rollout.md",
       "retrieved_score": 5.6235551834106445,
-      "latency_ms": 0.21795900102006271,
+      "latency_ms": 0.41700000292621553,
       "keywords_found": [],
       "keywords_missing": [
         "identity provider",
@@ -226,8 +226,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "keyword",
-      "smart_fallback_used": false,
+      "adaptive_strategy": "keyword",
+      "adaptive_fallback_used": false,
       "category": "hybrid"
     },
     {
@@ -239,7 +239,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "billing/refund-policy.md",
       "retrieved_score": 0.6321521997451782,
-      "latency_ms": 18.182291998527944,
+      "latency_ms": 32.379750002291985,
       "keywords_found": [
         "policy",
         "annual",
@@ -249,8 +249,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true,
+      "adaptive_strategy": "hybrid",
+      "adaptive_fallback_used": true,
       "category": "rerank"
     },
     {
@@ -262,7 +262,7 @@
       "top_5_keyword_hit": true,
       "retrieved_path": "ops/checkout-sev2.md",
       "retrieved_score": 0.5453645586967468,
-      "latency_ms": 15.45191700279247,
+      "latency_ms": 53.64095900586108,
       "keywords_found": [
         "checkout",
         "incident",
@@ -272,8 +272,8 @@
       "path_first_hit_rank": 1,
       "path_reciprocal_rank": 1.0,
       "path_hit_within_max_rank": true,
-      "smart_strategy": "hybrid",
-      "smart_fallback_used": true,
+      "adaptive_strategy": "hybrid",
+      "adaptive_fallback_used": true,
       "category": "ambiguous"
     }
   ],
@@ -282,5 +282,5 @@
   "stress_only": false,
   "strict_keywords": false,
   "strict_keywords_top1": false,
-  "smart_fallback_rate": 0.25
+  "adaptive_fallback_rate": 0.5
 }

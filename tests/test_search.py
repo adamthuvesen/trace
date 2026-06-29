@@ -10,6 +10,7 @@ from trace_search.retrieval.query_profile import (
 )
 from trace_search.retrieval.search import (
     HybridSearch,
+    KeywordSearch,
     SearchFilters,
     _clamp_top_k,
     _semantic_fetch_size,
@@ -96,6 +97,105 @@ class TestEmptyCorpusSearch:
         ks = KeywordSearch(mock_indexer)
         result = ks.search("anything")
         assert result == []
+
+
+class TestKeywordSearchAggregation:
+    class FakeBM25:
+        def __init__(self, scores):
+            self.scores = scores
+            self.fetch_size = None
+
+        def retrieve(self, _query_tokens, k):
+            self.fetch_size = k
+            return [list(range(len(self.scores)))], [self.scores]
+
+    @staticmethod
+    def _metadata(path: str, title: str, chunk_index: int) -> dict:
+        return {
+            "path": path,
+            "title": title,
+            "folder": "",
+            "chunk_index": chunk_index,
+            "chunk_count": 3,
+            "breadcrumb": title,
+            "extension": ".md",
+            "source_mtime": 0.0,
+        }
+
+    @classmethod
+    def _large_corpus_with(cls, first: dict) -> list[dict]:
+        return [
+            first,
+            *[
+                cls._metadata(f"filler/{index}.md", f"Filler {index}", 0)
+                for index in range(4000)
+            ],
+        ]
+
+    def test_keyword_search_aggregates_chunks_by_file_before_truncating(self):
+        class FakeIndexer:
+            bm25 = TestKeywordSearchAggregation.FakeBM25([10.0, 9.8, 9.6])
+            bm25_corpus = [
+                TestKeywordSearchAggregation._metadata("wrong.md", "Wrong", 0),
+                TestKeywordSearchAggregation._metadata("right.md", "Alpha", 0),
+                TestKeywordSearchAggregation._metadata("right.md", "Alpha", 1),
+            ]
+
+        hits = KeywordSearch(FakeIndexer()).search("alpha", max_results=1)
+
+        assert [hit["path"] for hit in hits] == ["right.md"]
+        assert hits[0]["bm25_file_support"] == 2
+        assert FakeIndexer.bm25.fetch_size == 3
+
+    def test_keyword_search_drops_weak_hits_without_metadata_anchor(self):
+        class FakeIndexer:
+            bm25 = TestKeywordSearchAggregation.FakeBM25([5.0])
+            bm25_corpus = TestKeywordSearchAggregation._large_corpus_with(
+                TestKeywordSearchAggregation._metadata("unrelated.md", "Unrelated", 0)
+            )
+
+        hits = KeywordSearch(FakeIndexer()).search(
+            "kubernetes pod security policy",
+            max_results=5,
+        )
+
+        assert hits == []
+
+    def test_keyword_search_keeps_weak_hits_with_strong_metadata_anchor(self):
+        class FakeIndexer:
+            bm25 = TestKeywordSearchAggregation.FakeBM25([5.0])
+            bm25_corpus = TestKeywordSearchAggregation._large_corpus_with(
+                TestKeywordSearchAggregation._metadata(
+                    "ops/kubernetes-pod-policy.md",
+                    "Kubernetes pod policy",
+                    0,
+                )
+            )
+
+        hits = KeywordSearch(FakeIndexer()).search(
+            "kubernetes pod security policy",
+            max_results=5,
+        )
+
+        assert [hit["path"] for hit in hits] == ["ops/kubernetes-pod-policy.md"]
+
+    def test_keyword_search_drops_weak_hits_with_only_tiny_metadata_overlap(self):
+        class FakeIndexer:
+            bm25 = TestKeywordSearchAggregation.FakeBM25([5.5])
+            bm25_corpus = TestKeywordSearchAggregation._large_corpus_with(
+                TestKeywordSearchAggregation._metadata(
+                    "archive/unrelated.md",
+                    "Unrelated note",
+                    0,
+                )
+            )
+
+        hits = KeywordSearch(FakeIndexer()).search(
+            "kubernetes pod security policy",
+            max_results=5,
+        )
+
+        assert hits == []
 
 
 class TestSemanticFetchSize:

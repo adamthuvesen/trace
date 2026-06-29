@@ -26,13 +26,13 @@ from trace_search.indexing.index_metadata import (
 from trace_search.indexing.index_paths import bm25_dir, chroma_dir
 from trace_search.indexing.kb_paths import get_default_index_root, should_exclude_path
 from trace_search.retrieval.search import (
+    AdaptiveSearch,
     HybridSearch,
     KeywordSearch,
     SearchFilters,
     SemanticSearch,
-    SmartSearch,
 )
-from trace_search.retrieval.search_types import SearchRoute, SmartSearchResult
+from trace_search.retrieval.search_types import AdaptiveSearchResult, SearchRoute
 from trace_search.server.server_warmup import warm_embedding_model
 from trace_search.indexing.wiki_indexer import WikiIndexer
 
@@ -53,7 +53,7 @@ class Collection:
     _semantic: SemanticSearch | None = field(default=None, repr=False)
     _keyword: KeywordSearch | None = field(default=None, repr=False)
     _hybrid: HybridSearch | None = field(default=None, repr=False)
-    _smart: SmartSearch | None = field(default=None, repr=False)
+    _adaptive: AdaptiveSearch | None = field(default=None, repr=False)
 
     def reset(self) -> None:
         """Clear all cached search components so they are rebuilt on next access."""
@@ -61,7 +61,7 @@ class Collection:
         self._semantic = None
         self._keyword = None
         self._hybrid = None
-        self._smart = None
+        self._adaptive = None
 
     def ensure_index(
         self,
@@ -98,19 +98,28 @@ class Collection:
             self._hybrid = HybridSearch(indexer, indexer.backend)
         return self._hybrid
 
+    def get_adaptive(
+        self,
+        backend: EmbeddingBackend | None = None,
+        *,
+        skip_build: bool = False,
+    ) -> AdaptiveSearch:
+        if skip_build:
+            indexer = self.ensure_index(backend, skip_build=True)
+            return AdaptiveSearch(indexer, indexer.backend)
+        if self._adaptive is None:
+            indexer = self.ensure_index(backend)
+            self._adaptive = AdaptiveSearch(indexer, indexer.backend)
+        return self._adaptive
+
     def get_smart(
         self,
         backend: EmbeddingBackend | None = None,
         *,
         skip_build: bool = False,
-    ) -> SmartSearch:
-        if skip_build:
-            indexer = self.ensure_index(backend, skip_build=True)
-            return SmartSearch(indexer, indexer.backend)
-        if self._smart is None:
-            indexer = self.ensure_index(backend)
-            self._smart = SmartSearch(indexer, indexer.backend)
-        return self._smart
+    ) -> AdaptiveSearch:
+        """Deprecated alias for get_adaptive()."""
+        return self.get_adaptive(backend, skip_build=skip_build)
 
     def get_neighbor_content(
         self,
@@ -211,7 +220,9 @@ class CollectionRegistry:
         top_k: int,
         collection: str | None,
         filters: SearchFilters | None = None,
-    ) -> list[dict] | SmartSearchResult:
+    ) -> list[dict] | AdaptiveSearchResult:
+        if mode == "adaptive":
+            return self.search_adaptive(query, top_k, collection, filters=filters)
         if mode == "smart":
             return self.search_smart(query, top_k, collection, filters=filters)
         filters = filters or SearchFilters()
@@ -273,24 +284,24 @@ class CollectionRegistry:
         assert isinstance(result, list)
         return result
 
-    def search_smart(
+    def search_adaptive(
         self,
         query: str,
         top_k: int,
         collection: str | None,
         filters: SearchFilters | None = None,
-    ) -> SmartSearchResult:
+    ) -> AdaptiveSearchResult:
         filters = filters or SearchFilters()
         cols = self._resolve(collection)
         if len(cols) == 1:
             result = (
-                cols[0].get_smart(self.backend).search(query, top_k, filters=filters)
+                cols[0].get_adaptive(self.backend).search(query, top_k, filters=filters)
             )
             hits = [self._with_neighbor_context(cols[0], hit) for hit in result.hits]
-            return SmartSearchResult(hits=hits, route=result.route)
+            return AdaptiveSearchResult(hits=hits, route=result.route)
 
         results = [
-            c.get_smart(self.backend).search(query, top_k, filters=filters)
+            c.get_adaptive(self.backend).search(query, top_k, filters=filters)
             for c in cols
         ]
         merged_hits = self._merge_results(
@@ -302,7 +313,7 @@ class CollectionRegistry:
         fallback_used = any(result.route.fallback_used for result in results)
         strategy = "hybrid" if fallback_used else "keyword"
         reasons = sorted({result.route.reason for result in results})
-        return SmartSearchResult(
+        return AdaptiveSearchResult(
             hits=merged_hits,
             route=SearchRoute(
                 strategy=strategy,
@@ -311,6 +322,16 @@ class CollectionRegistry:
                 filters=filters,
             ),
         )
+
+    def search_smart(
+        self,
+        query: str,
+        top_k: int,
+        collection: str | None,
+        filters: SearchFilters | None = None,
+    ) -> AdaptiveSearchResult:
+        """Deprecated alias for search_adaptive()."""
+        return self.search_adaptive(query, top_k, collection, filters=filters)
 
     def probe_search(
         self, query: str, top_k: int, collection: str | None
@@ -344,7 +365,7 @@ class CollectionRegistry:
         if len(cols) == 1:
             result = (
                 cols[0]
-                .get_smart(self.backend, skip_build=True)
+                .get_adaptive(self.backend, skip_build=True)
                 .search(
                     query,
                     top_k,
@@ -353,7 +374,7 @@ class CollectionRegistry:
             return result.hits
 
         results = [
-            c.get_smart(self.backend, skip_build=True).search(query, top_k)
+            c.get_adaptive(self.backend, skip_build=True).search(query, top_k)
             for c in cols
         ]
         return self._merge_results(

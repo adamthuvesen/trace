@@ -186,20 +186,20 @@ Trace includes a small eval harness (`tools/eval/`) for golden-query checks. The
 | `bm25` | 88% | 94% | 0.912 | 0.16 ms | 2.6 ms |
 | `semantic` | 88% | 100% | 0.941 | 6.71 ms | 7.1 ms |
 | `hybrid` | 88% | 100% | 0.941 | 7.10 ms | 10.9 ms |
-| `smart` | 88% | 100% | 0.941 | 7.20 ms | 10.6 ms |
+| `adaptive` | 88% | 100% | 0.941 | 7.20 ms | 10.6 ms |
 
-The useful result is not the shared 88% Top-1. BM25 is fastest and strong on exact terms, but misses one paraphrase entirely. Semantic and hybrid recover all queries in the top 5. `smart` keeps BM25 for strong lexical hits and falls back to vector search when keyword evidence is weak, matching the best recall while keeping lexical queries cheap.
+The useful result is not the shared 88% Top-1. BM25 is fastest and strong on exact terms, but misses one paraphrase entirely. Semantic and hybrid recover all queries in the top 5. `adaptive` keeps BM25 for strong lexical hits and falls back to vector search when keyword evidence is weak, matching the best recall while keeping lexical queries cheap.
 
 These are smoke-test numbers, not corpus-scale benchmark claims. Full reports live in [`docs/benchmarks/`](docs/benchmarks/). Reproduce the committed gate with:
 
 ```bash
 KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
-  uv run python -m tools.eval.cli --full --search smart --output-dir docs/benchmarks/
+  uv run python -m tools.eval.cli --full --search adaptive --output-dir docs/benchmarks/
 ```
 
 For the multi-KB retrieval battle suite, see
 [`docs/retrieval-modes.md`](docs/retrieval-modes.md). It compares BM25,
-semantic, hybrid, reranked, and smart retrieval across committed no-secret
+semantic, hybrid, reranked, and adaptive retrieval across committed no-secret
 fixtures and documents when each mode wins.
 
 ## Development
@@ -212,7 +212,7 @@ uv build
 
 # Search evaluation against the committed fixture
 KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
-  uv run python -m tools.eval.cli --full --search smart
+  uv run python -m tools.eval.cli --full --search adaptive
 ```
 
 To evaluate against your own corpus, copy

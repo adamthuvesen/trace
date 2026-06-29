@@ -54,8 +54,8 @@ regression:
   # Minimum queries that must regress (pass->fail) to flag
   min_regressed_queries: 2
 
-# Optional gates when running with `--search smart` (production MCP default).
-smart:
+# Optional gates when running with `--search adaptive` (production MCP default).
+adaptive:
   fallback_rate:
     target: 0.35
     warning: 0.50

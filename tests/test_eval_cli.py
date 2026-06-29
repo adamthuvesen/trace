@@ -4,7 +4,7 @@ from pathlib import Path
 
 from tools.eval.battle_royale import load_suite
 from tools.eval.cli import resolve_eval_scope
-from tools.eval.evaluator import evaluate_query, percentile
+from tools.eval.evaluator import evaluate_query, normalize_search_mode, percentile
 from tools.eval.models import GoldenQuery
 
 
@@ -119,4 +119,13 @@ def test_challenge_battle_suite_includes_stress_queries():
     assert "challenge" in description
     assert {"retrieval", "support", "api"} == {kb.kb_id for kb in kbs}
     assert all(kb.include_stress for kb in kbs)
-    assert modes == ("bm25", "semantic", "hybrid", "reranked", "smart")
+    assert modes == ("bm25", "semantic", "hybrid", "reranked", "adaptive")
+
+
+def test_eval_search_modes_include_deprecated_smart_alias():
+    from tools.eval.evaluator import SEARCH_MODES
+
+    assert "adaptive" in SEARCH_MODES
+    assert "smart" in SEARCH_MODES
+    assert normalize_search_mode("smart") == "adaptive"
+    assert normalize_search_mode("adaptive") == "adaptive"

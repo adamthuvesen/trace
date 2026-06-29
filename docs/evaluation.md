@@ -6,9 +6,9 @@ benchmark results live in [docs/benchmarks/](benchmarks/).
 ## Quickstart
 
 ```bash
-# Tiny committed fixture (no copy step; good smoke test, runs the prod `smart` mode)
+# Tiny committed fixture (no copy step; good smoke test, runs the prod `adaptive` mode)
 KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
-  uv run python -m tools.eval.cli --full --search smart
+  uv run python -m tools.eval.cli --full --search adaptive
 ```
 
 ## Full wiki eval
@@ -25,18 +25,18 @@ KB_PATH=/path/to/your/docs uv run python -m tools.eval --full
 ## Committed fixture eval
 
 The fixture under `tests/fixtures/eval_kb` needs no copy step. Swap `--search` to
-compare modes (`bm25`, `semantic`, `hybrid`, `smart`); `smart` is the production
-MCP default path:
+compare modes (`bm25`, `semantic`, `hybrid`, `adaptive`); `adaptive` is the production
+MCP default path. `smart` is still accepted as a deprecated alias for `adaptive`:
 
 ```bash
 KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
   uv run python -m tools.eval.cli --full --search semantic
 KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
-  uv run python -m tools.eval.cli --full --search smart
+  uv run python -m tools.eval.cli --full --search adaptive
 ```
 
 CI runs the same fixture eval as a separate, non-gating job
-(`uv run python -m tools.eval.cli --ci --search smart`).
+(`uv run python -m tools.eval.cli --ci --search adaptive`).
 
 ## Pytest path
 
