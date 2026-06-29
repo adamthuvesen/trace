@@ -24,6 +24,17 @@ def _hit(path="doc.md", score=2.0, source="keyword", content="BM25 ranking docs"
     }
 
 
+def test_smart_public_aliases_remain_importable():
+    import trace_search
+    from trace_search.retrieval.search import AdaptiveSearchResult, SmartSearch
+    from trace_search.retrieval.search_types import SmartSearchResult
+
+    assert SmartSearch is AdaptiveSearch
+    assert trace_search.SmartSearch is AdaptiveSearch
+    assert SmartSearchResult is AdaptiveSearchResult
+    assert trace_search.SmartSearchResult is AdaptiveSearchResult
+
+
 def test_adaptive_search_keeps_strong_keyword_results():
     """Strong BM25 hits should short-circuit before hybrid is consulted."""
     adaptive = AdaptiveSearch.__new__(AdaptiveSearch)
@@ -238,6 +249,20 @@ def test_adaptive_search_empty_query_does_not_call_engines():
     adaptive.hybrid.search.assert_not_called()
 
 
+def test_collection_smart_alias_uses_adaptive_cache(tmp_path):
+    from trace_search.collections.collection_registry import Collection
+
+    collection = Collection(
+        name="docs",
+        kb_path=tmp_path / "docs",
+        index_path=tmp_path / "index",
+    )
+    adaptive = MagicMock()
+    collection._adaptive = adaptive
+
+    assert collection.get_smart() is adaptive
+
+
 def test_context_packets_group_by_document_and_include_followups():
     hits = [
         _hit(content="BM25 ranking compares exact terms with semantic search."),
@@ -296,6 +321,29 @@ def test_default_search_tool_uses_adaptive_registry_path(tmp_path):
 
     search_adaptive.assert_called_once()
     assert "**Selected:** keyword" in rendered
+
+
+def test_registry_smart_alias_uses_adaptive_search(tmp_path):
+    from trace_search.retrieval.search import AdaptiveSearchResult
+    from trace_search.collections.collection_registry import CollectionRegistry
+
+    kb = tmp_path / "docs"
+    kb.mkdir()
+    registry = CollectionRegistry({"docs": kb})
+    expected = AdaptiveSearchResult(
+        hits=[_hit()],
+        route=SearchRoute(
+            strategy="keyword",
+            reason="test route",
+            fallback_used=False,
+        ),
+    )
+
+    with patch.object(registry, "search_adaptive", return_value=expected) as adaptive:
+        assert registry.search_smart("BM25", 5, "docs") is expected
+        assert registry._search("smart", "BM25", 5, "docs") is expected
+
+    assert adaptive.call_count == 2
 
 
 def test_multi_collection_adaptive_search_batches_neighbor_fetches(tmp_path):

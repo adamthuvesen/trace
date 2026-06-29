@@ -40,7 +40,12 @@ logger = logging.getLogger(__name__)
 EVAL_DIR = Path(__file__).parent
 DEFAULT_GOLDEN_QUERIES_PATH = EVAL_DIR / "golden_queries.yaml"
 EXAMPLE_GOLDEN_QUERIES_PATH = EVAL_DIR / "golden_queries.example.yaml"
-SEARCH_MODES = ("semantic", "bm25", "hybrid", "reranked", "adaptive")
+SEARCH_MODES = ("semantic", "bm25", "hybrid", "reranked", "adaptive", "smart")
+
+
+def normalize_search_mode(search_mode: str) -> str:
+    """Map deprecated eval mode aliases to their canonical names."""
+    return "adaptive" if search_mode == "smart" else search_mode
 
 
 def get_golden_queries_path() -> Path:
@@ -130,6 +135,7 @@ def create_searcher(
     indexer: WikiIndexer,
     search_mode: str,
 ) -> Searcher:
+    search_mode = normalize_search_mode(search_mode)
     from trace_search.retrieval.search import (
         AdaptiveSearch,
         HybridSearch,
@@ -205,7 +211,7 @@ def evaluate_query(
     Args:
         query: The golden query to evaluate.
         searcher: The search engine to use.
-        search_mode: The search mode (semantic, bm25, hybrid, reranked, adaptive).
+        search_mode: The search mode (semantic, bm25, hybrid, reranked, adaptive, smart).
         top_k: Number of results to retrieve.
         min_keywords: Minimum keywords to count as a hit (unless overridden per query
             or by ``strict_keywords``).
@@ -214,6 +220,7 @@ def evaluate_query(
         strict_keywords_top1: Evaluate keyword hits using only the top-1 chunk body
             (applies to both top-1 and top-5 keyword metrics).
     """
+    search_mode = normalize_search_mode(search_mode)
     need = _effective_min_keywords(query, min_keywords, strict_keywords)
 
     adaptive_strategy: str | None = None
@@ -393,6 +400,8 @@ def run_evaluation(
 
     thresholds = load_thresholds()
     min_keywords = thresholds.get("keyword_match", {}).get("min_keywords", 2)
+
+    search_mode = normalize_search_mode(search_mode)
 
     queries = load_golden_queries(
         quick_only=quick_only,

@@ -26,7 +26,7 @@ KB_PATH=/path/to/your/docs uv run python -m tools.eval --full
 
 The fixture under `tests/fixtures/eval_kb` needs no copy step. Swap `--search` to
 compare modes (`bm25`, `semantic`, `hybrid`, `adaptive`); `adaptive` is the production
-MCP default path:
+MCP default path. `smart` is still accepted as a deprecated alias for `adaptive`:
 
 ```bash
 KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \

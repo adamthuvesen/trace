@@ -889,3 +889,7 @@ class AdaptiveSearch:
                 filters=filters,
             ),
         )
+
+
+SmartSearch = AdaptiveSearch
+SmartSearchResult = AdaptiveSearchResult
