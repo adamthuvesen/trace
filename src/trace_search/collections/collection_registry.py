@@ -6,18 +6,19 @@ import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 from trace_search.config import settings
-from trace_search.extraction.corpus import iter_kb_files
 from trace_search.collections.diagnostics import (
     diagnose_collections,
     render_doctor_report,
 )
+from trace_search.collections.document_listing import list_documents_for_collections
+from trace_search.collections.index_stats import render_index_stats
 from trace_search.indexing.embeddings import EmbeddingBackend, build_embedding_backend
 from trace_search.extraction.extractors import (
     SUPPORTED_EXTENSIONS,
     extract_content,
-    extract_title,
 )
 from trace_search.indexing.index_metadata import (
     metadata_matches_active_model,
@@ -38,8 +39,7 @@ from trace_search.indexing.wiki_indexer import WikiIndexer
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_LIST_LIMIT = 50
-MAX_LIST_LIMIT = 500
+DirectSearchMode = Literal["keyword", "semantic", "hybrid"]
 
 
 @dataclass
@@ -120,6 +120,23 @@ class Collection:
     ) -> AdaptiveSearch:
         """Deprecated alias for get_adaptive()."""
         return self.get_adaptive(backend, skip_build=skip_build)
+
+    def search(
+        self,
+        mode: DirectSearchMode,
+        query: str,
+        top_k: int,
+        filters: SearchFilters,
+        backend: EmbeddingBackend | None = None,
+    ) -> list[dict]:
+        """Run one non-adaptive search mode for this collection."""
+        if mode == "keyword":
+            return self.get_keyword(backend).search(query, top_k, filters=filters)
+        if mode == "semantic":
+            return self.get_semantic(backend).search(query, top_k, filters=filters)
+        if mode == "hybrid":
+            return self.get_hybrid(backend).search(query, top_k, filters=filters)
+        raise ValueError(f"Unknown search mode: {mode}")
 
     def get_neighbor_content(
         self,
@@ -228,25 +245,13 @@ class CollectionRegistry:
         filters = filters or SearchFilters()
         cols = self._resolve(collection)
 
-        def run_on(col: Collection) -> list[dict]:
-            if mode == "keyword":
-                return col.get_keyword(self.backend).search(
-                    query, top_k, filters=filters
-                )
-            if mode == "semantic":
-                return col.get_semantic(self.backend).search(
-                    query, top_k, filters=filters
-                )
-            if mode == "hybrid":
-                return col.get_hybrid(self.backend).search(
-                    query, top_k, filters=filters
-                )
+        if mode not in {"keyword", "semantic", "hybrid"}:
             raise ValueError(f"Unknown search mode: {mode}")
 
         if len(cols) == 1:
-            return run_on(cols[0])
+            return cols[0].search(mode, query, top_k, filters, self.backend)
         return self._merge_results(
-            [run_on(col) for col in cols],
+            [col.search(mode, query, top_k, filters, self.backend) for col in cols],
             top_k,
             [c.name for c in cols],
         )
@@ -487,88 +492,14 @@ class CollectionRegistry:
         collection: str | None,
         filters: SearchFilters | None = None,
     ) -> str:
-        if limit < 1:
-            limit = DEFAULT_LIST_LIMIT
-        limit = min(limit, MAX_LIST_LIMIT)
         filters = filters or SearchFilters()
         cols = self._resolve(collection)
-        all_docs: list[dict[str, str]] = []
-
-        for col in cols:
-            kb = col.kb_path.resolve()
-            search_path = kb
-
-            if folder:
-                candidate = (kb / folder).resolve()
-                if not candidate.is_relative_to(kb):
-                    continue
-                if candidate.exists():
-                    search_path = candidate
-                else:
-                    for directory in sorted(kb.iterdir(), key=lambda p: p.name.lower()):
-                        if (
-                            directory.is_dir()
-                            and directory.name.lower() == folder.lower()
-                        ):
-                            search_path = directory
-                            break
-                    else:
-                        continue
-
-            for file_path in iter_kb_files(kb, root=search_path):
-                ext = file_path.suffix.lower()
-                rel_path = str(file_path.relative_to(kb))
-                try:
-                    mtime = file_path.stat().st_mtime
-                except OSError:
-                    continue
-                if not filters.matches_record(rel_path, ext, mtime):
-                    continue
-                if ext == ".md":
-                    try:
-                        content = file_path.read_text(encoding="utf-8")
-                        title = extract_title(content, file_path)
-                    except Exception:
-                        title = file_path.stem
-                else:
-                    title = file_path.stem
-                path_parts = rel_path.split("/")
-                doc_folder = path_parts[0] if len(path_parts) > 1 else ""
-                doc: dict[str, str] = {
-                    "title": title,
-                    "path": rel_path,
-                    "folder": doc_folder,
-                }
-                if len(cols) > 1:
-                    doc["collection"] = col.name
-                all_docs.append(doc)
-
-        if not all_docs:
-            return "No documents found."
-
-        all_docs = sorted(all_docs, key=lambda d: (d.get("collection", ""), d["path"]))
-        all_docs = all_docs[:limit]
-
-        lines = [
-            f"Found {len(all_docs)} documents"
-            + (f" in {folder}" if folder else "")
-            + ":\n"
-        ]
-        by_folder: dict[str, list[dict[str, str]]] = defaultdict(list)
-        for doc in all_docs:
-            key = (
-                doc.get("collection", "") + "/" + (doc["folder"] or "(root)")
-                if len(cols) > 1
-                else doc["folder"] or "(root)"
-            )
-            by_folder[key].append(doc)
-
-        for folder_name, folder_docs in sorted(by_folder.items()):
-            lines.append(f"\n## {folder_name}")
-            for doc in folder_docs:
-                lines.append(f"- **{doc['title']}**: `{doc['path']}`")
-
-        return "\n".join(lines)
+        return list_documents_for_collections(
+            [(col.name, col.kb_path) for col in cols],
+            folder=folder,
+            limit=limit,
+            filters=filters,
+        )
 
     def reindex(self, collection: str | None, force: bool = False) -> str:
         """Reindex the given collection(s); incremental by default."""
@@ -601,44 +532,8 @@ class CollectionRegistry:
 
     def index_stats(self, collection: str | None) -> str:
         cols = self._resolve(collection)
-        sections = []
-        cache_stats = SemanticSearch.get_cache_stats()
-
-        for col in cols:
-            indexer = col.ensure_index(self.backend, skip_build=True)
-            stats = indexer.get_stats()
-            chunking = stats.get("chunking", {})
-
-            if chunking.get("use_tokens"):
-                chunk_mode = f"token-based (max {chunking.get('token_chunk_size', settings.token_chunk_size)} tokens)"
-            else:
-                chunk_mode = f"character-based (max {chunking.get('char_chunk_size', settings.char_chunk_size)} chars)"
-
-            if chunking.get("enable_overlap"):
-                if chunking.get("use_tokens"):
-                    overlap_info = f"enabled ({chunking.get('token_overlap_size', settings.token_overlap_size)} tokens)"
-                else:
-                    overlap_info = f"enabled ({chunking.get('char_overlap_size', settings.char_overlap_size)} chars)"
-            else:
-                overlap_info = "disabled"
-
-            sections.append(f"""## Collection: {col.name}
-
-- **Knowledge base:** `{stats["kb_path"]}`
-- **ChromaDB chunks:** {stats["total_chunks"]}
-- **BM25 documents:** {stats["bm25_docs"]}
-- **BM25 available:** {stats["bm25_available"]}
-- **Chunking:** {chunk_mode}, overlap {overlap_info}
-- **ChromaDB path:** `{stats["chroma_path"]}`
-- **BM25 path:** `{stats["bm25_path"]}`""")
-
-        return f"""# Index Statistics
-
-{chr(10).join(sections)}
-
-## Shared
-- **Embedding model:** {settings.embedding_model} (dims={settings.embedding_dims})
-- **Embedding backend:** {settings.embedding_backend}
-- **Reranker:** {settings.reranker_model} (enabled={settings.reranker_enabled})
-- **Cache:** {cache_stats["cache_size"]}/{cache_stats["cache_maxsize"]} (hit rate: {cache_stats["cache_hit_rate"]})
-"""
+        collection_stats = [
+            (col.name, col.ensure_index(self.backend, skip_build=True).get_stats())
+            for col in cols
+        ]
+        return render_index_stats(collection_stats, SemanticSearch.get_cache_stats())

@@ -28,6 +28,35 @@ def validate_collection_name(name: str) -> str:
     return name
 
 
+def _parse_collection_entry(entry: str) -> tuple[str, Path]:
+    entry = entry.strip()
+    if ":" not in entry:
+        raise ValueError(
+            f"Invalid KB_COLLECTIONS entry '{entry}'. "
+            "Expected format: 'name:/path/to/kb'"
+        )
+
+    name, path_str = entry.split(":", 1)
+    name = validate_collection_name(name.strip())
+    path = Path(path_str.strip()).expanduser()
+    if not path.exists():
+        raise ValueError(f"Collection '{name}' path does not exist: {path}")
+    if not path.is_dir():
+        raise ValueError(f"Collection '{name}' path is not a directory: {path}")
+    return name, path
+
+
+def parse_kb_collections(value: str) -> dict[str, Path]:
+    """Parse a KB_COLLECTIONS string into a validated collection map."""
+    collections: dict[str, Path] = {}
+    for entry in value.split(","):
+        name, path = _parse_collection_entry(entry)
+        if name in collections:
+            raise ValueError(f"Duplicate collection name: {name}")
+        collections[name] = path
+    return collections
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -202,35 +231,13 @@ class Settings(BaseSettings):
                 "KB_COLLECTIONS and KB_PATH are mutually exclusive — set one, not both."
             )
         if self.kb_collections:
-            collections = {}
-            for entry in self.kb_collections.split(","):
-                entry = entry.strip()
-                if ":" not in entry:
-                    raise ValueError(
-                        f"Invalid KB_COLLECTIONS entry '{entry}'. "
-                        "Expected format: 'name:/path/to/kb'"
-                    )
-                name, path_str = entry.split(":", 1)
-                name = name.strip()
-                validate_collection_name(name)
-                if name in collections:
-                    raise ValueError(f"Duplicate collection name: {name}")
-                path = Path(path_str.strip()).expanduser()
-                if not path.exists():
-                    raise ValueError(f"Collection '{name}' path does not exist: {path}")
-                if not path.is_dir():
-                    raise ValueError(
-                        f"Collection '{name}' path is not a directory: {path}"
-                    )
-                collections[name] = path
-            return collections
-        elif self.kb_path:
+            return parse_kb_collections(self.kb_collections)
+        if self.kb_path:
             return {self.kb_path.name: self.kb_path}
-        else:
-            raise ValueError(
-                "Set KB_COLLECTIONS or KB_PATH. "
-                "KB_COLLECTIONS format: 'name:/path,name:/path'"
-            )
+        raise ValueError(
+            "Set KB_COLLECTIONS or KB_PATH. "
+            "KB_COLLECTIONS format: 'name:/path,name:/path'"
+        )
 
     @property
     def tokenizer_model(self) -> str:

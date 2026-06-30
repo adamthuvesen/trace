@@ -13,6 +13,7 @@ from typing import Any
 from trace_search.config import settings
 from trace_search.indexing.index_metadata import (
     INDEX_METADATA_VERSION,
+    IndexMetadata,
     SourceChangeSet,
     categorize_source_changes,
     metadata_matches_active_model,
@@ -135,53 +136,57 @@ def _read_metadata_version(index_path: Path) -> int | None:
         return None
 
 
-def diagnose_index(kb_path: Path, index_path: Path) -> IndexDiagnosis:
-    """Diagnose index presence, compatibility, freshness, and last build time."""
-    model_slug = settings.model_slug
-    chroma_path = chroma_dir(index_path, model_slug)
-    bm25_path = bm25_dir(index_path, model_slug)
+def _missing_index_diagnosis(
+    index_path: Path,
+    *,
+    chroma_path: Path,
+    bm25_path: Path,
+) -> IndexDiagnosis | None:
+    missing = []
+    if not chroma_path.exists():
+        missing.append("ChromaDB")
+    if not bm25_path.exists():
+        missing.append("BM25")
+    if not missing:
+        return None
 
+    return IndexDiagnosis(
+        status="missing",
+        messages=[
+            f"Missing {' and '.join(missing)} index files.",
+            "Run `reindex` after confirming the corpus path.",
+        ],
+        last_index_time=None,
+        metadata_version=_read_metadata_version(index_path),
+        next_reindex="forced",
+        changes=None,
+    )
+
+
+def _unknown_metadata_diagnosis(raw_version: int | None) -> IndexDiagnosis:
+    if raw_version is not None and raw_version != INDEX_METADATA_VERSION:
+        reason_msg = (
+            f"Index metadata is at schema v{raw_version}; "
+            f"current schema is v{INDEX_METADATA_VERSION}."
+        )
+        next_msg = "Next `reindex` will be forced (schema upgrade)."
+    else:
+        reason_msg = "Index exists but has no readable Trace metadata."
+        next_msg = "Next `reindex` will be forced (no metadata)."
+
+    return IndexDiagnosis(
+        status="unknown",
+        messages=[reason_msg, next_msg],
+        last_index_time=None,
+        metadata_version=raw_version,
+        next_reindex="forced",
+        changes=None,
+    )
+
+
+def _freshness_diagnosis(kb_path: Path, metadata: IndexMetadata) -> IndexDiagnosis:
     messages: list[str] = []
     status = "healthy"
-
-    if not chroma_path.exists() or not bm25_path.exists():
-        missing = []
-        if not chroma_path.exists():
-            missing.append("ChromaDB")
-        if not bm25_path.exists():
-            missing.append("BM25")
-        return IndexDiagnosis(
-            status="missing",
-            messages=[
-                f"Missing {' and '.join(missing)} index files.",
-                "Run `reindex` after confirming the corpus path.",
-            ],
-            last_index_time=None,
-            metadata_version=_read_metadata_version(index_path),
-            next_reindex="forced",
-            changes=None,
-        )
-
-    raw_version = _read_metadata_version(index_path)
-    metadata = read_index_metadata(index_path)
-    if metadata is None:
-        if raw_version is not None and raw_version != INDEX_METADATA_VERSION:
-            reason_msg = (
-                f"Index metadata is at schema v{raw_version}; "
-                f"current schema is v{INDEX_METADATA_VERSION}."
-            )
-            next_msg = "Next `reindex` will be forced (schema upgrade)."
-        else:
-            reason_msg = "Index exists but has no readable Trace metadata."
-            next_msg = "Next `reindex` will be forced (no metadata)."
-        return IndexDiagnosis(
-            status="unknown",
-            messages=[reason_msg, next_msg],
-            last_index_time=None,
-            metadata_version=raw_version,
-            next_reindex="forced",
-            changes=None,
-        )
 
     if not metadata_matches_active_model(metadata):
         status = "incompatible"
@@ -202,15 +207,12 @@ def diagnose_index(kb_path: Path, index_path: Path) -> IndexDiagnosis:
         else:
             messages.append("Next `reindex` will run incrementally on changed files.")
             next_reindex = "incremental"
+    elif status == "incompatible":
+        messages.append("Next `reindex` will run, but model mismatch forces a rebuild.")
+        next_reindex = "forced"
     else:
-        if status == "incompatible":
-            messages.append(
-                "Next `reindex` will run, but model mismatch forces a rebuild."
-            )
-            next_reindex = "forced"
-        else:
-            messages.append("Indexes are present, compatible, and fresh.")
-            next_reindex = "incremental"
+        messages.append("Indexes are present, compatible, and fresh.")
+        next_reindex = "incremental"
 
     return IndexDiagnosis(
         status=status,
@@ -220,6 +222,27 @@ def diagnose_index(kb_path: Path, index_path: Path) -> IndexDiagnosis:
         next_reindex=next_reindex,
         changes=changes,
     )
+
+
+def diagnose_index(kb_path: Path, index_path: Path) -> IndexDiagnosis:
+    """Diagnose index presence, compatibility, freshness, and last build time."""
+    model_slug = settings.model_slug
+    chroma_path = chroma_dir(index_path, model_slug)
+    bm25_path = bm25_dir(index_path, model_slug)
+
+    missing = _missing_index_diagnosis(
+        index_path,
+        chroma_path=chroma_path,
+        bm25_path=bm25_path,
+    )
+    if missing is not None:
+        return missing
+
+    raw_version = _read_metadata_version(index_path)
+    metadata = read_index_metadata(index_path)
+    if metadata is None:
+        return _unknown_metadata_diagnosis(raw_version)
+    return _freshness_diagnosis(kb_path, metadata)
 
 
 def run_probe(
@@ -299,6 +322,90 @@ def diagnose_collections(
     )
 
 
+def _metadata_version_label(index: IndexDiagnosis) -> str:
+    version = index.metadata_version
+    current = index.metadata_version_current
+    if version is None:
+        return "none"
+    if version == current:
+        return f"v{version}"
+    return f"v{version} (current: v{current})"
+
+
+def _append_collection_report(
+    lines: list[str],
+    collection: CollectionDiagnosis,
+) -> None:
+    lines.append("")
+    lines.append(f"## Collection: {collection.name}")
+    lines.append(f"- **Knowledge base:** `{collection.kb_path}`")
+    lines.append(f"- **Index root:** `{collection.index_path}`")
+    lines.append(f"- **Visible supported docs:** {collection.corpus.visible_total}")
+
+    if collection.corpus.visible_by_extension:
+        ext_counts = ", ".join(
+            f"{ext}={count}"
+            for ext, count in sorted(collection.corpus.visible_by_extension.items())
+        )
+        lines.append(f"- **By extension:** {ext_counts}")
+    else:
+        lines.append(
+            "- **Warning:** No supported visible documents found; search will return no results."
+        )
+
+    if collection.corpus.excluded_by_reason:
+        excluded = ", ".join(
+            f"{reason}={count}"
+            for reason, count in sorted(collection.corpus.excluded_by_reason.items())
+        )
+        lines.append(f"- **Excluded paths:** {excluded}")
+    else:
+        lines.append("- **Excluded paths:** none")
+
+    lines.append(f"- **Index status:** {collection.index.status}")
+    for message in collection.index.messages:
+        lines.append(f"  - {message}")
+    lines.append(
+        f"- **Last index time:** {collection.index.last_index_time or 'unknown'}"
+    )
+    lines.append(f"- **Metadata schema:** {_metadata_version_label(collection.index)}")
+    lines.append(f"- **Next reindex:** {collection.index.next_reindex}")
+
+    changes = collection.index.changes
+    if changes is not None:
+        lines.append(
+            "- **Source changes since last index:** "
+            f"unchanged={len(changes.unchanged)}, "
+            f"added={len(changes.added)}, "
+            f"changed={len(changes.changed)}, "
+            f"removed={len(changes.removed)}"
+        )
+
+
+def _append_filter_hint(lines: list[str]) -> None:
+    lines.append("")
+    lines.append("## Filters")
+    lines.append(
+        "- Scope any search or `list_documents` call with `path_prefix`, "
+        "`extensions`, or `since` (ISO 8601 datetime). "
+        "Example: `search('router', path_prefix='architecture/', extensions=['.md'])`."
+    )
+
+
+def _append_probe_report(lines: list[str], probe: ProbeDiagnosis) -> None:
+    lines.append("")
+    lines.append("## Sample Query")
+    lines.append(f"- **Query:** `{probe.query}`")
+    lines.append(f"- **Status:** {probe.status}")
+    if probe.elapsed_ms is not None:
+        lines.append(f"- **Latency:** {probe.elapsed_ms:.1f} ms")
+    lines.append(f"- **Results:** {probe.result_count}")
+    if probe.top_result:
+        lines.append(f"- **Top result:** {probe.top_result}")
+    if probe.message:
+        lines.append(f"- **Note:** {probe.message}")
+
+
 def render_doctor_report(report: DoctorReport) -> str:
     """Render a doctor report as Markdown."""
     lines = ["# Trace Doctor", ""]
@@ -310,80 +417,11 @@ def render_doctor_report(report: DoctorReport) -> str:
         return "\n".join(lines)
 
     for collection in report.collections:
-        lines.append("")
-        lines.append(f"## Collection: {collection.name}")
-        lines.append(f"- **Knowledge base:** `{collection.kb_path}`")
-        lines.append(f"- **Index root:** `{collection.index_path}`")
-        lines.append(f"- **Visible supported docs:** {collection.corpus.visible_total}")
+        _append_collection_report(lines, collection)
 
-        if collection.corpus.visible_by_extension:
-            ext_counts = ", ".join(
-                f"{ext}={count}"
-                for ext, count in sorted(collection.corpus.visible_by_extension.items())
-            )
-            lines.append(f"- **By extension:** {ext_counts}")
-        else:
-            lines.append(
-                "- **Warning:** No supported visible documents found; search will return no results."
-            )
-
-        if collection.corpus.excluded_by_reason:
-            excluded = ", ".join(
-                f"{reason}={count}"
-                for reason, count in sorted(
-                    collection.corpus.excluded_by_reason.items()
-                )
-            )
-            lines.append(f"- **Excluded paths:** {excluded}")
-        else:
-            lines.append("- **Excluded paths:** none")
-
-        lines.append(f"- **Index status:** {collection.index.status}")
-        for message in collection.index.messages:
-            lines.append(f"  - {message}")
-        last_index_time = collection.index.last_index_time or "unknown"
-        lines.append(f"- **Last index time:** {last_index_time}")
-
-        version = collection.index.metadata_version
-        version_current = collection.index.metadata_version_current
-        if version is None:
-            version_label = "none"
-        elif version == version_current:
-            version_label = f"v{version}"
-        else:
-            version_label = f"v{version} (current: v{version_current})"
-        lines.append(f"- **Metadata schema:** {version_label}")
-        lines.append(f"- **Next reindex:** {collection.index.next_reindex}")
-
-        changes = collection.index.changes
-        if changes is not None:
-            lines.append(
-                "- **Source changes since last index:** "
-                f"unchanged={len(changes.unchanged)}, "
-                f"added={len(changes.added)}, "
-                f"changed={len(changes.changed)}, "
-                f"removed={len(changes.removed)}"
-            )
-
-    lines.append("")
-    lines.append("## Filters")
-    lines.append(
-        "- Scope any search or `list_documents` call with `path_prefix`, "
-        "`extensions`, or `since` (ISO 8601 datetime). "
-        "Example: `search('router', path_prefix='architecture/', extensions=['.md'])`."
-    )
+    _append_filter_hint(lines)
 
     if report.probe is not None:
-        lines.append("")
-        lines.append("## Sample Query")
-        lines.append(f"- **Query:** `{report.probe.query}`")
-        lines.append(f"- **Status:** {report.probe.status}")
-        if report.probe.elapsed_ms is not None:
-            lines.append(f"- **Latency:** {report.probe.elapsed_ms:.1f} ms")
-        lines.append(f"- **Results:** {report.probe.result_count}")
-        if report.probe.top_result:
-            lines.append(f"- **Top result:** {report.probe.top_result}")
-        if report.probe.message:
-            lines.append(f"- **Note:** {report.probe.message}")
+        _append_probe_report(lines, report.probe)
 
     return "\n".join(lines)

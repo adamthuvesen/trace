@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from functools import lru_cache
 
 from trace_search.config import settings
@@ -100,40 +101,58 @@ def _get_overlap_text(chunk: str, overlap_size: int, use_tokens: bool) -> str:
     return chunk[-overlap_size:] if len(chunk) > overlap_size else chunk
 
 
+@dataclass(frozen=True)
+class ChunkingParams:
+    """Resolved chunk sizing and overlap behavior."""
+
+    use_tokens: bool
+    max_size: int
+    overlap_size: int
+
+    def size(self, text: str) -> int:
+        return _get_size(text, self.use_tokens)
+
+    def overlap(self, chunk: str) -> str:
+        return _get_overlap_text(chunk, self.overlap_size, self.use_tokens)
+
+
 def _split_oversized_text(
     text: str,
     *,
-    use_tokens: bool,
-    max_size: int,
-    overlap_size: int,
+    params: ChunkingParams,
 ) -> list[str]:
     """Split one oversized text block into windows without losing content."""
-    if _get_size(text, use_tokens) <= max_size:
+    if params.size(text) <= params.max_size:
         return [text]
 
-    if use_tokens:
+    if params.use_tokens:
         return _get_token_counter().split_to_token_windows(
             text,
-            max_tokens=max_size,
-            overlap_tokens=overlap_size,
+            max_tokens=params.max_size,
+            overlap_tokens=params.overlap_size,
         )
 
-    step = max_size - overlap_size if 0 < overlap_size < max_size else max_size
-    return [text[start : start + max_size] for start in range(0, len(text), step)]
+    step = (
+        params.max_size - params.overlap_size
+        if 0 < params.overlap_size < params.max_size
+        else params.max_size
+    )
+    return [
+        text[start : start + params.max_size] for start in range(0, len(text), step)
+    ]
 
 
 def _prepend_overlap_if_fits(
     overlap: str,
     chunk: str,
     *,
-    use_tokens: bool,
-    max_size: int,
+    params: ChunkingParams,
 ) -> str:
     """Prefix overlap only when it does not force truncating the new chunk."""
     if not overlap:
         return chunk
     combined = f"{overlap}\n\n{chunk}"
-    if _get_size(combined, use_tokens) <= max_size:
+    if params.size(combined) <= params.max_size:
         return combined
     return chunk
 
@@ -141,23 +160,24 @@ def _prepend_overlap_if_fits(
 def _merge_tiny_chunks(
     chunks: list[str],
     *,
-    use_tokens: bool,
-    max_size: int,
+    params: ChunkingParams,
 ) -> list[str]:
     """Merge tiny chunks into neighbors to preserve context and reduce fragmentation."""
     if len(chunks) <= 1:
         return chunks
 
-    if use_tokens:
-        tiny_threshold = max(5, int(max_size * 0.1))
+    if params.use_tokens:
+        tiny_threshold = max(5, int(params.max_size * 0.1))
     else:
-        tiny_threshold = 200 if max_size >= 200 else max(10, int(max_size * 0.5))
+        tiny_threshold = (
+            200 if params.max_size >= 200 else max(10, int(params.max_size * 0.5))
+        )
 
     merged: list[str] = []
     i = 0
     while i < len(chunks):
         chunk = chunks[i]
-        if _get_size(chunk, use_tokens) >= tiny_threshold:
+        if params.size(chunk) >= tiny_threshold:
             merged.append(chunk)
             i += 1
             continue
@@ -165,7 +185,7 @@ def _merge_tiny_chunks(
         # Prefer merging with next chunk to keep heading context with its section.
         if i + 1 < len(chunks):
             combined_next = f"{chunk}\n\n{chunks[i + 1]}"
-            if _get_size(combined_next, use_tokens) <= max_size:
+            if params.size(combined_next) <= params.max_size:
                 merged.append(combined_next)
                 i += 2
                 continue
@@ -173,7 +193,7 @@ def _merge_tiny_chunks(
         # Fall back to previous chunk if it fits.
         if merged:
             combined_prev = f"{merged[-1]}\n\n{chunk}"
-            if _get_size(combined_prev, use_tokens) <= max_size:
+            if params.size(combined_prev) <= params.max_size:
                 merged[-1] = combined_prev
                 i += 1
                 continue
@@ -201,8 +221,7 @@ def _prefix_heading_context(
     chunks: list[str],
     context: str,
     *,
-    use_tokens: bool,
-    max_size: int,
+    params: ChunkingParams,
 ) -> list[str]:
     """Prefix heading context to chunks where it fits, to preserve section meaning."""
     if not context or len(chunks) <= 1:
@@ -214,7 +233,7 @@ def _prefix_heading_context(
             prefixed.append(chunk)
             continue
         combined = f"{context}\n\n{chunk}"
-        if _get_size(combined, use_tokens) <= max_size:
+        if params.size(combined) <= params.max_size:
             prefixed.append(combined)
         else:
             prefixed.append(chunk)
@@ -251,11 +270,11 @@ def _resolve_chunking_params(
     overlap_chars: int | None,
     overlap_tokens: int | None,
     enable_overlap: bool | None,
-) -> tuple[bool, int, int]:
+) -> ChunkingParams:
     """Resolve chunking parameters with defaults from settings.
 
     Returns:
-        Tuple of (use_tokens, max_size, overlap_size)
+        Resolved chunking parameters.
     """
     if use_tokens is None:
         use_tokens = settings.use_token_based_chunking
@@ -275,7 +294,11 @@ def _resolve_chunking_params(
     if not enable_overlap:
         overlap_size = 0
 
-    return use_tokens, max_size, overlap_size
+    return ChunkingParams(
+        use_tokens=use_tokens,
+        max_size=max_size,
+        overlap_size=overlap_size,
+    )
 
 
 def chunk_by_headings(
@@ -302,7 +325,7 @@ def chunk_by_headings(
     Returns:
         List of content chunks.
     """
-    use_tokens, max_size, overlap_size = _resolve_chunking_params(
+    params = _resolve_chunking_params(
         use_tokens,
         max_chunk_chars,
         max_chunk_tokens,
@@ -322,8 +345,8 @@ def chunk_by_headings(
 
     for section in sections:
         section_level = _get_heading_level(section)
-        section_size = _get_size(section, use_tokens)
-        current_size = _get_size(current_chunk, use_tokens)
+        section_size = params.size(section)
+        current_size = params.size(current_chunk)
 
         if current_chunk and _heading_level_changed(current_level, section_level):
             chunks.append(current_chunk)
@@ -332,24 +355,22 @@ def chunk_by_headings(
             pending_overlap = ""
             current_size = 0
 
-        if current_size + section_size <= max_size:
+        if current_size + section_size <= params.max_size:
             current_chunk += "\n\n" + section if current_chunk else section
             if current_chunk == section:
                 current_level = section_level
         else:
             if current_chunk:
                 chunks.append(current_chunk)
-                pending_overlap = _get_overlap_text(
-                    current_chunk, overlap_size, use_tokens
-                )
+                pending_overlap = params.overlap(current_chunk)
                 current_level = None
 
             # If section itself is too large, split it further
-            if section_size > max_size:
+            if section_size > params.max_size:
                 sub_chunks = chunk_by_paragraphs(
                     section,
                     max_chunk_chars=max_chunk_chars,
-                    use_tokens=use_tokens,
+                    use_tokens=params.use_tokens,
                     max_chunk_tokens=max_chunk_tokens,
                     overlap_chars=overlap_chars,
                     overlap_tokens=overlap_tokens,
@@ -359,29 +380,24 @@ def chunk_by_headings(
                 sub_chunks = _prefix_heading_context(
                     sub_chunks,
                     heading_context,
-                    use_tokens=use_tokens,
-                    max_size=max_size,
+                    params=params,
                 )
                 if pending_overlap and sub_chunks:
                     sub_chunks[0] = _prepend_overlap_if_fits(
                         pending_overlap,
                         sub_chunks[0],
-                        use_tokens=use_tokens,
-                        max_size=max_size,
+                        params=params,
                     )
                 chunks.extend(sub_chunks)
                 if sub_chunks:
-                    pending_overlap = _get_overlap_text(
-                        sub_chunks[-1], overlap_size, use_tokens
-                    )
+                    pending_overlap = params.overlap(sub_chunks[-1])
                 current_chunk = ""
                 current_level = None
             else:
                 current_chunk = _prepend_overlap_if_fits(
                     pending_overlap,
                     section,
-                    use_tokens=use_tokens,
-                    max_size=max_size,
+                    params=params,
                 )
                 pending_overlap = ""
                 current_level = section_level
@@ -394,8 +410,7 @@ def chunk_by_headings(
 
     return _merge_tiny_chunks(
         chunks,
-        use_tokens=use_tokens,
-        max_size=max_size,
+        params=params,
     )
 
 
@@ -423,7 +438,7 @@ def chunk_by_paragraphs(
     Returns:
         List of content chunks.
     """
-    use_tokens, max_size, overlap_size = _resolve_chunking_params(
+    params = _resolve_chunking_params(
         use_tokens,
         max_chunk_chars,
         max_chunk_tokens,
@@ -440,35 +455,28 @@ def chunk_by_paragraphs(
     for para in paragraphs:
         if not para:
             continue
-        para_size = _get_size(para, use_tokens)
+        para_size = params.size(para)
 
-        if para_size > max_size:
+        if para_size > params.max_size:
             if current_chunk:
                 chunks.append(current_chunk)
-                pending_overlap = _get_overlap_text(
-                    current_chunk, overlap_size, use_tokens
-                )
+                pending_overlap = params.overlap(current_chunk)
                 current_chunk = ""
 
             sub_chunks = _split_oversized_text(
                 para,
-                use_tokens=use_tokens,
-                max_size=max_size,
-                overlap_size=overlap_size,
+                params=params,
             )
             if pending_overlap and sub_chunks:
                 sub_chunks[0] = _prepend_overlap_if_fits(
                     pending_overlap,
                     sub_chunks[0],
-                    use_tokens=use_tokens,
-                    max_size=max_size,
+                    params=params,
                 )
                 pending_overlap = ""
             chunks.extend(sub_chunks)
             if sub_chunks:
-                pending_overlap = _get_overlap_text(
-                    sub_chunks[-1], overlap_size, use_tokens
-                )
+                pending_overlap = params.overlap(sub_chunks[-1])
             continue
 
         if current_chunk:
@@ -477,27 +485,23 @@ def chunk_by_paragraphs(
             candidate = _prepend_overlap_if_fits(
                 pending_overlap,
                 para,
-                use_tokens=use_tokens,
-                max_size=max_size,
+                params=params,
             )
 
-        if _get_size(candidate, use_tokens) <= max_size:
+        if params.size(candidate) <= params.max_size:
             current_chunk = candidate
             if pending_overlap:
                 pending_overlap = ""
         else:
             if current_chunk:
                 chunks.append(current_chunk)
-                pending_overlap = _get_overlap_text(
-                    current_chunk, overlap_size, use_tokens
-                )
+                pending_overlap = params.overlap(current_chunk)
 
             # Start new chunk with overlap if applicable
             current_chunk = _prepend_overlap_if_fits(
                 pending_overlap,
                 para,
-                use_tokens=use_tokens,
-                max_size=max_size,
+                params=params,
             )
             pending_overlap = ""
 
