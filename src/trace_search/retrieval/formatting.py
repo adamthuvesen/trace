@@ -81,6 +81,145 @@ def _format_followups(hits: list[dict[str, Any]], limit: int = 3) -> list[str]:
     return followups
 
 
+def _format_empty_results(route: SearchRoute | None) -> str:
+    if route is None:
+        return "No results found."
+
+    lines = [
+        "No results found.",
+        "",
+        f"**Strategy:** {route.strategy}",
+        f"**Reason:** {route.reason}",
+    ]
+    if not route.filters.is_empty:
+        lines.append(f"**Active filters:** {route.filters.describe()}")
+    return "\n".join(lines)
+
+
+def _append_route_summary(lines: list[str], route: SearchRoute | None) -> None:
+    if route is None:
+        return
+
+    fallback = "yes" if route.fallback_used else "no"
+    lines.extend(
+        [
+            "",
+            "## Strategy",
+            f"- **Selected:** {route.strategy}",
+            f"- **Fallback used:** {fallback}",
+            f"- **Reason:** {route.reason}",
+        ]
+    )
+    if not route.filters.is_empty:
+        lines.append(f"- **Active filters:** {route.filters.describe()}")
+
+
+def _group_hits_by_document(
+    sorted_hits: list[dict[str, Any]],
+    *,
+    max_documents: int,
+) -> list[list[dict[str, Any]]]:
+    grouped: dict[tuple[str | None, str], list[dict[str, Any]]] = defaultdict(list)
+    for hit in sorted_hits:
+        grouped[(hit.get("collection"), str(hit.get("path", "")))].append(hit)
+
+    return sorted(
+        grouped.values(),
+        key=lambda group: max(_score_for_sort(hit) for hit in group),
+        reverse=True,
+    )[:max_documents]
+
+
+def _matched_query_terms(query: str, quote: str) -> list[str]:
+    quote_lower = quote.lower()
+    return [term for term in _query_terms(query) if term in quote_lower]
+
+
+def _append_snippet(
+    lines: list[str],
+    *,
+    hit: dict[str, Any],
+    title: str,
+    query: str,
+    quote: str,
+    snippet_number: int,
+) -> None:
+    breadcrumb = hit.get("breadcrumb") or title
+    lines.append("")
+    lines.append(f"**Snippet {snippet_number}:** {breadcrumb}")
+
+    hints = hit.get("match_hints") or []
+    if hints:
+        lines.append(f"- **Match evidence:** {'; '.join(hints[:3])}")
+
+    matched_terms = _matched_query_terms(query, quote)
+    if matched_terms:
+        terms = ", ".join(f"`{term}`" for term in sorted(set(matched_terms)))
+        lines.append(f"- **Matched terms:** {terms}")
+
+    lines.append(f"- **Best quote:** {quote}")
+
+    neighbor = hit.get("neighbor_content")
+    if neighbor:
+        lines.append(f"- **Nearby context:** {_trim_at_boundary(str(neighbor), 220)}")
+
+
+def _append_document_group(
+    lines: list[str],
+    *,
+    index: int,
+    group: list[dict[str, Any]],
+    query: str,
+    global_seen: set[tuple[str | None, str]],
+    dedupe_across_documents: bool,
+    max_snippets: int,
+) -> None:
+    first = group[0]
+    path = str(first.get("path", ""))
+    title = first.get("title") or path or "Untitled"
+    collection = first.get("collection")
+    source = first.get("source", "unknown")
+    folder = first.get("folder", "")
+
+    lines.append("")
+    lines.append(f"### {index}. {title}")
+    lines.append(f"- **Path:** `{path}`")
+    if collection:
+        lines.append(f"- **Collection:** {collection}")
+    if folder:
+        lines.append(f"- **Folder:** {folder}")
+    lines.append(f"- **Source:** {source}")
+
+    per_doc_seen: set[str] = set()
+    snippets_added = 0
+    for hit in group:
+        quote = _best_quote(str(hit.get("content", "")), query)
+        if not quote:
+            continue
+
+        normalized = _normalization_key(quote)
+        global_key = (collection, normalized)
+        if normalized in per_doc_seen:
+            continue
+        if dedupe_across_documents and global_key in global_seen:
+            continue
+
+        per_doc_seen.add(normalized)
+        global_seen.add(global_key)
+        snippets_added += 1
+        _append_snippet(
+            lines,
+            hit=hit,
+            title=title,
+            query=query,
+            quote=quote,
+            snippet_number=snippets_added,
+        )
+
+        if snippets_added >= max_snippets:
+            break
+
+
 def format_context_packets(
     hits: list[dict[str, Any]],
     *,
@@ -91,101 +230,28 @@ def format_context_packets(
 ) -> str:
     """Render agent-native context grouped by document."""
     if not hits:
-        if route is None:
-            return "No results found."
-        empty_lines = [
-            "No results found.",
-            "",
-            f"**Strategy:** {route.strategy}",
-            f"**Reason:** {route.reason}",
-        ]
-        if not route.filters.is_empty:
-            empty_lines.append(f"**Active filters:** {route.filters.describe()}")
-        return "\n".join(empty_lines)
+        return _format_empty_results(route)
 
     sorted_hits = sorted(hits, key=_score_for_sort, reverse=True)
     lines = [f"Found {len(hits)} results"]
+    _append_route_summary(lines, route)
 
-    if route is not None:
-        fallback = "yes" if route.fallback_used else "no"
-        lines.extend(
-            [
-                "",
-                "## Strategy",
-                f"- **Selected:** {route.strategy}",
-                f"- **Fallback used:** {fallback}",
-                f"- **Reason:** {route.reason}",
-            ]
-        )
-        if not route.filters.is_empty:
-            lines.append(f"- **Active filters:** {route.filters.describe()}")
-
-    grouped: dict[tuple[str | None, str], list[dict[str, Any]]] = defaultdict(list)
-    for hit in sorted_hits:
-        grouped[(hit.get("collection"), str(hit.get("path", "")))].append(hit)
-
-    document_groups = sorted(
-        grouped.values(),
-        key=lambda group: max(_score_for_sort(hit) for hit in group),
-        reverse=True,
-    )[:max_documents]
-
+    document_groups = _group_hits_by_document(
+        sorted_hits,
+        max_documents=max_documents,
+    )
     lines.extend(["", "## Context"])
     global_seen: set[tuple[str | None, str]] = set()
     for index, group in enumerate(document_groups, 1):
-        first = group[0]
-        path = str(first.get("path", ""))
-        title = first.get("title") or path or "Untitled"
-        collection = first.get("collection")
-        source = first.get("source", "unknown")
-        folder = first.get("folder", "")
-        lines.append("")
-        lines.append(f"### {index}. {title}")
-        lines.append(f"- **Path:** `{path}`")
-        if collection:
-            lines.append(f"- **Collection:** {collection}")
-        if folder:
-            lines.append(f"- **Folder:** {folder}")
-        lines.append(f"- **Source:** {source}")
-
-        per_doc_seen: set[str] = set()
-        snippets_added = 0
-        for hit in group:
-            quote = _best_quote(str(hit.get("content", "")), query)
-            if not quote:
-                continue
-            normalized = _normalization_key(quote)
-            global_key = (collection, normalized)
-            if normalized in per_doc_seen:
-                continue
-            if global_key in global_seen and len(document_groups) > 1:
-                continue
-            per_doc_seen.add(normalized)
-            global_seen.add(global_key)
-
-            breadcrumb = hit.get("breadcrumb") or title
-            lines.append("")
-            lines.append(f"**Snippet {snippets_added + 1}:** {breadcrumb}")
-            hints = hit.get("match_hints") or []
-            if hints:
-                lines.append(f"- **Match evidence:** {'; '.join(hints[:3])}")
-            matched_terms = [
-                term for term in _query_terms(query) if term in quote.lower()
-            ]
-            if matched_terms:
-                terms = ", ".join(f"`{term}`" for term in sorted(set(matched_terms)))
-                lines.append(f"- **Matched terms:** {terms}")
-            lines.append(f"- **Best quote:** {quote}")
-
-            neighbor = hit.get("neighbor_content")
-            if neighbor:
-                lines.append(
-                    f"- **Nearby context:** {_trim_at_boundary(str(neighbor), 220)}"
-                )
-
-            snippets_added += 1
-            if snippets_added >= max_snippets_per_document:
-                break
+        _append_document_group(
+            lines,
+            index=index,
+            group=group,
+            query=query,
+            global_seen=global_seen,
+            dedupe_across_documents=len(document_groups) > 1,
+            max_snippets=max_snippets_per_document,
+        )
 
     followups = _format_followups(sorted_hits)
     if followups:

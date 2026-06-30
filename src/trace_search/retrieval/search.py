@@ -152,6 +152,51 @@ def _split_extensions(values: list[str] | tuple[str, ...]) -> tuple[str, ...]:
     return tuple(normalized)
 
 
+def _parse_path_prefixes(
+    path_prefix: str | list[str] | tuple[str, ...] | None,
+) -> tuple[str, ...]:
+    if path_prefix is None or path_prefix == "":
+        return ()
+    if isinstance(path_prefix, str):
+        return (path_prefix,)
+    return tuple(prefix for prefix in path_prefix if prefix)
+
+
+def _parse_extensions(
+    extensions: str | list[str] | tuple[str, ...] | None,
+) -> tuple[str, ...]:
+    if extensions is None or extensions == "":
+        return ()
+    if isinstance(extensions, str):
+        return _split_extensions((extensions,))
+    return _split_extensions(extensions)
+
+
+def _parse_since(since: str | datetime | None) -> datetime | None:
+    if since is None or since == "":
+        return None
+
+    if isinstance(since, datetime):
+        parsed_since = since
+    elif isinstance(since, str):
+        try:
+            parsed_since = datetime.fromisoformat(since)
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid `since` value {since!r}: expected ISO 8601 "
+                "datetime (e.g. 2026-01-01T00:00:00Z)"
+            ) from exc
+    else:
+        raise ValueError(
+            f"Invalid `since` value: expected ISO 8601 string or datetime, "
+            f"got {type(since).__name__}"
+        )
+
+    if parsed_since.tzinfo is None:
+        return parsed_since.replace(tzinfo=UTC)
+    return parsed_since
+
+
 def parse_filters(
     path_prefix: str | list[str] | tuple[str, ...] | None = None,
     extensions: str | list[str] | tuple[str, ...] | None = None,
@@ -165,44 +210,10 @@ def parse_filters(
     - `since` accepts an ISO 8601 datetime string or a `datetime`. Naive
       datetimes are assumed to be UTC. Invalid input raises ``ValueError``.
     """
-    if path_prefix is None or path_prefix == "":
-        prefixes: tuple[str, ...] = ()
-    elif isinstance(path_prefix, str):
-        prefixes = (path_prefix,)
-    else:
-        prefixes = tuple(p for p in path_prefix if p)
-
-    if extensions is None or extensions == "":
-        exts: tuple[str, ...] = ()
-    elif isinstance(extensions, str):
-        exts = _split_extensions((extensions,))
-    else:
-        exts = _split_extensions(extensions)
-
-    parsed_since: datetime | None = None
-    if since is not None and since != "":
-        if isinstance(since, datetime):
-            parsed_since = since
-        elif isinstance(since, str):
-            try:
-                parsed_since = datetime.fromisoformat(since)
-            except ValueError as exc:
-                raise ValueError(
-                    f"Invalid `since` value {since!r}: expected ISO 8601 "
-                    "datetime (e.g. 2026-01-01T00:00:00Z)"
-                ) from exc
-        else:
-            raise ValueError(
-                f"Invalid `since` value: expected ISO 8601 string or datetime, "
-                f"got {type(since).__name__}"
-            )
-        if parsed_since.tzinfo is None:
-            parsed_since = parsed_since.replace(tzinfo=UTC)
-
     return SearchFilters(
-        path_prefix=prefixes,
-        extensions=exts,
-        since=parsed_since,
+        path_prefix=_parse_path_prefixes(path_prefix),
+        extensions=_parse_extensions(extensions),
+        since=_parse_since(since),
     )
 
 
@@ -345,6 +356,45 @@ def _weak_file_score(corpus_size: int) -> float:
     return max(1.0, _BM25_WEAK_FILE_SCORE_LOG_FACTOR * math.log(max(corpus_size, 2)))
 
 
+@dataclass
+class _KeywordHitGroup:
+    best_hit: dict[str, Any]
+    best_score: float
+    metadata_overlap: float
+    support_score: float = 0.0
+    chunk_count: int = 0
+
+    def add_hit(
+        self,
+        hit: dict[str, Any],
+        *,
+        score: float,
+        metadata_overlap: float,
+        rank: int,
+    ) -> None:
+        self.chunk_count += 1
+        self.metadata_overlap = max(self.metadata_overlap, metadata_overlap)
+        if score > self.best_score:
+            self.best_hit = hit
+            self.best_score = score
+        if rank > 0:
+            self.support_score += score / (rank + 1)
+
+    def file_score(self) -> float:
+        support_boost = min(2.0, 0.18 * self.support_score)
+        metadata_boost = self.best_score * min(0.35, 0.45 * self.metadata_overlap)
+        return self.best_score + support_boost + metadata_boost
+
+    def to_hit(self, file_score: float) -> dict[str, Any]:
+        hit = dict(self.best_hit)
+        hit["bm25_chunk_score"] = self.best_score
+        hit["bm25_file_score"] = file_score
+        hit["bm25_file_support"] = self.chunk_count
+        hit["bm25_metadata_overlap"] = self.metadata_overlap
+        hit["score"] = file_score
+        return hit
+
+
 def _aggregate_keyword_hits(
     query: str,
     hits: list[dict[str, Any]],
@@ -358,54 +408,36 @@ def _aggregate_keyword_hits(
         return []
 
     query_terms = _rank_terms(query, remove_stopwords=True)
-    grouped: dict[str, dict[str, Any]] = {}
+    grouped: dict[str, _KeywordHitGroup] = {}
     for rank, hit in enumerate(hits):
         path = str(hit.get("path", ""))
         if not path:
             continue
         score = float(hit.get("score", 0.0) or 0.0)
         overlap = _metadata_overlap(query_terms, hit)
-        group = grouped.setdefault(
-            path,
-            {
-                "best_hit": hit,
-                "best_score": score,
-                "support_score": 0.0,
-                "metadata_overlap": overlap,
-                "chunk_count": 0,
-            },
-        )
-        group["chunk_count"] += 1
-        group["metadata_overlap"] = max(float(group["metadata_overlap"]), overlap)
-        if score > float(group["best_score"]):
-            group["best_hit"] = hit
-            group["best_score"] = score
-        if rank > 0:
-            group["support_score"] += score / (rank + 1)
+        group = grouped.get(path)
+        if group is None:
+            group = _KeywordHitGroup(
+                best_hit=hit,
+                best_score=score,
+                metadata_overlap=overlap,
+            )
+            grouped[path] = group
+        group.add_hit(hit, score=score, metadata_overlap=overlap, rank=rank)
 
     weak_score = _weak_file_score(corpus_size)
     ranked: list[tuple[float, int, dict[str, Any]]] = []
     for order, group in enumerate(grouped.values()):
-        best_score = float(group["best_score"])
-        overlap = float(group["metadata_overlap"])
-        support_boost = min(2.0, 0.18 * float(group["support_score"]))
-        metadata_boost = best_score * min(0.35, 0.45 * overlap)
-        file_score = best_score + support_boost + metadata_boost
+        file_score = group.file_score()
 
         if (
             require_anchor_for_weak_hits
             and file_score < weak_score
-            and overlap < _BM25_WEAK_METADATA_OVERLAP
+            and group.metadata_overlap < _BM25_WEAK_METADATA_OVERLAP
         ):
             continue
 
-        hit = dict(group["best_hit"])
-        hit["bm25_chunk_score"] = best_score
-        hit["bm25_file_score"] = file_score
-        hit["bm25_file_support"] = int(group["chunk_count"])
-        hit["bm25_metadata_overlap"] = overlap
-        hit["score"] = file_score
-        ranked.append((file_score, -order, hit))
+        ranked.append((file_score, -order, group.to_hit(file_score)))
 
     ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
     return [hit for _, _, hit in ranked[:max_results]]
