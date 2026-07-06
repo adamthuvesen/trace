@@ -2,13 +2,17 @@
 
 Local retrieval over a folder of files, for an agent or for you. Trace indexes
 documents on disk and serves search, document fetch, and diagnostics over a CLI
-or an MCP server. That lets an agent pull the right passages from a knowledge base
-without you pasting the whole thing into context.
+or an MCP server. That lets an agent pull the right passages from a knowledge
+base without you pasting the whole thing into context.
 
-Retrieval runs entirely locally. The default `search` is BM25-first: lexical
-matching answers most queries fast, and Trace only falls back to vector/hybrid
-when the keyword results look weak. Embeddings run on-device (ONNX int8 by
-default); nothing leaves the machine.
+The default `search` is adaptive and BM25-first. Trace trusts strong lexical
+matches, but skips them when the keyword evidence is weak and falls back to
+semantic or hybrid search. Retrieval runs entirely locally. Embeddings run
+on-device (ONNX int8 by default); nothing leaves the machine.
+
+The CLI and MCP server wrap the same Python primitives (`WikiIndexer`,
+`AdaptiveSearch`, `CollectionRegistry`, and result formatters), so you can use
+the pieces directly from a script or library.
 
 Formats: Markdown, PDF, Word, PowerPoint, CSV, SQL, Python, YAML, TypeScript,
 Jupyter notebooks.
