@@ -2,7 +2,7 @@
 
 Local retrieval over a folder of files, for an agent or for you. Trace indexes
 documents on disk and serves search, document fetch, and diagnostics over a CLI
-or an MCP server — so an agent can pull the right passages from a knowledge base
+or an MCP server. That lets an agent pull the right passages from a knowledge base
 without you pasting the whole thing into context.
 
 Retrieval runs entirely locally. The default `search` is BM25-first: lexical
@@ -15,15 +15,15 @@ Jupyter notebooks.
 
 ## Install
 
-Python 3.11+ and `uv`.
+Trace needs Python 3.11+ and `uv`.
 
 ```bash
 uv sync
 ```
 
-## No-secret demo
+## Demo With A Committed Fixture
 
-This uses the committed fixture in `tests/fixtures/eval_kb`.
+This command searches the committed fixture in `tests/fixtures/eval_kb`.
 
 ```console
 $ KB_PATH=tests/fixtures/eval_kb TOKENIZERS_PARALLELISM=false uv run trace search "BM25 ranking" --top-k 2
@@ -52,7 +52,7 @@ Found 2 results
 
 ## CLI
 
-`uv run trace ...` from the repo, or `trace ...` once installed.
+Use `uv run trace ...` from the repo, or `trace ...` once installed.
 
 ```bash
 # Single collection
@@ -69,7 +69,7 @@ KB_PATH=/path/to/docs uv run trace doctor
 KB_PATH=/path/to/docs uv run trace serve
 ```
 
-Bare `uv run trace` also starts the MCP server.
+With no subcommand, `uv run trace` starts the MCP server.
 
 | Command | Description |
 | --- | --- |
@@ -131,7 +131,7 @@ In multi-collection mode, search and document tools take an optional
 AND and show up in `search` output under `Active filters`, so an empty result
 explains itself.
 
-Start with `search` — it reports which strategy won, groups context by document,
+Start with `search`. It reports which strategy won, groups context by document,
 includes match evidence, and suggests `get_document(path=...)` follow-ups. Reach
 for `keyword_search` / `semantic_search` / `search_hybrid` when you want one
 mode for debugging or deterministic comparison.
@@ -140,16 +140,16 @@ mode for debugging or deterministic comparison.
 
 | Variable | Description | Default |
 | --- | --- | --- |
-| `KB_PATH` | Path to a single collection (`~` expanded) | — |
-| `KB_COLLECTIONS` | Comma-separated `name:path` pairs (`~` expanded) | — |
-| `INDEX_PATH` | Root path for indexes (`~` expanded) | — |
+| `KB_PATH` | Path to a single collection (`~` expanded) | unset |
+| `KB_COLLECTIONS` | Comma-separated `name:path` pairs (`~` expanded) | unset |
+| `INDEX_PATH` | Root path for indexes (`~` expanded) | unset |
 | `LOG_LEVEL` | `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`/`NOTSET` | `INFO` |
 | `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` or `BAAI/bge-base-en-v1.5` | `all-MiniLM-L6-v2` |
 | `EMBEDDING_BACKEND` | `onnx` (int8, faster) or `torch` | `onnx` |
 | `EMBEDDING_WARMUP_ENABLED` | Pre-encode at startup to cut first-query latency | `true` |
 | `RERANKER_ENABLED` | Enable reranking | `false` |
 
-`KB_PATH` and `KB_COLLECTIONS` are mutually exclusive — setting both fails at
+`KB_PATH` and `KB_COLLECTIONS` are mutually exclusive. Setting both fails at
 startup, as do invalid paths, collection names, and log levels.
 
 Indexes live under each collection in `.mcp-search/indexes/`. Set `INDEX_PATH`
@@ -161,7 +161,7 @@ multi-collection mode uses one subdirectory per collection.
 `reindex` is incremental: Trace fingerprints each file (SHA-256 + mtime + size)
 and reprocesses only what was added, changed, or removed. Run
 `trace reindex --force` (`force=true` over MCP) to drop both indexes and rebuild
-from scratch — after a model change or to recover from corruption.
+from scratch after a model change or to recover from corruption.
 
 `doctor` reports the next-reindex plan and a change summary:
 
@@ -172,7 +172,7 @@ from scratch — after a model change or to recover from corruption.
 - Source changes since last index: unchanged=27, added=1, changed=2, removed=1
 ```
 
-When given a sample query, `doctor` probes existing indexes only — it tells you
+When given a sample query, `doctor` probes existing indexes only. It tells you
 to `reindex` rather than building as a side effect. If it reports unknown
 metadata (an older `v1` schema), one `reindex` repopulates model and freshness
 metadata; that run is forced, later runs are incremental.
@@ -188,7 +188,11 @@ Trace includes a small eval harness (`tools/eval/`) for golden-query checks. The
 | `hybrid` | 88% | 100% | 0.941 | 7.10 ms | 10.9 ms |
 | `adaptive` | 88% | 100% | 0.941 | 7.20 ms | 10.6 ms |
 
-The useful result is not the shared 88% Top-1. BM25 is fastest and strong on exact terms, but misses one paraphrase entirely. Semantic and hybrid recover all queries in the top 5. `adaptive` keeps BM25 for strong lexical hits and falls back to vector search when keyword evidence is weak, matching the best recall while keeping lexical queries cheap.
+The shared 88% Top-1 hides the real tradeoff. BM25 is fastest and strong on
+exact terms, but misses one paraphrase entirely. Semantic and hybrid recover all
+queries in the top 5. `adaptive` keeps BM25 for strong lexical hits and falls
+back to vector search when keyword evidence is weak, matching the best recall
+while keeping lexical queries cheap.
 
 These are smoke-test numbers, not corpus-scale benchmark claims. Full reports live in [`docs/benchmarks/`](docs/benchmarks/). Reproduce the committed gate with:
 

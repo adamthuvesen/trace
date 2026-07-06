@@ -2,9 +2,9 @@
 
 Date: 2026-06-21
 
-This loop targeted the default `adaptive` retrieval path on the committed no-secret
-multi-KB battle suite. The goal was to keep perfect deterministic path quality
-while reducing local latency by at least 30%.
+This loop targeted the default `adaptive` retrieval path on the committed
+no-secret multi-KB battle suite. The goal was to keep perfect deterministic path
+quality while cutting local latency by at least 30%.
 
 ## Commands
 

@@ -7,7 +7,7 @@ Trace has five evaluated retrieval modes:
 | `bm25` | Exact identifiers, config keys, headers, error codes, filenames, and known terms. It is the fastest path by a wide margin. | The user is paraphrasing or does not know the vocabulary in the document. |
 | `semantic` | Natural-language paraphrases and conceptual lookups when exact terms are missing. Semantic search now applies a small lexical tie-break across its vector candidates so exact titles and headers are not buried by near-topic matches. | You need deterministic exact-token behavior for API headers, status codes, env vars, or highly confusable adjacent concepts. |
 | `hybrid` | Mixed lexical and semantic queries, especially technical noun phrases and queries with identifiers plus prose. | Ultra-low latency matters more than first-rank quality. |
-| `reranked` | Final-quality shortlist ranking when a cross-encoder is acceptable. It uses the hybrid candidate set, then reranks candidates. | Default interactive search; the battle suite showed the same Hit@1 as hybrid with higher latency. |
+| `reranked` | Final-quality shortlist ranking when a cross-encoder is acceptable. It uses the hybrid candidate set, then reranks candidates. | Default interactive search. The battle suite showed the same Hit@1 as hybrid with higher latency. |
 | `adaptive` | Default MCP/CLI search. It starts with BM25, trusts strong lexical hits, and falls back to hybrid for conceptual or weak keyword results. | You are debugging one retrieval method in isolation. Use the specialist modes instead. |
 
 ## Battle Results
@@ -45,9 +45,9 @@ Hit@1, Hit@5, MRR, latency, and top-1 failure buckets.
 
 ## Challenge Suite
 
-The default battle suite is intentionally small enough for smoke testing and is
-now saturated for `adaptive` retrieval quality. Use the larger contrast-heavy suite
-when tuning retrieval ranking:
+The default battle suite is small enough for smoke testing and is now saturated
+for `adaptive` retrieval quality. Use the larger contrast-heavy suite when
+tuning retrieval ranking:
 
 ```bash
 TOKENIZERS_PARALLELISM=false uv run python -m tools.eval.battle_royale \
