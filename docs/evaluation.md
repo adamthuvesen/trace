@@ -6,14 +6,15 @@ benchmark results live in [docs/benchmarks/](benchmarks/).
 ## Quickstart
 
 ```bash
-# Tiny committed fixture (no copy step; good smoke test, runs the prod `adaptive` mode)
+# Tiny committed fixture: no copy step, good smoke test, prod `adaptive` mode
 KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
   uv run python -m tools.eval.cli --full --search adaptive
 ```
 
-## Full wiki eval
+## Full KB eval
 
-Runs against your real KB plus a local `golden_queries.yaml`:
+To run against your real KB, create a local `golden_queries.yaml`, index that
+KB, and run the quick or full eval:
 
 ```bash
 cp tools/eval/golden_queries.example.yaml tools/eval/golden_queries.yaml
@@ -24,9 +25,9 @@ KB_PATH=/path/to/your/docs uv run python -m tools.eval --full
 
 ## Committed fixture eval
 
-The fixture under `tests/fixtures/eval_kb` needs no copy step. Swap `--search` to
-compare modes (`bm25`, `semantic`, `hybrid`, `adaptive`); `adaptive` is the production
-MCP default path. `smart` is still accepted as a deprecated alias for `adaptive`:
+The fixture under `tests/fixtures/eval_kb` needs no copy step. Change `--search`
+to compare modes (`bm25`, `semantic`, `hybrid`, `adaptive`). `adaptive` is the
+production MCP default path:
 
 ```bash
 KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \

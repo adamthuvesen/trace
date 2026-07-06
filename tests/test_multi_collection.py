@@ -8,15 +8,15 @@ from trace_search.config import Settings
 class TestKBCollectionsParsing:
     def test_parse_two_collections(self, tmp_path, monkeypatch):
         monkeypatch.delenv("KB_PATH", raising=False)
-        kb1 = tmp_path / "wiki"
+        kb1 = tmp_path / "docs"
         kb2 = tmp_path / "ai-context"
         kb1.mkdir()
         kb2.mkdir()
 
-        s = Settings(kb_collections=f"wiki:{kb1},ai-context:{kb2}")
+        s = Settings(kb_collections=f"docs:{kb1},ai-context:{kb2}")
         result = s.parsed_collections
-        assert set(result.keys()) == {"wiki", "ai-context"}
-        assert result["wiki"] == kb1
+        assert set(result.keys()) == {"docs", "ai-context"}
+        assert result["docs"] == kb1
         assert result["ai-context"] == kb2
 
     def test_fallback_to_kb_path(self, tmp_path):
@@ -55,22 +55,22 @@ class TestKBCollectionsParsing:
 
     def test_only_kb_collections_works(self, tmp_path, monkeypatch):
         monkeypatch.delenv("KB_PATH", raising=False)
-        kb = tmp_path / "wiki"
+        kb = tmp_path / "docs"
         kb.mkdir()
-        s = Settings(kb_collections=f"wiki:{kb}")
+        s = Settings(kb_collections=f"docs:{kb}")
         result = s.parsed_collections
-        assert result == {"wiki": kb}
+        assert result == {"docs": kb}
 
     def test_kb_collections_expands_user_home(self, tmp_path, monkeypatch):
         monkeypatch.delenv("KB_PATH", raising=False)
         home = tmp_path / "home"
-        kb = home / "wiki"
+        kb = home / "docs"
         kb.mkdir(parents=True)
         monkeypatch.setenv("HOME", str(home))
 
-        s = Settings(kb_collections="wiki:~/wiki")
+        s = Settings(kb_collections="docs:~/docs")
 
-        assert s.parsed_collections == {"wiki": kb}
+        assert s.parsed_collections == {"docs": kb}
 
     def test_only_kb_path_works(self, tmp_path):
         kb = tmp_path / "docs"
@@ -87,7 +87,7 @@ class TestKBCollectionsParsing:
 
     def test_nonexistent_path_raises(self, tmp_path, monkeypatch):
         monkeypatch.delenv("KB_PATH", raising=False)
-        s = Settings(kb_collections=f"wiki:{tmp_path / 'nope'}")
+        s = Settings(kb_collections=f"docs:{tmp_path / 'nope'}")
         with pytest.raises(ValueError, match="does not exist"):
             _ = s.parsed_collections
 
@@ -95,7 +95,7 @@ class TestKBCollectionsParsing:
         monkeypatch.delenv("KB_PATH", raising=False)
         f = tmp_path / "file.txt"
         f.write_text("hi")
-        s = Settings(kb_collections=f"wiki:{f}")
+        s = Settings(kb_collections=f"docs:{f}")
         with pytest.raises(ValueError, match="not a directory"):
             _ = s.parsed_collections
 
@@ -165,21 +165,21 @@ class TestCollectionRegistry:
     def test_resolve_specific(self, tmp_path):
         from trace_search.collections.collection_registry import CollectionRegistry
 
-        kb = tmp_path / "wiki"
+        kb = tmp_path / "docs"
         kb.mkdir()
 
-        reg = CollectionRegistry({"wiki": kb})
-        cols = reg._resolve("wiki")
+        reg = CollectionRegistry({"docs": kb})
+        cols = reg._resolve("docs")
         assert len(cols) == 1
-        assert cols[0].name == "wiki"
+        assert cols[0].name == "docs"
 
     def test_resolve_unknown_raises(self, tmp_path):
         from trace_search.collections.collection_registry import CollectionRegistry
 
-        kb = tmp_path / "wiki"
+        kb = tmp_path / "docs"
         kb.mkdir()
 
-        reg = CollectionRegistry({"wiki": kb})
+        reg = CollectionRegistry({"docs": kb})
         with pytest.raises(ValueError, match="Unknown collection 'nope'"):
             reg._resolve("nope")
 
@@ -350,24 +350,24 @@ class TestMultiCollectionFilters:
         from tests.test_runtime_hardening import FakeBackend
         from trace_search.collections.collection_registry import CollectionRegistry
 
-        wiki = tmp_path / "wiki"
+        docs = tmp_path / "docs"
         brain = tmp_path / "brain"
-        wiki.mkdir()
+        docs.mkdir()
         brain.mkdir()
-        (wiki / "architecture").mkdir()
-        (wiki / "rfcs").mkdir()
+        (docs / "architecture").mkdir()
+        (docs / "rfcs").mkdir()
         (brain / "architecture").mkdir()
-        (wiki / "architecture" / "intro.md").write_text(
-            "# wiki arch\n\nrouter design", encoding="utf-8"
+        (docs / "architecture" / "intro.md").write_text(
+            "# docs arch\n\nrouter design", encoding="utf-8"
         )
-        (wiki / "rfcs" / "001.md").write_text(
+        (docs / "rfcs" / "001.md").write_text(
             "# RFC 001\n\nrouter behavior", encoding="utf-8"
         )
         (brain / "architecture" / "notes.md").write_text(
             "# brain arch\n\nrouter scaling", encoding="utf-8"
         )
 
-        registry = CollectionRegistry({"wiki": wiki, "brain": brain})
+        registry = CollectionRegistry({"docs": docs, "brain": brain})
         registry._backend = FakeBackend()
         registry._warmed = True
         for col in registry.collections.values():
@@ -387,8 +387,8 @@ class TestMultiCollectionFilters:
         assert result.hits
         for hit in result.hits:
             assert hit["path"].startswith("architecture/")
-            assert hit.get("collection") in {"wiki", "brain"}
-        assert {hit.get("collection") for hit in result.hits} == {"wiki", "brain"}
+            assert hit.get("collection") in {"docs", "brain"}
+        assert {hit.get("collection") for hit in result.hits} == {"docs", "brain"}
         assert result.route.filters.path_prefix == ("architecture/",)
 
     def test_keyword_search_filters_respect_explicit_collection(self, tmp_path):
@@ -422,9 +422,9 @@ class TestMultiCollectionFilters:
     def test_instructions_list_collections(self, tmp_path):
         from trace_search.server.mcp_tools import _build_multi_instructions
 
-        result = _build_multi_instructions(["ai-context", "wiki"])
+        result = _build_multi_instructions(["ai-context", "docs"])
         assert '"ai-context"' in result
-        assert '"wiki"' in result
+        assert '"docs"' in result
         assert "collection" in result
 
 
@@ -469,11 +469,11 @@ class TestResolveAllCaseInsensitive:
     def _make_registry(self, tmp_path):
         from trace_search.collections.collection_registry import CollectionRegistry
 
-        wiki = tmp_path / "wiki"
+        docs = tmp_path / "docs"
         brain = tmp_path / "brain"
-        wiki.mkdir()
+        docs.mkdir()
         brain.mkdir()
-        return CollectionRegistry({"wiki": wiki, "brain": brain})
+        return CollectionRegistry({"docs": docs, "brain": brain})
 
     def test_resolve_all_lowercase(self, tmp_path):
         reg = self._make_registry(tmp_path)
@@ -497,14 +497,14 @@ class TestResolveAllCaseInsensitive:
 
     def test_resolve_unknown_raises(self, tmp_path):
         reg = self._make_registry(tmp_path)
-        with pytest.raises(ValueError, match="wiki"):
-            reg._resolve("Wiki")
+        with pytest.raises(ValueError, match="docs"):
+            reg._resolve("Docs")
 
     def test_resolve_known_collection_case_sensitive(self, tmp_path):
         reg = self._make_registry(tmp_path)
-        result = reg._resolve("wiki")
+        result = reg._resolve("docs")
         assert len(result) == 1
-        assert result[0].name == "wiki"
+        assert result[0].name == "docs"
 
 
 class TestTraceServerImport:

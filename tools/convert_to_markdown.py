@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert wiki files to a markdown-only mirror.
+"""Convert source documents to a markdown-only mirror.
 
 Creates a clean markdown copy of your knowledge base at .markdown/,
 converting PDFs, Office docs, and spreadsheets while copying existing
@@ -274,16 +274,16 @@ def write_error_log(output_dir: Path, errors: list[tuple[Path, str]]) -> None:
 
 @click.command()
 @click.option(
-    "--wiki-path",
+    "--source-path",
     type=click.Path(path_type=Path),
     default=None,
-    help="Wiki directory (default: WIKI_EXPORT_PATH or ./wiki-source)",
+    help="Source directory (default: CONVERT_SOURCE_PATH or ./docs-source)",
 )
 @click.option(
     "--output-dir",
     type=click.Path(path_type=Path),
     default=None,
-    help="Output directory (default: WIKI_MARKDOWN_OUT or ./wiki-markdown-out)",
+    help="Output directory (default: CONVERT_MARKDOWN_OUT or ./markdown-out)",
 )
 @click.option(
     "--dry-run",
@@ -302,29 +302,29 @@ def write_error_log(output_dir: Path, errors: list[tuple[Path, str]]) -> None:
     help="Comma-separated file types (e.g., pdf,docx)",
 )
 def main(
-    wiki_path: Path | None,
+    source_path: Path | None,
     output_dir: Path | None,
     dry_run: bool,
     force: bool,
     types: str | None,
 ) -> None:
-    """Convert wiki files to a markdown-only mirror."""
-    wiki_path = (
-        wiki_path
-        or Path(os.environ.get("WIKI_EXPORT_PATH", "wiki-source")).expanduser()
+    """Convert source documents to a markdown-only mirror."""
+    source_path = (
+        source_path
+        or Path(os.environ.get("CONVERT_SOURCE_PATH", "docs-source")).expanduser()
     ).resolve()
     output_dir = (
         output_dir
-        or Path(os.environ.get("WIKI_MARKDOWN_OUT", "wiki-markdown-out")).expanduser()
+        or Path(os.environ.get("CONVERT_MARKDOWN_OUT", "markdown-out")).expanduser()
     ).resolve()
-    if not wiki_path.exists():
-        raise click.UsageError(f"Wiki path does not exist: {wiki_path}")
+    if not source_path.exists():
+        raise click.UsageError(f"Source path does not exist: {source_path}")
 
     types_filter = None
     if types:
         types_filter = {t.strip().lower().lstrip(".") for t in types.split(",")}
 
-    console.print(f"\n[bold]Wiki path:[/bold] {wiki_path}")
+    console.print(f"\n[bold]Source path:[/bold] {source_path}")
     console.print(f"[bold]Output dir:[/bold] {output_dir}")
 
     if types_filter:
@@ -334,7 +334,7 @@ def main(
         console.print("[yellow]DRY RUN - no files will be modified[/yellow]\n")
 
     console.print("\nScanning for files...")
-    files = collect_files(wiki_path, types_filter)
+    files = collect_files(source_path, types_filter)
 
     if not files:
         console.print("[yellow]No files found to convert.[/yellow]")
@@ -348,7 +348,7 @@ def main(
 
     console.print()
 
-    stats = process_files(files, wiki_path, output_dir, force, dry_run)
+    stats = process_files(files, source_path, output_dir, force, dry_run)
 
     console.print("\n[bold]Summary:[/bold]")
     console.print(f"  Converted: {stats.converted}")

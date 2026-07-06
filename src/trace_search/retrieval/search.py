@@ -1,4 +1,4 @@
-"""Search implementations for wiki knowledge base."""
+"""Search implementations for local knowledge bases."""
 
 from __future__ import annotations
 
@@ -23,9 +23,9 @@ from trace_search.retrieval.hit_builders import (
     hit_from_chroma,
     hits_to_dicts,
 )
-from trace_search.retrieval.formatting import (  # noqa: F401 — package re-exports
-    format_context_packets,
+from trace_search.retrieval.formatting import (  # noqa: F401 - package re-exports
     format_results,
+    format_search_context,
 )
 from trace_search.retrieval.query_profile import (
     ADAPTIVE_KEYWORD_STRENGTH_TOP_K,
@@ -921,7 +921,3 @@ class AdaptiveSearch:
                 filters=filters,
             ),
         )
-
-
-SmartSearch = AdaptiveSearch
-SmartSearchResult = AdaptiveSearchResult

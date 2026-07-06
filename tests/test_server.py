@@ -144,7 +144,7 @@ class TestGetDocumentLogic:
     def test_md_file_extraction(self, wiki_path):
         md_files = list(wiki_path.rglob("*.md"))
         if not md_files:
-            pytest.skip("No MD files found in wiki")
+            pytest.skip("No MD files found in KB")
         content = md_files[0].read_text(encoding="utf-8")
         assert isinstance(content, str)
         assert len(content) > 0
@@ -152,7 +152,7 @@ class TestGetDocumentLogic:
     def test_pptx_file_extraction(self, wiki_path):
         pptx_files = list(wiki_path.rglob("*.pptx"))
         if not pptx_files:
-            pytest.skip("No PPTX files found in wiki")
+            pytest.skip("No PPTX files found in KB")
         content = extract_pptx_content(pptx_files[0])
         assert isinstance(content, str)
         assert "[Slide" in content
@@ -160,21 +160,21 @@ class TestGetDocumentLogic:
     def test_pdf_file_extraction(self, wiki_path):
         pdf_files = list(wiki_path.rglob("*.pdf"))
         if not pdf_files:
-            pytest.skip("No PDF files found in wiki")
+            pytest.skip("No PDF files found in KB")
         content = extract_pdf_content(pdf_files[0])
         assert isinstance(content, str)
 
     def test_docx_file_extraction(self, wiki_path):
         docx_files = list(wiki_path.rglob("*.docx"))
         if not docx_files:
-            pytest.skip("No DOCX files found in wiki")
+            pytest.skip("No DOCX files found in KB")
         content = extract_docx_content(docx_files[0])
         assert isinstance(content, str)
 
     def test_csv_file_extraction(self, wiki_path):
         csv_files = list(wiki_path.rglob("*.csv"))
         if not csv_files:
-            pytest.skip("No CSV files found in wiki")
+            pytest.skip("No CSV files found in KB")
         try:
             content = extract_csv_content(csv_files[0])
             assert isinstance(content, str)
@@ -226,17 +226,17 @@ class TestGetDocumentErrorEnvelope:
         assert "Supported" in result
 
     def test_multi_collection_response_includes_collection_tag(self, tmp_path):
-        wiki = tmp_path / "wiki"
+        docs = tmp_path / "docs"
         brain = tmp_path / "brain"
-        wiki.mkdir()
+        docs.mkdir()
         brain.mkdir()
-        (wiki / "intro.md").write_text("# Intro\n\nContent", encoding="utf-8")
+        (docs / "intro.md").write_text("# Intro\n\nContent", encoding="utf-8")
 
-        _, tools = build_multi_mcp("tag-test", {"wiki": wiki, "brain": brain})
+        _, tools = build_multi_mcp("tag-test", {"docs": docs, "brain": brain})
 
         result = tools["get_document"].fn("intro.md")
 
-        assert "**Collection:** wiki" in result
+        assert "**Collection:** docs" in result
 
     def test_single_collection_response_omits_collection_tag(self, tmp_path):
         (tmp_path / "solo.md").write_text("# Solo\n\nContent", encoding="utf-8")
@@ -431,14 +431,14 @@ class TestListDocumentsMultiCollectionWalk:
         from pathlib import Path
         from unittest.mock import patch
 
-        wiki = tmp_path / "wiki"
+        docs = tmp_path / "docs"
         brain = tmp_path / "brain"
-        wiki.mkdir()
+        docs.mkdir()
         brain.mkdir()
-        (wiki / "a.md").write_text("# A\n\ncontent", encoding="utf-8")
+        (docs / "a.md").write_text("# A\n\ncontent", encoding="utf-8")
         (brain / "b.md").write_text("# B\n\ncontent", encoding="utf-8")
 
-        _, tools = build_multi_mcp("walk-test", {"wiki": wiki, "brain": brain})
+        _, tools = build_multi_mcp("walk-test", {"docs": docs, "brain": brain})
 
         rglob_calls: list[str] = []
         original_rglob = Path.rglob

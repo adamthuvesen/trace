@@ -220,7 +220,7 @@ def _append_document_group(
             break
 
 
-def format_context_packets(
+def format_search_context(
     hits: list[dict[str, Any]],
     *,
     query: str,
@@ -228,7 +228,7 @@ def format_context_packets(
     max_documents: int = 5,
     max_snippets_per_document: int = 2,
 ) -> str:
-    """Render agent-native context grouped by document."""
+    """Render grouped search context for agents."""
     if not hits:
         return _format_empty_results(route)
 

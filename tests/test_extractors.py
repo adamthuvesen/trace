@@ -324,12 +324,12 @@ class TestExtractNotebookContent:
 
 @pytest.mark.slow
 class TestIntegrationWithRealFiles:
-    """Integration tests using actual wiki files; skip when fixtures aren't available."""
+    """Integration tests using actual KB files; skip when fixtures aren't available."""
 
     def test_pdf_from_wiki(self, wiki_path):
         pdfs = list(wiki_path.rglob("*.pdf"))
         if not pdfs:
-            pytest.skip("No PDF files found in wiki")
+            pytest.skip("No PDF files found in KB")
 
         pdf_path = pdfs[0]
         content = extract_pdf_content(pdf_path)
@@ -342,7 +342,7 @@ class TestIntegrationWithRealFiles:
     def test_docx_from_wiki(self, wiki_path):
         docx_files = list(wiki_path.rglob("*.docx"))
         if not docx_files:
-            pytest.skip("No DOCX files found in wiki")
+            pytest.skip("No DOCX files found in KB")
 
         docx_path = docx_files[0]
         content = extract_docx_content(docx_path)
@@ -353,7 +353,7 @@ class TestIntegrationWithRealFiles:
     def test_pptx_from_wiki(self, wiki_path):
         pptx_files = list(wiki_path.rglob("*.pptx"))
         if not pptx_files:
-            pytest.skip("No PPTX files found in wiki")
+            pytest.skip("No PPTX files found in KB")
 
         pptx_path = pptx_files[0]
         content = extract_pptx_content(pptx_path)
@@ -364,7 +364,7 @@ class TestIntegrationWithRealFiles:
     def test_csv_from_wiki(self, wiki_path):
         csv_files = list(wiki_path.rglob("*.csv"))
         if not csv_files:
-            pytest.skip("No CSV files found in wiki")
+            pytest.skip("No CSV files found in KB")
 
         csv_path = csv_files[0]
         try:

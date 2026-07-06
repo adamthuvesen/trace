@@ -7,7 +7,7 @@ import pytest
 
 @pytest.fixture
 def wiki_path() -> Path:
-    """Path to wiki knowledge base when KB-backed tests are configured."""
+    """Path to a knowledge base when KB-backed tests are configured."""
     from trace_search.config import get_settings, settings
 
     get_settings.cache_clear()

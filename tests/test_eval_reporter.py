@@ -80,7 +80,7 @@ def _sample_report() -> EvaluationReport:
 def test_markdown_report_keeps_section_contract():
     rendered = generate_markdown_report(_sample_report())
 
-    assert "# Wiki Search Evaluation Report" in rendered
+    assert "# Trace Search Evaluation Report" in rendered
     assert (
         "**Eval mode:** includes stress queries, strict keywords (top-1 scope)"
         in rendered
@@ -96,7 +96,7 @@ def test_markdown_report_keeps_section_contract():
 def test_console_report_keeps_section_contract():
     rendered = generate_console_report(_sample_report())
 
-    assert "WIKI SEARCH EVALUATION REPORT" in rendered
+    assert "TRACE SEARCH EVALUATION REPORT" in rendered
     assert "Eval subset:     core + stress" in rendered
     assert "Keyword mode:    strict (top-1 body only)" in rendered
     assert "ACCURACY METRICS" in rendered

@@ -1,4 +1,4 @@
-"""WikiIndexer: ChromaDB + BM25 indexing."""
+"""ChromaDB + BM25 indexing for local knowledge bases."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 
 
 class WikiIndexer:
-    """Index wiki documents into ChromaDB and BM25 for search."""
+    """Index knowledge base documents into ChromaDB and BM25 for search."""
 
     def __init__(
         self,
@@ -57,7 +57,7 @@ class WikiIndexer:
         bm25_path: str | Path | None = None,
         backend: EmbeddingBackend | None = None,
     ):
-        """Initialize wiki indexer.
+        """Initialize the indexer.
 
         Args:
             kb_path: Path to knowledge base. Uses KB_PATH env var if None.
@@ -486,7 +486,7 @@ class WikiIndexer:
         self,
         requests: list[tuple[str, int | None, int | None]],
     ) -> list[str | None]:
-        """Batch-fetch neighbor chunk text for context packets."""
+        """Batch-fetch neighbor chunk text for grouped search context."""
         request_ids: list[list[str]] = []
         all_ids: set[str] = set()
         for path, chunk_index, chunk_count in requests:

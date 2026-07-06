@@ -12,10 +12,8 @@ __all__ = [
     "HybridSearch",
     "AdaptiveSearch",
     "AdaptiveSearchResult",
-    "SmartSearch",
-    "SmartSearchResult",
     "format_results",
-    "format_context_packets",
+    "format_search_context",
     "CollectionRegistry",
 ]
 
@@ -32,10 +30,8 @@ def __getattr__(name: str):
         "HybridSearch",
         "AdaptiveSearch",
         "AdaptiveSearchResult",
-        "SmartSearch",
-        "SmartSearchResult",
         "format_results",
-        "format_context_packets",
+        "format_search_context",
     }:
         from trace_search.retrieval import search
 
