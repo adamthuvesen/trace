@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI for wiki search evaluation suite.
+"""CLI for Trace search evaluation suite.
 
 Usage:
     # Quick evaluation (~14 template queries; stress subset excluded by default)
@@ -50,7 +50,6 @@ import click
 from tools.eval.evaluator import (
     SEARCH_MODES,
     load_golden_queries,
-    normalize_search_mode,
     run_evaluation,
 )
 from tools.eval.regression import (
@@ -109,7 +108,7 @@ def resolve_eval_scope(
     help=(
         "Search mode to evaluate "
         "(default: hybrid; reranked forces cross-encoder reranking; "
-        "adaptive matches MCP default; smart is a deprecated alias)"
+        "adaptive matches MCP default)"
     ),
 )
 @click.option(
@@ -197,7 +196,7 @@ def main(
     output_dir: Path,
     ab: bool,
 ) -> None:
-    """Run wiki search evaluation suite."""
+    """Run Trace search evaluation suite."""
     if verbose:
         logging.getLogger("tools.eval").setLevel(logging.DEBUG)
 
@@ -209,8 +208,6 @@ def main(
         raise click.UsageError("Cannot specify both --ci and --ci-stress")
     if strict_keywords_top1 and not strict_keywords:
         raise click.UsageError("--strict-keywords-top1 requires --strict-keywords")
-
-    search = normalize_search_mode(search)
 
     ci_mode = ci or ci_stress
     quick_only, stress_only, include_stress_queries = resolve_eval_scope(

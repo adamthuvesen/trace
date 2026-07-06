@@ -14,7 +14,7 @@
 #     "pydantic-settings>=2.0.0",
 # ]
 # ///
-"""Test suite for evaluating chunking optimality in wiki search.
+"""Test suite for evaluating chunking quality in Trace search.
 
 This module provides four test approaches:
 1. Retrieval Quality Test - Check if chunks containing answers are retrieved
@@ -749,7 +749,7 @@ def generate_report(
 ) -> str:
     """Generate a comprehensive report of all test results."""
     lines = [
-        "# Wiki Search Chunking Evaluation Report",
+        "# Trace Search Chunking Evaluation Report",
         "",
         f"Generated: {__import__('datetime').datetime.now().isoformat()}",
         f"Embedding Model: {settings.embedding_model}",

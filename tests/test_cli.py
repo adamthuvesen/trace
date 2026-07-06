@@ -175,8 +175,8 @@ def test_serve_subcommand_starts_server(capsys):
             "# Semantic",
         ),
         (
-            ["keyword-search", "exact", "--max-results", "7", "--collection", "wiki"],
-            ("keyword_search", ("exact", 7, "wiki", None, None, None)),
+            ["keyword-search", "exact", "--max-results", "7", "--collection", "docs"],
+            ("keyword_search", ("exact", 7, "docs", None, None, None)),
             "# Keyword",
         ),
         (

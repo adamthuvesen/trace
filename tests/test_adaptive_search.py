@@ -1,11 +1,11 @@
-"""Tests for adaptive search routing and context packets."""
+"""Tests for adaptive search routing and grouped search context."""
 
 from unittest.mock import MagicMock, patch
 
 from trace_search.retrieval.search import (
     SearchRoute,
     AdaptiveSearch,
-    format_context_packets,
+    format_search_context,
 )
 
 
@@ -22,17 +22,6 @@ def _hit(path="doc.md", score=2.0, source="keyword", content="BM25 ranking docs"
         "chunk_count": 1,
         "breadcrumb": "Doc > Search",
     }
-
-
-def test_smart_public_aliases_remain_importable():
-    import trace_search
-    from trace_search.retrieval.search import AdaptiveSearchResult, SmartSearch
-    from trace_search.retrieval.search_types import SmartSearchResult
-
-    assert SmartSearch is AdaptiveSearch
-    assert trace_search.SmartSearch is AdaptiveSearch
-    assert SmartSearchResult is AdaptiveSearchResult
-    assert trace_search.SmartSearchResult is AdaptiveSearchResult
 
 
 def test_adaptive_search_keeps_strong_keyword_results():
@@ -249,28 +238,14 @@ def test_adaptive_search_empty_query_does_not_call_engines():
     adaptive.hybrid.search.assert_not_called()
 
 
-def test_collection_smart_alias_uses_adaptive_cache(tmp_path):
-    from trace_search.collections.collection_registry import Collection
-
-    collection = Collection(
-        name="docs",
-        kb_path=tmp_path / "docs",
-        index_path=tmp_path / "index",
-    )
-    adaptive = MagicMock()
-    collection._adaptive = adaptive
-
-    assert collection.get_smart() is adaptive
-
-
-def test_context_packets_group_by_document_and_include_followups():
+def test_search_context_groups_by_document_and_includes_followups():
     hits = [
         _hit(content="BM25 ranking compares exact terms with semantic search."),
         _hit(content="BM25 ranking compares exact terms with semantic search."),
         _hit(path="other.md", content="Semantic search finds related concepts."),
     ]
 
-    rendered = format_context_packets(
+    rendered = format_search_context(
         hits,
         query="BM25 ranking",
         route=SearchRoute(
@@ -287,11 +262,11 @@ def test_context_packets_group_by_document_and_include_followups():
     assert rendered.count("BM25 ranking compares") == 1
 
 
-def test_context_packets_include_collection_in_followups():
+def test_search_context_includes_collection_in_followups():
     hit = _hit(path="shared.md")
     hit["collection"] = "docs"
 
-    rendered = format_context_packets([hit], query="BM25")
+    rendered = format_search_context([hit], query="BM25")
 
     assert 'get_document(path="shared.md", collection="docs")' in rendered
 
@@ -321,29 +296,6 @@ def test_default_search_tool_uses_adaptive_registry_path(tmp_path):
 
     search_adaptive.assert_called_once()
     assert "**Selected:** keyword" in rendered
-
-
-def test_registry_smart_alias_uses_adaptive_search(tmp_path):
-    from trace_search.retrieval.search import AdaptiveSearchResult
-    from trace_search.collections.collection_registry import CollectionRegistry
-
-    kb = tmp_path / "docs"
-    kb.mkdir()
-    registry = CollectionRegistry({"docs": kb})
-    expected = AdaptiveSearchResult(
-        hits=[_hit()],
-        route=SearchRoute(
-            strategy="keyword",
-            reason="test route",
-            fallback_used=False,
-        ),
-    )
-
-    with patch.object(registry, "search_adaptive", return_value=expected) as adaptive:
-        assert registry.search_smart("BM25", 5, "docs") is expected
-        assert registry._search("smart", "BM25", 5, "docs") is expected
-
-    assert adaptive.call_count == 2
 
 
 def test_multi_collection_adaptive_search_batches_neighbor_fetches(tmp_path):

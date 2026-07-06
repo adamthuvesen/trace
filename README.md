@@ -69,7 +69,7 @@ KB_PATH=/path/to/docs uv run trace doctor
 KB_PATH=/path/to/docs uv run trace serve
 ```
 
-Bare `uv run trace` also starts the MCP server (backward compatibility).
+Bare `uv run trace` also starts the MCP server.
 
 | Command | Description |
 | --- | --- |

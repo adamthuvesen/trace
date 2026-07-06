@@ -28,6 +28,3 @@ class AdaptiveSearchResult:
 
     hits: list[dict[str, Any]]
     route: SearchRoute
-
-
-SmartSearchResult = AdaptiveSearchResult

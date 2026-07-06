@@ -77,7 +77,7 @@ local signals rather than broad corpus claims.
 ## Defaults
 
 No environment-variable default changed. `adaptive` remains the default user-facing
-search path. `smart` is still accepted as a deprecated compatibility alias for `adaptive`.
+search path.
 
 Two default heuristics changed because the battle suite showed repeatable misses:
 

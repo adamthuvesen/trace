@@ -18,14 +18,14 @@ def test_search_hit_to_dict_includes_set_fields() -> None:
         extension=".md",
         source_mtime=1_700_000_000.0,
         match_hints=["title matches: hello"],
-        collection="wiki",
+        collection="docs",
     )
     data = hit.to_dict()
     assert data["path"] == "docs/a.md"
     assert data["chunk_index"] == 0
     assert data["breadcrumb"] == "A > Section"
     assert data["match_hints"] == ["title matches: hello"]
-    assert data["collection"] == "wiki"
+    assert data["collection"] == "docs"
 
 
 def test_search_hit_to_dict_omits_unset_optionals() -> None:

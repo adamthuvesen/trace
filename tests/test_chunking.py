@@ -408,12 +408,12 @@ class TestEdgeCases:
         assert "TAIL" in "".join(chunks)
 
 
-class TestBackwardCompatibility:
-    def test_old_api_still_works(self):
+class TestDefaultChunkingParameters:
+    def test_heading_chunking_uses_default_limits(self):
         chunks = chunk_by_headings(SAMPLE_MARKDOWN, max_chunk_chars=1000)
         assert len(chunks) > 0
 
-    def test_old_paragraphs_api_works(self):
+    def test_paragraph_chunking_uses_default_limits(self):
         chunks = chunk_by_paragraphs("Para 1.\n\nPara 2.", max_chunk_chars=500)
         assert len(chunks) > 0
 

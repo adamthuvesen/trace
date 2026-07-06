@@ -11,7 +11,7 @@ KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_qu
   uv run python -m tools.eval.cli --full --search adaptive
 ```
 
-## Full wiki eval
+## Full KB eval
 
 Runs against your real KB plus a local `golden_queries.yaml`:
 
@@ -26,7 +26,7 @@ KB_PATH=/path/to/your/docs uv run python -m tools.eval --full
 
 The fixture under `tests/fixtures/eval_kb` needs no copy step. Swap `--search` to
 compare modes (`bm25`, `semantic`, `hybrid`, `adaptive`); `adaptive` is the production
-MCP default path. `smart` is still accepted as a deprecated alias for `adaptive`:
+MCP default path:
 
 ```bash
 KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \

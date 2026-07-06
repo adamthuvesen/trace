@@ -186,9 +186,9 @@ class TestApplyFiltersToHits:
         assert [h["path"] for h in filtered] == ["a.md", "c.md"]
 
     def test_extension_falls_back_to_path_suffix_when_missing(self):
-        hits = [{"path": "legacy.md"}, {"path": "newer.py", "extension": ".py"}]
+        hits = [{"path": "notes.md"}, {"path": "newer.py", "extension": ".py"}]
         filtered = apply_filters_to_hits(hits, parse_filters(extensions=[".md"]))
-        assert [h["path"] for h in filtered] == ["legacy.md"]
+        assert [h["path"] for h in filtered] == ["notes.md"]
 
     def test_since_filter_uses_inclusive_lower_bound(self):
         hits = [

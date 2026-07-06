@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from trace_search.config import get_settings
-from trace_search.retrieval.formatting import format_context_packets, format_results
+from trace_search.retrieval.formatting import format_results, format_search_context
 from trace_search.retrieval.search import SearchFilters, parse_filters
 from trace_search.collections.collection_registry import CollectionRegistry
 
@@ -49,26 +49,7 @@ class TraceOperations:
         result = self.registry.search_adaptive(
             query, top_k, collection, filters=filters
         )
-        return format_context_packets(result.hits, query=query, route=result.route)
-
-    def search_smart(
-        self,
-        query: str,
-        top_k: int = 10,
-        collection: str | None = None,
-        path_prefix: str | list[str] | None = None,
-        extensions: str | list[str] | None = None,
-        since: str | None = None,
-    ) -> str:
-        """Deprecated alias for search()."""
-        return self.search(
-            query,
-            top_k,
-            collection,
-            path_prefix=path_prefix,
-            extensions=extensions,
-            since=since,
-        )
+        return format_search_context(result.hits, query=query, route=result.route)
 
     def semantic_search(
         self,

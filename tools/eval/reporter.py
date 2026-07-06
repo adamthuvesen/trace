@@ -48,7 +48,7 @@ def generate_json_report(report: EvaluationReport) -> str:
 def _append_markdown_header(lines: list[str], report: EvaluationReport) -> None:
     lines.extend(
         [
-            "# Wiki Search Evaluation Report",
+            "# Trace Search Evaluation Report",
             "",
             f"**Timestamp:** {report.timestamp}",
             f"**Search Mode:** {report.search_mode}",
@@ -288,7 +288,7 @@ def _append_console_header(lines: list[str], report: EvaluationReport) -> None:
         [
             "",
             "=" * 60,
-            "WIKI SEARCH EVALUATION REPORT",
+            "TRACE SEARCH EVALUATION REPORT",
             "=" * 60,
             "",
             f"Timestamp:       {report.timestamp}",

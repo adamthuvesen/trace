@@ -88,7 +88,7 @@ class Settings(BaseSettings):
         description="Embedding runtime: 'onnx' (fastembed int8, default) or 'torch' (SentenceTransformer)",
     )
 
-    # BM25 parameters (tuned for short wiki chunks)
+    # BM25 parameters tuned for short document chunks.
     bm25_k1: float = Field(
         default=1.2, gt=0, description="BM25 k1 (term frequency saturation)"
     )

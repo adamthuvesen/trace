@@ -271,7 +271,7 @@ class TestFormatResults:
             {
                 "title": "Test",
                 "path": "t.md",
-                "folder": "Wiki",
+                "folder": "Docs",
                 "content": "content here",
                 "score": 0.95,
                 "source": "semantic",
@@ -288,7 +288,7 @@ class TestFormatResults:
             {
                 "title": "Test",
                 "path": "t.md",
-                "folder": "Wiki",
+                "folder": "Docs",
                 "content": "content",
                 "score": 0.85,
                 "source": "hybrid",

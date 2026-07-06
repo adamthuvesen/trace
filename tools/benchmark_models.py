@@ -13,7 +13,7 @@
 #     "pydantic-settings>=2.0.0",
 # ]
 # ///
-"""Benchmark embedding models for wiki search.
+"""Benchmark embedding models for Trace search.
 
 Compares retrieval accuracy and query latency between supported models.
 
@@ -648,7 +648,7 @@ def print_file_type_coverage(result: BenchmarkResult) -> None:
 
     coverage = result.file_type_coverage
 
-    wiki_types = {".md", ".pdf", ".docx", ".pptx"}
+    document_types = {".md", ".pdf", ".docx", ".pptx"}
     code_types = {".sql", ".py", ".yml", ".yaml", ".ipynb", ".ts", ".tsx"}
 
     header = f"{'Extension':<10} | {'Files':>6} | {'Chunks':>7} | {'Hit Rate':>9} | {'Status':<15}"
@@ -658,7 +658,7 @@ def print_file_type_coverage(result: BenchmarkResult) -> None:
     missing_types = []
     low_coverage_types = []
 
-    for ext in sorted(wiki_types | code_types):
+    for ext in sorted(document_types | code_types):
         if ext in coverage:
             cov = coverage[ext]
             status = "OK" if cov.hit_rate > 0 else "NO HITS"
@@ -671,7 +671,7 @@ def print_file_type_coverage(result: BenchmarkResult) -> None:
             row = f"{ext:<10} | {0:>6} | {0:>7} | {'N/A':>9} | {status:<15}"
         logger.info(row)
 
-    extra_types = set(coverage.keys()) - wiki_types - code_types
+    extra_types = set(coverage.keys()) - document_types - code_types
     if extra_types:
         logger.info("\nAdditional file types in index:")
         for ext in sorted(extra_types):
@@ -688,13 +688,15 @@ def print_file_type_coverage(result: BenchmarkResult) -> None:
             f"WARNING: File types with 0% hit rate: {', '.join(sorted(low_coverage_types))}"
         )
 
-    wiki_indexed = sum(
-        1 for t in wiki_types if t in coverage and coverage[t].chunk_count > 0
+    docs_indexed = sum(
+        1 for t in document_types if t in coverage and coverage[t].chunk_count > 0
     )
-    wiki_hit = sum(1 for t in wiki_types if t in coverage and coverage[t].hit_rate > 0)
+    docs_hit = sum(
+        1 for t in document_types if t in coverage and coverage[t].hit_rate > 0
+    )
 
-    logger.info(f"\nWiki document types indexed: {wiki_indexed}/{len(wiki_types)}")
-    logger.info(f"Wiki document types retrieved: {wiki_hit}/{len(wiki_types)}")
+    logger.info(f"\nDocument types indexed: {docs_indexed}/{len(document_types)}")
+    logger.info(f"Document types retrieved: {docs_hit}/{len(document_types)}")
 
 
 def main() -> None:
@@ -728,7 +730,7 @@ def main() -> None:
     else:
         search_modes = [args.search_mode]
 
-    logger.info("Wiki Search Model Benchmark")
+    logger.info("Trace Search Model Benchmark")
     logger.info(f"Knowledge base: {settings.kb_path}")
     logger.info(f"Models to test: {models_to_test}")
     logger.info(f"Search modes: {search_modes}")

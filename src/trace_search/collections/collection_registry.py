@@ -112,15 +112,6 @@ class Collection:
             self._adaptive = AdaptiveSearch(indexer, indexer.backend)
         return self._adaptive
 
-    def get_smart(
-        self,
-        backend: EmbeddingBackend | None = None,
-        *,
-        skip_build: bool = False,
-    ) -> AdaptiveSearch:
-        """Deprecated alias for get_adaptive()."""
-        return self.get_adaptive(backend, skip_build=skip_build)
-
     def search(
         self,
         mode: DirectSearchMode,
@@ -145,7 +136,7 @@ class Collection:
         chunk_count: int | None,
         backend: EmbeddingBackend | None = None,
     ) -> str | None:
-        """Fetch bounded neighboring chunk content for richer context packets."""
+        """Fetch bounded neighboring chunk content for grouped search context."""
         return self.get_neighbor_contents_batch(
             [(path, chunk_index, chunk_count)],
             backend,
@@ -240,8 +231,6 @@ class CollectionRegistry:
     ) -> list[dict] | AdaptiveSearchResult:
         if mode == "adaptive":
             return self.search_adaptive(query, top_k, collection, filters=filters)
-        if mode == "smart":
-            return self.search_smart(query, top_k, collection, filters=filters)
         filters = filters or SearchFilters()
         cols = self._resolve(collection)
 
@@ -327,16 +316,6 @@ class CollectionRegistry:
                 filters=filters,
             ),
         )
-
-    def search_smart(
-        self,
-        query: str,
-        top_k: int,
-        collection: str | None,
-        filters: SearchFilters | None = None,
-    ) -> AdaptiveSearchResult:
-        """Deprecated alias for search_adaptive()."""
-        return self.search_adaptive(query, top_k, collection, filters=filters)
 
     def probe_search(
         self, query: str, top_k: int, collection: str | None

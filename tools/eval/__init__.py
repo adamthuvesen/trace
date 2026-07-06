@@ -1,4 +1,4 @@
-"""Evaluation suite for wiki search."""
+"""Evaluation suite for Trace search."""
 
 from pathlib import Path
 
