@@ -1,5 +1,7 @@
 # Trace
 
+![License](https://img.shields.io/github/license/adamthuvesen/trace) ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+
 Local retrieval over a folder of files, for an agent or for you. Trace indexes
 documents on disk and serves search, document fetch, and diagnostics over a CLI
 or an MCP server. That lets an agent pull the right passages from a knowledge
