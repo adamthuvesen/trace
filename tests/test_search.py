@@ -9,10 +9,12 @@ from trace_search.retrieval.query_profile import (
     is_keywordish_query,
 )
 from trace_search.retrieval.search import (
+    _BM25_MIN_FILE_FETCH,
     HybridSearch,
     KeywordSearch,
     SearchFilters,
     _clamp_top_k,
+    _keyword_fetch_size,
     _semantic_fetch_size,
     _semantic_lexical_boost,
 )
@@ -146,6 +148,48 @@ class TestKeywordSearchAggregation:
         assert [hit["path"] for hit in hits] == ["right.md"]
         assert hits[0]["bm25_file_support"] == 2
         assert FakeIndexer.bm25.fetch_size == 3
+
+    def test_keyword_fetch_size_oversamples_files_even_with_filters(self):
+        # File-level aggregation needs a deep chunk pool to cover enough distinct
+        # files; a path filter must not shrink it below the file-oversample floor.
+        wiki = SearchFilters(path_prefix=("wiki/",))
+        assert _keyword_fetch_size(10, SearchFilters()) >= _BM25_MIN_FILE_FETCH
+        assert _keyword_fetch_size(10, wiki) >= _BM25_MIN_FILE_FETCH
+        assert _keyword_fetch_size(10, wiki) >= _keyword_fetch_size(10, SearchFilters())
+
+    def test_navigational_hub_demoted_below_content_page(self):
+        # index.md and a content page tie on best chunk score; the content page
+        # should win because the hub is navigational, not an answer.
+        class FakeIndexer:
+            bm25 = TestKeywordSearchAggregation.FakeBM25([6.0, 6.0])
+            bm25_corpus = [
+                TestKeywordSearchAggregation._metadata(
+                    "notes/index.md", "Alpha index", 0
+                ),
+                TestKeywordSearchAggregation._metadata("notes/alpha.md", "Alpha", 0),
+            ]
+
+        hits = KeywordSearch(FakeIndexer()).search("alpha", max_results=2)
+        assert [hit["path"] for hit in hits] == ["notes/alpha.md", "notes/index.md"]
+
+    def test_support_boost_not_inflated_by_raw_chunk_count(self):
+        # A file with one clearly stronger chunk beats a file with many weak
+        # chunks. Neither has a metadata anchor, so this isolates support: the old
+        # count-weighted support (capped at +2.0) let the 20-chunk file win, the
+        # reshaped scale-free support does not.
+        strong = TestKeywordSearchAggregation._metadata("strong.md", "Strong", 0)
+        weak_chunks = [
+            TestKeywordSearchAggregation._metadata("weak.md", "Weak", i)
+            for i in range(20)
+        ]
+
+        class FakeIndexer:
+            bm25 = TestKeywordSearchAggregation.FakeBM25([7.5] + [6.0] * 20)
+            bm25_corpus = [strong, *weak_chunks]
+
+        hits = KeywordSearch(FakeIndexer()).search("zeta", max_results=2)
+        assert hits[0]["path"] == "strong.md"
+        assert hits[0]["score"] > hits[1]["score"]
 
     def test_keyword_search_drops_weak_hits_without_metadata_anchor(self):
         class FakeIndexer:
