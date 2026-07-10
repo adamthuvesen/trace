@@ -298,6 +298,39 @@ def test_default_search_tool_uses_adaptive_registry_path(tmp_path):
     assert "**Selected:** keyword" in rendered
 
 
+def test_default_search_tool_renders_all_top_k_documents(tmp_path):
+    """An explicit top_k must not be silently truncated by the grouped-context
+    default of 5 documents: a hit at rank 6-10 is still a returned result."""
+    from trace_search.retrieval.search import AdaptiveSearchResult
+    from trace_search.collections.collection_registry import CollectionRegistry
+    from trace_search.server.mcp_tools import build_multi_mcp
+
+    kb = tmp_path / "docs"
+    kb.mkdir()
+    _, tools = build_multi_mcp("trace-test", {"docs": kb})
+
+    hits = [
+        _hit(path=f"doc{i}.md", score=10.0 - i, content=f"Distinct content {i}")
+        for i in range(10)
+    ]
+    with patch.object(
+        CollectionRegistry,
+        "search_adaptive",
+        return_value=AdaptiveSearchResult(
+            hits=hits,
+            route=SearchRoute(
+                strategy="keyword",
+                reason="test route",
+                fallback_used=False,
+            ),
+        ),
+    ):
+        rendered = tools["search"].fn("BM25", top_k=10)
+
+    for i in range(10):
+        assert f"`doc{i}.md`" in rendered
+
+
 def test_multi_collection_adaptive_search_batches_neighbor_fetches(tmp_path):
     """Multi-collection adaptive search should issue one ChromaDB get() per collection,
     not one per hit."""

@@ -8,7 +8,7 @@ import math
 import re
 from collections import OrderedDict, defaultdict
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path as _Path
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol
@@ -48,10 +48,29 @@ logger = logging.getLogger(__name__)
 # are active. Keeps per-query latency bounded even on very large corpora.
 _FILTER_OVERSAMPLE = 5
 _MAX_OVERSAMPLE_FETCH = 500
-_BM25_FILE_OVERSAMPLE = 6
-_BM25_MIN_FILE_FETCH = 50
+# File-level BM25 rolls chunk hits up into files, so the chunk pool must be deep
+# enough to cover enough distinct files. Long files (navigational hubs, verbose
+# essays) each occupy many chunk slots, so a shallow pool starves precise pages
+# whose single best chunk sits just outside it. Oversample generously by file.
+_BM25_FILE_OVERSAMPLE = 25
+_BM25_MIN_FILE_FETCH = 200
 _BM25_WEAK_FILE_SCORE_LOG_FACTOR = 0.72
 _BM25_WEAK_METADATA_OVERLAP = 0.20
+
+# File-score aggregation weights (see _KeywordHitGroup.file_score).
+# Support rewards a file with several chunks nearly as strong as its best, scored
+# relative to that best so raw chunk count cannot inflate a long or link-dense
+# file. Metadata boost lifts pages whose title/path/breadcrumb name the query
+# terms — a precise topical match — over verbose pages that merely mention them;
+# the gain is large because overlap is diluted by long natural-language queries.
+# Navigational hubs (index/log link-dumps) are demoted, not filtered, so they can
+# still answer catalog questions but do not outrank the content pages they list.
+_SUPPORT_TOP_M = 3
+_SUPPORT_GAIN = 0.3
+_METADATA_BOOST_GAIN = 4.0
+_METADATA_BOOST_CAP = 1.5
+_HUB_DEMOTION = 0.4
+_NAVIGATIONAL_HUB_BASENAMES = frozenset({"index.md", "log.md", "changelog.md"})
 _ADAPTIVE_MIN_FALLBACK_SEMANTIC_SCORE = 0.40
 _SEMANTIC_OVERSAMPLE = 1
 _SEMANTIC_MAX_CANDIDATES = 50
@@ -344,10 +363,11 @@ def _metadata_overlap(query_terms: set[str], hit: dict[str, Any]) -> float:
 
 
 def _keyword_fetch_size(max_results: int, filters: SearchFilters) -> int:
-    fetch_n = _candidate_fetch_size(max_results, filters)
-    if filters.is_empty:
-        fetch_n = max(fetch_n, max_results * _BM25_FILE_OVERSAMPLE)
-        fetch_n = max(fetch_n, _BM25_MIN_FILE_FETCH)
+    fetch_n = max(max_results * _BM25_FILE_OVERSAMPLE, _BM25_MIN_FILE_FETCH)
+    if not filters.is_empty:
+        # Filters discard candidate chunks after fetch; widen the pool so the
+        # surviving set still covers enough distinct files.
+        fetch_n = max(fetch_n, _candidate_fetch_size(max_results, filters))
     return min(fetch_n, _MAX_OVERSAMPLE_FETCH)
 
 
@@ -356,13 +376,17 @@ def _weak_file_score(corpus_size: int) -> float:
     return max(1.0, _BM25_WEAK_FILE_SCORE_LOG_FACTOR * math.log(max(corpus_size, 2)))
 
 
+def _is_navigational_hub(path: str) -> bool:
+    """Whether a path is a navigational hub (index/log link-dump), not content."""
+    return path.rsplit("/", 1)[-1].lower() in _NAVIGATIONAL_HUB_BASENAMES
+
+
 @dataclass
 class _KeywordHitGroup:
     best_hit: dict[str, Any]
     best_score: float
     metadata_overlap: float
-    support_score: float = 0.0
-    chunk_count: int = 0
+    chunk_scores: list[float] = field(default_factory=list)
 
     def add_hit(
         self,
@@ -370,26 +394,39 @@ class _KeywordHitGroup:
         *,
         score: float,
         metadata_overlap: float,
-        rank: int,
     ) -> None:
-        self.chunk_count += 1
+        self.chunk_scores.append(score)
         self.metadata_overlap = max(self.metadata_overlap, metadata_overlap)
         if score > self.best_score:
             self.best_hit = hit
             self.best_score = score
-        if rank > 0:
-            self.support_score += score / (rank + 1)
 
     def file_score(self) -> float:
-        support_boost = min(2.0, 0.18 * self.support_score)
-        metadata_boost = self.best_score * min(0.35, 0.45 * self.metadata_overlap)
-        return self.best_score + support_boost + metadata_boost
+        best = self.best_score
+        if best <= 0:
+            return best
+
+        # Reward genuine multi-section coverage: the top-M secondary chunks scored
+        # as a fraction of this file's own best, saturating so raw chunk count
+        # cannot inflate a long or link-dense file.
+        secondary = sorted(self.chunk_scores, reverse=True)[1 : 1 + _SUPPORT_TOP_M]
+        support_ratio = sum(s / best for s in secondary)
+        support_boost = _SUPPORT_GAIN * best * (support_ratio / (1.0 + support_ratio))
+
+        metadata_boost = best * min(
+            _METADATA_BOOST_CAP, _METADATA_BOOST_GAIN * self.metadata_overlap
+        )
+        score = best + support_boost + metadata_boost
+
+        if _is_navigational_hub(str(self.best_hit.get("path", ""))):
+            score *= _HUB_DEMOTION
+        return score
 
     def to_hit(self, file_score: float) -> dict[str, Any]:
         hit = dict(self.best_hit)
         hit["bm25_chunk_score"] = self.best_score
         hit["bm25_file_score"] = file_score
-        hit["bm25_file_support"] = self.chunk_count
+        hit["bm25_file_support"] = len(self.chunk_scores)
         hit["bm25_metadata_overlap"] = self.metadata_overlap
         hit["score"] = file_score
         return hit
@@ -409,7 +446,7 @@ def _aggregate_keyword_hits(
 
     query_terms = _rank_terms(query, remove_stopwords=True)
     grouped: dict[str, _KeywordHitGroup] = {}
-    for rank, hit in enumerate(hits):
+    for hit in hits:
         path = str(hit.get("path", ""))
         if not path:
             continue
@@ -423,7 +460,7 @@ def _aggregate_keyword_hits(
                 metadata_overlap=overlap,
             )
             grouped[path] = group
-        group.add_hit(hit, score=score, metadata_overlap=overlap, rank=rank)
+        group.add_hit(hit, score=score, metadata_overlap=overlap)
 
     weak_score = _weak_file_score(corpus_size)
     ranked: list[tuple[float, int, dict[str, Any]]] = []

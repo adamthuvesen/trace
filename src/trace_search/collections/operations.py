@@ -49,7 +49,11 @@ class TraceOperations:
         result = self.registry.search_adaptive(
             query, top_k, collection, filters=filters
         )
-        return format_search_context(result.hits, query=query, route=result.route)
+        # Render as many documents as the caller asked for; the compact
+        # max_documents=5 default would silently truncate an explicit top_k.
+        return format_search_context(
+            result.hits, query=query, route=result.route, max_documents=top_k
+        )
 
     def semantic_search(
         self,
