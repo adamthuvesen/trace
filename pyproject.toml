@@ -34,11 +34,12 @@ convert = [
 [dependency-groups]
 dev = [
     "matplotlib>=3.8.0",
-    "numpy>=1.26.0",
+    "numpy>=1.26.0,<2.5",
     "pytest>=8.0.0",
     "click>=8.0.0",
     "PyYAML>=6.0.0",
     "ruff>=0.15.13",
+    "mypy>=2.2.0",
 ]
 
 [build-system]
@@ -54,3 +55,13 @@ pythonpath = ["src"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src/trace_search"]
+strict = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = ["bm25s", "Stemmer", "fitz"]
+ignore_missing_imports = true

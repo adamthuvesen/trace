@@ -33,7 +33,11 @@ from trace_search.retrieval.search import (
     SearchFilters,
     SemanticSearch,
 )
-from trace_search.retrieval.search_types import AdaptiveSearchResult, SearchRoute
+from trace_search.retrieval.search_types import (
+    AdaptiveSearchResult,
+    SearchResult,
+    SearchRoute,
+)
 from trace_search.server.server_warmup import warm_embedding_model
 from trace_search.indexing.wiki_indexer import WikiIndexer
 
@@ -119,7 +123,7 @@ class Collection:
         top_k: int,
         filters: SearchFilters,
         backend: EmbeddingBackend | None = None,
-    ) -> list[dict]:
+    ) -> list[SearchResult]:
         """Run one non-adaptive search mode for this collection."""
         if mode == "keyword":
             return self.get_keyword(backend).search(query, top_k, filters=filters)
@@ -228,7 +232,7 @@ class CollectionRegistry:
         top_k: int,
         collection: str | None,
         filters: SearchFilters | None = None,
-    ) -> list[dict]:
+    ) -> list[SearchResult]:
         filters = filters or SearchFilters()
         cols = self._resolve(collection)
 
@@ -246,7 +250,7 @@ class CollectionRegistry:
         top_k: int,
         collection: str | None,
         filters: SearchFilters | None = None,
-    ) -> list[dict]:
+    ) -> list[SearchResult]:
         return self._search("keyword", query, top_k, collection, filters)
 
     def search_semantic(
@@ -255,7 +259,7 @@ class CollectionRegistry:
         top_k: int,
         collection: str | None,
         filters: SearchFilters | None = None,
-    ) -> list[dict]:
+    ) -> list[SearchResult]:
         return self._search("semantic", query, top_k, collection, filters)
 
     def search_hybrid(
@@ -264,7 +268,7 @@ class CollectionRegistry:
         top_k: int,
         collection: str | None,
         filters: SearchFilters | None = None,
-    ) -> list[dict]:
+    ) -> list[SearchResult]:
         return self._search("hybrid", query, top_k, collection, filters)
 
     def search_adaptive(
@@ -308,7 +312,7 @@ class CollectionRegistry:
 
     def probe_search(
         self, query: str, top_k: int, collection: str | None
-    ) -> list[dict]:
+    ) -> list[SearchResult]:
         """Run a sample query only when indexes already exist and match settings."""
         model_slug = settings.model_slug
         missing = []
@@ -356,7 +360,9 @@ class CollectionRegistry:
             [c.name for c in cols],
         )
 
-    def _with_neighbor_context(self, col: Collection, hit: dict) -> dict:
+    def _with_neighbor_context(
+        self, col: Collection, hit: SearchResult
+    ) -> SearchResult:
         enriched = hit.copy()
         if "neighbor_content" not in enriched:
             enriched["neighbor_content"] = col.get_neighbor_content(
@@ -368,13 +374,13 @@ class CollectionRegistry:
         return enriched
 
     def _attach_neighbors_batched(
-        self, hits: list[dict], cols: list[Collection]
+        self, hits: list[SearchResult], cols: list[Collection]
     ) -> None:
         """Group `hits` by their `collection` tag and issue one batched neighbor
         fetch per collection. Mutates each hit in place to set `neighbor_content`.
         """
         col_by_name = {c.name: c for c in cols}
-        by_collection: dict[str, list[dict]] = defaultdict(list)
+        by_collection: dict[str, list[SearchResult]] = defaultdict(list)
         for hit in hits:
             if "neighbor_content" in hit:
                 continue
@@ -398,19 +404,19 @@ class CollectionRegistry:
 
     @staticmethod
     def _merge_results(
-        result_lists: list[list[dict]],
+        result_lists: list[list[SearchResult]],
         top_k: int,
         collection_names: list[str],
-    ) -> list[dict]:
+    ) -> list[SearchResult]:
         """Interleave results from multiple collections by score, tag with collection name."""
-        tagged: list[dict] = []
+        tagged: list[SearchResult] = []
         for results, name in zip(result_lists, collection_names):
             for hit in results:
                 hit = hit.copy()
                 hit["collection"] = name
                 tagged.append(hit)
         tagged.sort(
-            key=lambda h: h.get("rrf_score", h.get("score", 0)),
+            key=lambda h: float(h.get("rrf_score", h.get("score", 0)) or 0),
             reverse=True,
         )
         return tagged[:top_k]

@@ -222,7 +222,7 @@ def read_index_metadata(index_root: Path) -> IndexMetadata | None:
 
 def metadata_matches_active_model(metadata: IndexMetadata) -> bool:
     """Return whether metadata matches the active embedding settings."""
-    return (
+    return bool(
         metadata.embedding_model == settings.embedding_model
         and metadata.model_slug == settings.model_slug
         and metadata.embedding_dims == settings.embedding_dims

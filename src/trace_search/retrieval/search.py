@@ -13,6 +13,15 @@ from datetime import UTC, datetime
 from pathlib import Path as _Path
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 
+from chromadb import Collection
+from chromadb.api.types import Where
+from chromadb.base_types import (
+    InclusionExclusionOperator,
+    LiteralValue,
+    LogicalOperator,
+    WhereOperator,
+)
+
 from trace_search.retrieval.bm25_tokenize import tokenize_keywords
 from trace_search.config import settings
 from trace_search.indexing.embeddings import EmbeddingBackend, build_embedding_backend
@@ -21,6 +30,7 @@ from trace_search.retrieval.hit_builders import (
     hit_from_chroma,
     hits_to_dicts,
 )
+from trace_search.retrieval.models import SearchHit
 from trace_search.retrieval.formatting import (  # noqa: F401 - package re-exports
     format_results,
     format_search_context,
@@ -36,7 +46,11 @@ from trace_search.retrieval.query_profile import (
     is_conceptual_query,
     is_keywordish_query,
 )
-from trace_search.retrieval.search_types import AdaptiveSearchResult, SearchRoute
+from trace_search.retrieval.search_types import (
+    AdaptiveSearchResult,
+    SearchResult,
+    SearchRoute,
+)
 
 if TYPE_CHECKING:
     from trace_search.indexing.wiki_indexer import WikiIndexer
@@ -214,23 +228,32 @@ def parse_filters(
     )
 
 
-def filters_to_chroma_where(filters: SearchFilters) -> dict | None:
+def filters_to_chroma_where(filters: SearchFilters) -> Where | None:
     """Build a Chroma `where` clause from filters, or None if no push-down applies.
 
     Chroma metadata filtering supports equality, `$in`, `$gte`, `$lte`, `$and`,
     and `$or`, but no prefix-matching on string fields. So `extension` and
     `since` push down; `path_prefix` is applied post-fetch.
     """
-    clauses: list[dict] = []
+    clauses: list[Where] = []
 
     if filters.extensions:
         if len(filters.extensions) == 1:
-            clauses.append({"extension": filters.extensions[0]})
+            extension_clause: Where = {"extension": filters.extensions[0]}
         else:
-            clauses.append({"extension": {"$in": list(filters.extensions)}})
+            extension_values: list[LiteralValue] = list(filters.extensions)
+            in_operator: dict[InclusionExclusionOperator, list[LiteralValue]] = {
+                "$in": extension_values
+            }
+            extension_clause = {"extension": in_operator}
+        clauses.append(extension_clause)
 
     if filters.since is not None:
-        clauses.append({"source_mtime": {"$gte": filters.since.timestamp()}})
+        gte_operator: dict[WhereOperator | LogicalOperator, LiteralValue] = {
+            "$gte": filters.since.timestamp()
+        }
+        since_clause: Where = {"source_mtime": gte_operator}
+        clauses.append(since_clause)
 
     if not clauses:
         return None
@@ -458,19 +481,6 @@ def _aggregate_keyword_hits(
     return [hit for _, _, hit in ranked[:max_results]]
 
 
-class ChromaQueryCollection(Protocol):
-    """Minimal Chroma collection surface used by semantic search."""
-
-    def query(
-        self,
-        *,
-        query_embeddings: list[list[float]],
-        n_results: int,
-        include: list[str],
-        where: dict | None = ...,
-    ) -> dict[str, list]: ...
-
-
 class Reranker(Protocol):
     """The small part of the cross-encoder API used by hybrid search."""
 
@@ -490,7 +500,7 @@ class SemanticSearch:
 
     def __init__(
         self,
-        collection: ChromaQueryCollection,
+        collection: Collection,
         backend: EmbeddingBackend | None = None,
     ):
         """Initialize semantic search.
@@ -522,7 +532,7 @@ class SemanticSearch:
         return list(embedding)
 
     @classmethod
-    def get_cache_stats(cls) -> dict:
+    def get_cache_stats(cls) -> dict[str, int | str]:
         """Get cache statistics."""
         total = cls._cache_hits + cls._cache_misses
         hit_rate = cls._cache_hits / total if total > 0 else 0.0
@@ -539,7 +549,7 @@ class SemanticSearch:
         query: str,
         top_k: int = 10,
         filters: SearchFilters | None = None,
-    ) -> list[dict]:
+    ) -> list[SearchResult]:
         """Search by semantic similarity, optionally scoped by filters."""
         if not query or not query.strip():
             return []
@@ -550,25 +560,29 @@ class SemanticSearch:
         n_results = _semantic_fetch_size(top_k, filters)
         where = filters_to_chroma_where(filters)
 
-        query_kwargs: dict[str, Any] = {
-            "query_embeddings": [query_embedding],
-            "n_results": n_results,
-            "include": ["documents", "metadatas", "distances"],
-        }
-        if where is not None:
-            query_kwargs["where"] = where
-        results = self.collection.query(**query_kwargs)
+        query_embeddings: list[Sequence[float]] = [query_embedding]
+        results = self.collection.query(
+            query_embeddings=query_embeddings,
+            n_results=n_results,
+            include=["documents", "metadatas", "distances"],
+            where=where,
+        )
+        documents = results["documents"]
+        metadatas = results["metadatas"]
+        distances = results["distances"]
+        if documents is None or metadatas is None or distances is None:
+            raise ValueError("Chroma query did not return requested result fields")
 
-        built: list = []
+        built: list[SearchHit] = []
         for i, doc_id in enumerate(results["ids"][0]):
-            distance = results["distances"][0][i]
+            distance = distances[0][i]
             similarity = 1 - distance
-            metadata = results["metadatas"][0][i]
+            metadata = metadatas[0][i]
             built.append(
                 hit_from_chroma(
                     doc_id,
                     metadata,
-                    results["documents"][0][i],
+                    documents[0][i],
                     similarity,
                 )
             )
@@ -601,7 +615,7 @@ class KeywordSearch:
         keyword: str,
         max_results: int = 20,
         filters: SearchFilters | None = None,
-    ) -> list[dict]:
+    ) -> list[SearchResult]:
         """Search using BM25 for fast keyword matching, optionally filtered."""
         if not keyword or not keyword.strip():
             return []
@@ -622,7 +636,7 @@ class KeywordSearch:
         fetch_n = min(fetch_n, len(metadata_list))
         results, scores = bm25.retrieve(query_tokens, k=fetch_n)
 
-        built = []
+        built: list[SearchHit] = []
         for i, result in enumerate(results[0]):
             score = float(scores[0][i])
             if score <= 0:
@@ -684,7 +698,7 @@ class HybridSearch:
         semantic_weight: float | None = None,
         rerank: bool | None = None,
         filters: SearchFilters | None = None,
-    ) -> list[dict]:
+    ) -> list[SearchResult]:
         """Hybrid search using RRF with optional cross-encoder reranking.
 
         Args:
@@ -720,7 +734,7 @@ class HybridSearch:
         )
 
         rrf_scores: dict[str, float] = defaultdict(float)
-        doc_data: dict[str, dict] = {}
+        doc_data: dict[str, SearchResult] = {}
         k = 60  # RRF constant
 
         # Dedup by chunk ID, not file path, so multiple chunks of one doc can co-rank.
@@ -740,7 +754,7 @@ class HybridSearch:
             top_k * candidate_multiplier, rrf_scores, key=rrf_scores.__getitem__
         )
 
-        candidates = []
+        candidates: list[SearchResult] = []
         for chunk_id in ranked_ids:
             result = doc_data[chunk_id].copy()
             result["rrf_score"] = rrf_scores[chunk_id]

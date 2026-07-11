@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from trace_search.indexing.index_paths import chunk_id
@@ -10,7 +11,7 @@ from trace_search.retrieval.models import SearchHit
 
 def hit_from_chroma(
     doc_id: str,
-    metadata: dict[str, Any],
+    metadata: Mapping[str, Any],
     content: str,
     similarity: float,
 ) -> SearchHit:
@@ -36,7 +37,7 @@ def hit_from_chroma(
 
 
 def hit_from_bm25(
-    metadata: dict[str, Any],
+    metadata: Mapping[str, Any],
     content: str,
     score: float,
 ) -> SearchHit:

@@ -73,7 +73,7 @@ def extract_docx_content(path: Path) -> str:
     """Extract text from Word document (paragraphs + tables)."""
     from docx import Document
 
-    doc = Document(path)
+    doc = Document(str(path))
     texts = []
 
     for para in doc.paragraphs:
@@ -95,7 +95,7 @@ def extract_pptx_content(path: Path) -> str:
     """Extract text from PowerPoint (text frames + tables + notes)."""
     from pptx import Presentation
 
-    prs = Presentation(path)
+    prs = Presentation(str(path))
     texts = []
 
     for slide_num, slide in enumerate(prs.slides, 1):

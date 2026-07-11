@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import logging
-from typing import Protocol, runtime_checkable
+from typing import Protocol, TypeAlias, runtime_checkable
 
 import numpy as np
+from numpy.typing import NDArray
 
 from trace_search.config import settings
 
 logger = logging.getLogger(__name__)
+
+EmbeddingArray: TypeAlias = NDArray[np.float32]
 
 
 @runtime_checkable
@@ -23,8 +26,8 @@ class EmbeddingBackend(Protocol):
     model_name: str
     dim: int
 
-    def encode(self, texts: list[str]) -> np.ndarray: ...
-    def encode_one(self, text: str) -> np.ndarray: ...
+    def encode(self, texts: list[str]) -> EmbeddingArray: ...
+    def encode_one(self, text: str) -> EmbeddingArray: ...
 
 
 class TorchBackend:
@@ -40,14 +43,14 @@ class TorchBackend:
         probe = self._model.encode(["probe"])
         self.dim = int(np.asarray(probe).shape[-1])
 
-    def encode(self, texts: list[str]) -> np.ndarray:
+    def encode(self, texts: list[str]) -> EmbeddingArray:
         if not texts:
             return np.empty((0, self.dim), dtype=np.float32)
         vectors = self._model.encode(texts)
         return np.asarray(vectors, dtype=np.float32)
 
-    def encode_one(self, text: str) -> np.ndarray:
-        return self.encode([text])[0]
+    def encode_one(self, text: str) -> EmbeddingArray:
+        return np.asarray(self.encode([text])[0], dtype=np.float32)
 
 
 # fastembed uses HF-prefixed names; map our canonical keys to its identifiers.
@@ -74,14 +77,14 @@ class OnnxBackend:
         probe = next(iter(self._model.embed(["probe"])))
         self.dim = int(np.asarray(probe).shape[-1])
 
-    def encode(self, texts: list[str]) -> np.ndarray:
+    def encode(self, texts: list[str]) -> EmbeddingArray:
         if not texts:
             return np.empty((0, self.dim), dtype=np.float32)
         vectors = list(self._model.embed(list(texts)))
         return np.asarray(np.stack(vectors), dtype=np.float32)
 
-    def encode_one(self, text: str) -> np.ndarray:
-        return self.encode([text])[0]
+    def encode_one(self, text: str) -> EmbeddingArray:
+        return np.asarray(self.encode([text])[0], dtype=np.float32)
 
 
 def build_embedding_backend() -> EmbeddingBackend:
