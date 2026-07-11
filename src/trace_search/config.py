@@ -11,8 +11,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 SUPPORTED_MODELS = {
-    "all-MiniLM-L6-v2": {"dims": 384, "pooling": "mean"},
-    "BAAI/bge-base-en-v1.5": {"dims": 768, "pooling": "cls"},
+    "all-MiniLM-L6-v2": {"dims": 384},
+    "BAAI/bge-base-en-v1.5": {"dims": 768},
 }
 COLLECTION_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 VALID_LOG_LEVELS = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"}
@@ -100,26 +100,13 @@ class Settings(BaseSettings):
     reranker_enabled: bool = False
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
-    # Embedding warmup (one-time pre-encode at server bootstrap)
-    embedding_warmup_enabled: bool = Field(
-        default=True,
-        description="Pre-encode a fixed batch at startup to flatten first-query tail latency",
-    )
-
     # Chunking settings
-    use_token_based_chunking: bool = False
     enable_chunk_overlap: bool = True
     char_chunk_size: int = Field(
         default=1000, gt=0, le=10000, description="Max chars per chunk"
     )
     char_overlap_size: int = Field(
         default=100, ge=0, description="Character overlap between chunks"
-    )
-    token_chunk_size: int = Field(
-        default=512, gt=0, le=2048, description="Max tokens per chunk"
-    )
-    token_overlap_size: int = Field(
-        default=50, ge=0, description="Token overlap between chunks"
     )
 
     # Directory exclusions (comma-separated)
@@ -196,10 +183,6 @@ class Settings(BaseSettings):
         return SUPPORTED_MODELS[self.embedding_model]["dims"]
 
     @property
-    def embedding_pooling(self) -> str:
-        return SUPPORTED_MODELS[self.embedding_model]["pooling"]
-
-    @property
     def model_slug(self) -> str:
         """Filesystem-safe model name slug."""
         return self.embedding_model.replace("/", "_").replace("-", "_").lower()
@@ -238,13 +221,6 @@ class Settings(BaseSettings):
             "Set KB_COLLECTIONS or KB_PATH. "
             "KB_COLLECTIONS format: 'name:/path,name:/path'"
         )
-
-    @property
-    def tokenizer_model(self) -> str:
-        tokenizer_map = {
-            "all-MiniLM-L6-v2": "sentence-transformers/all-MiniLM-L6-v2",
-        }
-        return tokenizer_map.get(self.embedding_model, self.embedding_model)
 
 
 @lru_cache(maxsize=1)

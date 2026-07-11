@@ -223,19 +223,14 @@ class CollectionRegistry:
 
     def _search(
         self,
-        mode: str,
+        mode: DirectSearchMode,
         query: str,
         top_k: int,
         collection: str | None,
         filters: SearchFilters | None = None,
-    ) -> list[dict] | AdaptiveSearchResult:
-        if mode == "adaptive":
-            return self.search_adaptive(query, top_k, collection, filters=filters)
+    ) -> list[dict]:
         filters = filters or SearchFilters()
         cols = self._resolve(collection)
-
-        if mode not in {"keyword", "semantic", "hybrid"}:
-            raise ValueError(f"Unknown search mode: {mode}")
 
         if len(cols) == 1:
             return cols[0].search(mode, query, top_k, filters, self.backend)
@@ -252,9 +247,7 @@ class CollectionRegistry:
         collection: str | None,
         filters: SearchFilters | None = None,
     ) -> list[dict]:
-        result = self._search("keyword", query, top_k, collection, filters)
-        assert isinstance(result, list)
-        return result
+        return self._search("keyword", query, top_k, collection, filters)
 
     def search_semantic(
         self,
@@ -263,9 +256,7 @@ class CollectionRegistry:
         collection: str | None,
         filters: SearchFilters | None = None,
     ) -> list[dict]:
-        result = self._search("semantic", query, top_k, collection, filters)
-        assert isinstance(result, list)
-        return result
+        return self._search("semantic", query, top_k, collection, filters)
 
     def search_hybrid(
         self,
@@ -274,9 +265,7 @@ class CollectionRegistry:
         collection: str | None,
         filters: SearchFilters | None = None,
     ) -> list[dict]:
-        result = self._search("hybrid", query, top_k, collection, filters)
-        assert isinstance(result, list)
-        return result
+        return self._search("hybrid", query, top_k, collection, filters)
 
     def search_adaptive(
         self,

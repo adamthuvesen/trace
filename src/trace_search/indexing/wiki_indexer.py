@@ -522,17 +522,11 @@ class WikiIndexer:
             "kb_path": str(self.kb_path),
             "chroma_path": str(self.chroma_path),
             "bm25_path": str(self.bm25_path),
-            "embedding_model": settings.embedding_model,
-            "embedding_dims": settings.embedding_dims,
-            "embedding_pooling": settings.embedding_pooling,
             "bm25_available": bm25 is not None,
             # Chunking configuration
             "chunking": {
-                "use_tokens": settings.use_token_based_chunking,
                 "enable_overlap": settings.enable_chunk_overlap,
                 "char_chunk_size": settings.char_chunk_size,
                 "char_overlap_size": settings.char_overlap_size,
-                "token_chunk_size": settings.token_chunk_size,
-                "token_overlap_size": settings.token_overlap_size,
             },
         }

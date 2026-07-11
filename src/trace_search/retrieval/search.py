@@ -13,8 +13,6 @@ from datetime import UTC, datetime
 from pathlib import Path as _Path
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 
-from sentence_transformers import CrossEncoder
-
 from trace_search.retrieval.bm25_tokenize import tokenize_keywords
 from trace_search.config import settings
 from trace_search.indexing.embeddings import EmbeddingBackend, build_embedding_backend
@@ -33,6 +31,7 @@ from trace_search.retrieval.query_profile import (
     BM25_DECISIVE_TOP_MARGIN,
     BM25_STRONG_HIT_FRACTION,
     BM25_WEAK_BEST_SCORE,
+    LEXICAL_STOPWORDS,
     classify_query,
     is_conceptual_query,
     is_keywordish_query,
@@ -40,6 +39,8 @@ from trace_search.retrieval.query_profile import (
 from trace_search.retrieval.search_types import AdaptiveSearchResult, SearchRoute
 
 if TYPE_CHECKING:
+    from sentence_transformers import CrossEncoder
+
     from trace_search.indexing.wiki_indexer import WikiIndexer
 
 logger = logging.getLogger(__name__)
@@ -74,27 +75,6 @@ _NAVIGATIONAL_HUB_BASENAMES = frozenset({"index.md", "log.md", "changelog.md"})
 _ADAPTIVE_MIN_FALLBACK_SEMANTIC_SCORE = 0.40
 _SEMANTIC_OVERSAMPLE = 1
 _SEMANTIC_MAX_CANDIDATES = 50
-_SEMANTIC_STOPWORDS = frozenset(
-    {
-        "a",
-        "an",
-        "and",
-        "are",
-        "for",
-        "how",
-        "in",
-        "is",
-        "of",
-        "the",
-        "to",
-        "what",
-        "when",
-        "where",
-        "which",
-        "who",
-        "why",
-    }
-)
 
 
 def _clamp_top_k(top_k: int, default: int = 10, max_val: int = 100) -> int:
@@ -313,7 +293,7 @@ def _rank_terms(text: str, *, remove_stopwords: bool = False) -> set[str]:
             if len(part) > 1:
                 terms.add(_normalize_rank_term(part))
     if remove_stopwords:
-        terms -= _SEMANTIC_STOPWORDS
+        terms -= LEXICAL_STOPWORDS
     return terms
 
 
@@ -688,6 +668,8 @@ class HybridSearch:
         if not settings.reranker_enabled:
             return None
         if cls._reranker is None:
+            from sentence_transformers import CrossEncoder
+
             cls._reranker = CrossEncoder(settings.reranker_model)
         return cls._reranker
 
