@@ -16,6 +16,7 @@ from trace_search.indexing.index_metadata import (
     read_index_metadata,
 )
 from trace_search.indexing.wiki_indexer import WikiIndexer
+from trace_search.retrieval.search import KeywordSearch
 
 
 @pytest.fixture
@@ -39,7 +40,7 @@ def _chunk_paths(indexer: WikiIndexer) -> list[str]:
     return sorted(meta["path"] for meta in (result.get("metadatas") or []))
 
 
-def test_initial_build_writes_v2_metadata_with_hashes(kb_paths):
+def test_initial_build_writes_current_metadata_with_hashes(kb_paths):
     kb, chroma, bm25 = kb_paths
     (kb / "intro.md").write_text("# Intro\n\nhello world", encoding="utf-8")
     (kb / "notes.md").write_text("# Notes\n\nmore content", encoding="utf-8")
@@ -53,6 +54,21 @@ def test_initial_build_writes_v2_metadata_with_hashes(kb_paths):
     assert meta.version == INDEX_METADATA_VERSION
     assert {record.path for record in meta.source_files} == {"intro.md", "notes.md"}
     assert all(record.content_sha for record in meta.source_files)
+
+
+def test_full_rebuild_keeps_bm25_content_available_in_memory(kb_paths):
+    kb, chroma, bm25 = kb_paths
+    (kb / "bm25.md").write_text(
+        "# BM25\n\nBM25 is a keyword ranking function.",
+        encoding="utf-8",
+    )
+    indexer = _make_indexer(kb, chroma, bm25)
+
+    indexer.build_index(force=True)
+    hits = KeywordSearch(indexer).search("BM25", max_results=1)
+
+    assert hits
+    assert "keyword ranking" in hits[0]["content"]
 
 
 def test_incremental_rebuild_skips_unchanged_files(kb_paths):

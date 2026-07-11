@@ -252,13 +252,11 @@ def main(
 
     if indexer.collection.count() == 0:
         click.echo("Building index (first time)...")
-        indexer.build_index()
     else:
-        click.echo(f"Using existing index: {indexer.collection.count()} chunks")
+        click.echo(f"Refreshing existing index: {indexer.collection.count()} chunks")
+    indexer.build_index()
 
-    # Mirror production bootstrap: warm the embedding model so eval p95 reflects
-    # what real MCP consumers see. Set EMBEDDING_WARMUP_ENABLED=false to
-    # measure cold-path latency explicitly.
+    # Mirror production bootstrap so eval p95 reflects what MCP consumers see.
     from trace_search.server.server_warmup import warm_embedding_model
 
     warm_embedding_model(indexer.backend)
@@ -344,8 +342,7 @@ def _run_ab(
         click.echo(f"\n=== Running backend: {backend_name} ===")
         backend = build_embedding_backend()
         indexer = WikiIndexer(backend=backend)
-        if indexer.collection.count() == 0:
-            indexer.build_index()
+        indexer.build_index()
         warm_embedding_model(indexer.backend)
 
         report = run_evaluation(

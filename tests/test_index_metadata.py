@@ -71,6 +71,26 @@ def test_older_metadata_version_is_treated_as_missing(tmp_path):
     assert read_index_metadata(index_root) is None
 
 
+def test_token_chunking_metadata_version_is_treated_as_missing(tmp_path):
+    kb = tmp_path / "kb"
+    index_root = tmp_path / "indexes"
+    kb.mkdir()
+    metadata = build_index_metadata(
+        kb_path=kb,
+        build_started_at=utc_now_iso(),
+        build_completed_at=utc_now_iso(),
+        document_count=0,
+        chunk_count=0,
+    )
+    write_index_metadata(index_root, metadata)
+
+    raw = json.loads(metadata_path(index_root).read_text(encoding="utf-8"))
+    raw["version"] = 2
+    metadata_path(index_root).write_text(json.dumps(raw), encoding="utf-8")
+
+    assert read_index_metadata(index_root) is None
+
+
 def test_invalidate_index_metadata_is_idempotent(tmp_path):
     index_root = tmp_path / "indexes"
     invalidate_index_metadata(index_root)  # no metadata file yet — must not raise

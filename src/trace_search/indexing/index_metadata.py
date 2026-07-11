@@ -12,7 +12,7 @@ from typing import Any
 from trace_search.config import settings
 from trace_search.extraction.corpus import iter_kb_files
 
-INDEX_METADATA_VERSION = 2
+INDEX_METADATA_VERSION = 3
 INDEX_METADATA_FILENAME = "index_metadata.json"
 
 _HASH_CHUNK_SIZE = 64 * 1024
@@ -179,7 +179,7 @@ def read_index_metadata(index_root: Path) -> IndexMetadata | None:
     """Read index metadata, returning None when absent, unreadable, or outdated.
 
     Metadata written by an older schema version is treated as missing so the
-    caller forces a full rebuild and writes fresh v2 metadata.
+    caller forces a full rebuild and writes fresh metadata.
     """
     path = metadata_path(index_root)
     if not path.exists():
