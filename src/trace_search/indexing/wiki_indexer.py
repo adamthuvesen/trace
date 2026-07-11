@@ -274,6 +274,9 @@ class WikiIndexer:
         )
         self._bm25 = bm25s.BM25(k1=settings.bm25_k1, b=settings.bm25_b)
         self._bm25.index(corpus_tokens)
+        self._bm25.corpus = [
+            {"id": index, "text": chunk} for index, chunk in enumerate(chunks)
+        ]
         self._bm25_corpus = metadatas
 
         self.bm25_path.mkdir(parents=True, exist_ok=True)

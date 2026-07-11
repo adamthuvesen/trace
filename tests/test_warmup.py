@@ -2,106 +2,77 @@
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
-from trace_search.config import get_settings
-from trace_search.retrieval.search import SemanticSearch
+from tests.test_runtime_hardening import FakeBackend
 from trace_search.collections.collection_registry import CollectionRegistry
+from trace_search.retrieval.search import SemanticSearch
+from trace_search.server.server_warmup import warm_embedding_model
 
 
-FIXTURE_KB = Path(__file__).parent.parent / "tools" / "eval" / "fixture_kb"
+class RecordingBackend(FakeBackend):
+    def __init__(self) -> None:
+        super().__init__()
+        self.encoded_batches: list[list[str]] = []
+
+    def encode(self, texts: list[str]):
+        self.encoded_batches.append(list(texts))
+        return super().encode(texts)
 
 
 @pytest.fixture(autouse=True)
-def _reset_settings_and_cache(monkeypatch):
-    """Reset cached settings and the class-level semantic cache between tests."""
-    get_settings.cache_clear()
+def _reset_semantic_cache():
     SemanticSearch._embedding_cache.clear()
     SemanticSearch._cache_hits = 0
     SemanticSearch._cache_misses = 0
     yield
-    get_settings.cache_clear()
     SemanticSearch._embedding_cache.clear()
     SemanticSearch._cache_hits = 0
     SemanticSearch._cache_misses = 0
 
 
-def _registry(tmp_path: Path) -> CollectionRegistry:
-    if not FIXTURE_KB.exists():
-        pytest.skip("fixture_kb missing; skip KB-backed warmup test")
-    return CollectionRegistry({"fixture": FIXTURE_KB}, index_root=tmp_path)
+def test_registry_warms_backend_on_first_load(tmp_path: Path, monkeypatch):
+    backend = RecordingBackend()
+    monkeypatch.setattr(
+        "trace_search.collections.collection_registry.build_embedding_backend",
+        lambda: backend,
+    )
+    registry = CollectionRegistry({"fixture": tmp_path})
+
+    assert registry.backend is backend
+    assert len(backend.encoded_batches) == 1
 
 
-@pytest.mark.slow
-def test_warmup_runs_when_enabled(tmp_path, caplog, monkeypatch):
-    monkeypatch.setenv("EMBEDDING_WARMUP_ENABLED", "true")
-    get_settings.cache_clear()
+def test_registry_warms_backend_exactly_once(tmp_path: Path, monkeypatch):
+    backend = RecordingBackend()
+    monkeypatch.setattr(
+        "trace_search.collections.collection_registry.build_embedding_backend",
+        lambda: backend,
+    )
+    registry = CollectionRegistry({"fixture": tmp_path})
 
-    caplog.set_level(logging.INFO, logger="trace_search.server.server_warmup")
-    reg = _registry(tmp_path)
-    _ = reg.backend  # trigger lazy load + warmup
-
-    messages = [r.getMessage() for r in caplog.records]
-    assert any("Embedding model warmed" in m for m in messages)
-
-
-@pytest.mark.slow
-def test_warmup_runs_exactly_once(tmp_path, caplog, monkeypatch):
-    monkeypatch.setenv("EMBEDDING_WARMUP_ENABLED", "true")
-    get_settings.cache_clear()
-
-    caplog.set_level(logging.INFO, logger="trace_search.server.server_warmup")
-    reg = _registry(tmp_path)
-    _ = reg.backend
-    _ = reg.backend
-    _ = reg.backend
-
-    warmup_lines = [
-        r for r in caplog.records if "Embedding model warmed" in r.getMessage()
-    ]
-    assert len(warmup_lines) == 1
+    assert registry.backend is registry.backend
+    assert registry.backend is backend
+    assert len(backend.encoded_batches) == 1
 
 
-@pytest.mark.slow
-def test_warmup_skipped_when_disabled(tmp_path, caplog, monkeypatch):
-    monkeypatch.setenv("EMBEDDING_WARMUP_ENABLED", "false")
-    get_settings.cache_clear()
+def test_warmup_does_not_populate_query_cache():
+    warm_embedding_model(RecordingBackend())
 
-    caplog.set_level(logging.INFO, logger="trace_search.server.server_warmup")
-    reg = _registry(tmp_path)
-    _ = reg.backend
-
-    messages = [r.getMessage() for r in caplog.records]
-    assert not any("Embedding model warmed" in m for m in messages)
-
-
-@pytest.mark.slow
-def test_warmup_does_not_populate_query_cache(tmp_path, monkeypatch):
-    monkeypatch.setenv("EMBEDDING_WARMUP_ENABLED", "true")
-    get_settings.cache_clear()
-
-    reg = _registry(tmp_path)
-    _ = reg.backend
-
-    assert len(SemanticSearch._embedding_cache) == 0
+    assert SemanticSearch.get_cache_stats()["cache_size"] == 0
     assert SemanticSearch._cache_hits == 0
     assert SemanticSearch._cache_misses == 0
 
 
-@pytest.mark.slow
-def test_warmup_input_still_cache_misses_as_user_query(tmp_path, monkeypatch):
-    """Warmup must not make a subsequent real query look like a cache hit."""
-    monkeypatch.setenv("EMBEDDING_WARMUP_ENABLED", "true")
-    get_settings.cache_clear()
-
-    reg = _registry(tmp_path)
-    col = reg.collections["fixture"]
-    semantic = col.get_semantic(reg.backend)
+def test_warmup_input_still_cache_misses_as_user_query():
+    backend = RecordingBackend()
+    semantic = SemanticSearch(MagicMock(), backend)
+    warm_embedding_model(backend)
 
     before_misses = SemanticSearch._cache_misses
-    # "hello world" is one of the warmup sentences
     semantic._get_query_embedding("hello world")
+
     assert SemanticSearch._cache_misses == before_misses + 1

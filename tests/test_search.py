@@ -1,5 +1,7 @@
 """Tests for search module."""
 
+from typing import get_type_hints
+
 from trace_search.config import settings
 from trace_search.retrieval.query_profile import (
     WEIGHT_KEYWORD,
@@ -31,6 +33,10 @@ class TestHybridSearchQueryClassification:
         query_type, weight = self._classify("How does semantic ranking work?")
         assert query_type == "question"
         assert weight == WEIGHT_QUESTION
+
+    def test_lazy_reranker_type_hints_resolve_at_runtime(self):
+        assert "_reranker" in get_type_hints(HybridSearch)
+        assert "return" in get_type_hints(HybridSearch._get_reranker)
 
     def test_short_definition_classified_as_keyword(self):
         query_type, weight = self._classify("What is BM25?")

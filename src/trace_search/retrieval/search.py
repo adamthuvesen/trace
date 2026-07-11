@@ -7,7 +7,7 @@ import logging
 import math
 import re
 from collections import OrderedDict, defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path as _Path
@@ -39,8 +39,6 @@ from trace_search.retrieval.query_profile import (
 from trace_search.retrieval.search_types import AdaptiveSearchResult, SearchRoute
 
 if TYPE_CHECKING:
-    from sentence_transformers import CrossEncoder
-
     from trace_search.indexing.wiki_indexer import WikiIndexer
 
 logger = logging.getLogger(__name__)
@@ -473,6 +471,12 @@ class ChromaQueryCollection(Protocol):
     ) -> dict[str, list]: ...
 
 
+class Reranker(Protocol):
+    """The small part of the cross-encoder API used by hybrid search."""
+
+    def predict(self, pairs: list[tuple[str, str]]) -> Sequence[float]: ...
+
+
 class SemanticSearch:
     """Vector-based semantic search using ChromaDB."""
 
@@ -651,7 +655,7 @@ class HybridSearch:
     """Combined semantic + keyword search with RRF ranking and optional reranking."""
 
     # Lazy-loaded reranker (shared across instances)
-    _reranker: ClassVar[CrossEncoder | None] = None
+    _reranker: ClassVar[Reranker | None] = None
 
     def __init__(self, indexer: WikiIndexer, backend: EmbeddingBackend | None = None):
         """Initialize hybrid search.
@@ -664,7 +668,7 @@ class HybridSearch:
         self.keyword = KeywordSearch(indexer)
 
     @classmethod
-    def _get_reranker(cls) -> CrossEncoder | None:
+    def _get_reranker(cls) -> Reranker | None:
         if not settings.reranker_enabled:
             return None
         if cls._reranker is None:
