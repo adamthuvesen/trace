@@ -152,7 +152,6 @@ mode for debugging or deterministic comparison.
 | `LOG_LEVEL` | `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`/`NOTSET` | `INFO` |
 | `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` or `BAAI/bge-base-en-v1.5` | `all-MiniLM-L6-v2` |
 | `EMBEDDING_BACKEND` | `onnx` (int8, faster) or `torch` | `onnx` |
-| `EMBEDDING_WARMUP_ENABLED` | Pre-encode at startup to cut first-query latency | `true` |
 | `RERANKER_ENABLED` | Enable reranking | `false` |
 
 `KB_PATH` and `KB_COLLECTIONS` are mutually exclusive. Setting both fails at

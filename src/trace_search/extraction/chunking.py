@@ -4,133 +4,30 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from functools import lru_cache
 
 from trace_search.config import settings
 
 
-class TokenCounter:
-    """Token counter using the embedding model's tokenizer.
-
-    Use _get_token_counter() to get a cached singleton instance.
-    """
-
-    _tokenizer = None
-
-    def _ensure_tokenizer(self) -> None:
-        """Lazy-load tokenizer on first use."""
-        if self._tokenizer is None:
-            from transformers import AutoTokenizer
-
-            self._tokenizer = AutoTokenizer.from_pretrained(
-                settings.tokenizer_model,
-                use_fast=True,
-            )
-
-    def count_tokens(self, text: str) -> int:
-        """Count tokens in text using the embedding model's tokenizer."""
-        self._ensure_tokenizer()
-        return len(self._tokenizer.encode(text, add_special_tokens=False))
-
-    def truncate_to_tokens(self, text: str, max_tokens: int) -> str:
-        """Truncate text to fit within max_tokens."""
-        self._ensure_tokenizer()
-        tokens = self._tokenizer.encode(text, add_special_tokens=False)
-        if len(tokens) <= max_tokens:
-            return text
-        truncated_tokens = tokens[:max_tokens]
-        return self._tokenizer.decode(truncated_tokens, skip_special_tokens=True)
-
-    def get_last_n_tokens(self, text: str, n: int) -> str:
-        """Get the last n tokens of text as a string."""
-        self._ensure_tokenizer()
-        tokens = self._tokenizer.encode(text, add_special_tokens=False)
-        if len(tokens) <= n:
-            return text
-        last_tokens = tokens[-n:]
-        return self._tokenizer.decode(last_tokens, skip_special_tokens=True)
-
-    def split_to_token_windows(
-        self,
-        text: str,
-        *,
-        max_tokens: int,
-        overlap_tokens: int,
-    ) -> list[str]:
-        """Split text into token windows without dropping content."""
-        self._ensure_tokenizer()
-        tokens = self._tokenizer.encode(text, add_special_tokens=False)
-        if len(tokens) <= max_tokens:
-            return [text]
-
-        step = (
-            max_tokens - overlap_tokens
-            if 0 < overlap_tokens < max_tokens
-            else max_tokens
-        )
-        chunks = []
-        for start in range(0, len(tokens), step):
-            window = tokens[start : start + max_tokens]
-            if not window:
-                break
-            chunks.append(self._tokenizer.decode(window, skip_special_tokens=True))
-            if start + max_tokens >= len(tokens):
-                break
-        return chunks
-
-
-@lru_cache(maxsize=1)
-def _get_token_counter() -> TokenCounter:
-    """Get singleton TokenCounter instance (lazy-loaded)."""
-    return TokenCounter()
-
-
-def _get_size(text: str, use_tokens: bool) -> int:
-    """Get size of text in characters or tokens."""
-    if use_tokens:
-        return _get_token_counter().count_tokens(text)
-    return len(text)
-
-
-def _get_overlap_text(chunk: str, overlap_size: int, use_tokens: bool) -> str:
-    """Extract overlap text from end of chunk."""
-    if overlap_size <= 0:
-        return ""
-    if use_tokens:
-        return _get_token_counter().get_last_n_tokens(chunk, overlap_size)
-    return chunk[-overlap_size:] if len(chunk) > overlap_size else chunk
-
-
 @dataclass(frozen=True)
 class ChunkingParams:
-    """Resolved chunk sizing and overlap behavior."""
+    """Resolved chunk sizing and overlap behavior (character-based)."""
 
-    use_tokens: bool
     max_size: int
     overlap_size: int
 
     def size(self, text: str) -> int:
-        return _get_size(text, self.use_tokens)
+        return len(text)
 
     def overlap(self, chunk: str) -> str:
-        return _get_overlap_text(chunk, self.overlap_size, self.use_tokens)
+        if self.overlap_size <= 0:
+            return ""
+        return chunk[-self.overlap_size :] if len(chunk) > self.overlap_size else chunk
 
 
-def _split_oversized_text(
-    text: str,
-    *,
-    params: ChunkingParams,
-) -> list[str]:
+def _split_oversized_text(text: str, *, params: ChunkingParams) -> list[str]:
     """Split one oversized text block into windows without losing content."""
     if params.size(text) <= params.max_size:
         return [text]
-
-    if params.use_tokens:
-        return _get_token_counter().split_to_token_windows(
-            text,
-            max_tokens=params.max_size,
-            overlap_tokens=params.overlap_size,
-        )
 
     step = (
         params.max_size - params.overlap_size
@@ -157,21 +54,14 @@ def _prepend_overlap_if_fits(
     return chunk
 
 
-def _merge_tiny_chunks(
-    chunks: list[str],
-    *,
-    params: ChunkingParams,
-) -> list[str]:
+def _merge_tiny_chunks(chunks: list[str], *, params: ChunkingParams) -> list[str]:
     """Merge tiny chunks into neighbors to preserve context and reduce fragmentation."""
     if len(chunks) <= 1:
         return chunks
 
-    if params.use_tokens:
-        tiny_threshold = max(5, int(params.max_size * 0.1))
-    else:
-        tiny_threshold = (
-            200 if params.max_size >= 200 else max(10, int(params.max_size * 0.5))
-        )
+    tiny_threshold = (
+        200 if params.max_size >= 200 else max(10, int(params.max_size * 0.5))
+    )
 
     merged: list[str] = []
     i = 0
@@ -264,40 +154,21 @@ def _heading_level_changed(current_level: int | None, next_level: int | None) ->
 
 
 def _resolve_chunking_params(
-    use_tokens: bool | None,
     max_chunk_chars: int | None,
-    max_chunk_tokens: int | None,
     overlap_chars: int | None,
-    overlap_tokens: int | None,
     enable_overlap: bool | None,
 ) -> ChunkingParams:
-    """Resolve chunking parameters with defaults from settings.
-
-    Returns:
-        Resolved chunking parameters.
-    """
-    if use_tokens is None:
-        use_tokens = settings.use_token_based_chunking
+    """Resolve chunking parameters with defaults from settings."""
     if max_chunk_chars is None:
         max_chunk_chars = settings.char_chunk_size
-    if max_chunk_tokens is None:
-        max_chunk_tokens = settings.token_chunk_size
     if overlap_chars is None:
         overlap_chars = settings.char_overlap_size
-    if overlap_tokens is None:
-        overlap_tokens = settings.token_overlap_size
     if enable_overlap is None:
         enable_overlap = settings.enable_chunk_overlap
 
-    max_size = max_chunk_tokens if use_tokens else max_chunk_chars
-    overlap_size = overlap_tokens if use_tokens else overlap_chars
-    if not enable_overlap:
-        overlap_size = 0
-
     return ChunkingParams(
-        use_tokens=use_tokens,
-        max_size=max_size,
-        overlap_size=overlap_size,
+        max_size=max_chunk_chars,
+        overlap_size=0 if not enable_overlap else overlap_chars,
     )
 
 
@@ -305,10 +176,7 @@ def chunk_by_headings(
     content: str,
     max_chunk_chars: int | None = None,
     *,
-    use_tokens: bool | None = None,
-    max_chunk_tokens: int | None = None,
     overlap_chars: int | None = None,
-    overlap_tokens: int | None = None,
     enable_overlap: bool | None = None,
 ) -> list[str]:
     """Split content by markdown headings, respecting size limits.
@@ -316,23 +184,13 @@ def chunk_by_headings(
     Args:
         content: Markdown content to chunk.
         max_chunk_chars: Max characters per chunk.
-        use_tokens: Use token-based sizing.
-        max_chunk_tokens: Max tokens per chunk (token mode).
         overlap_chars: Character overlap between chunks.
-        overlap_tokens: Token overlap between chunks.
         enable_overlap: Enable overlap.
 
     Returns:
         List of content chunks.
     """
-    params = _resolve_chunking_params(
-        use_tokens,
-        max_chunk_chars,
-        max_chunk_tokens,
-        overlap_chars,
-        overlap_tokens,
-        enable_overlap,
-    )
+    params = _resolve_chunking_params(max_chunk_chars, overlap_chars, enable_overlap)
 
     # Split on headings (keep the heading with content)
     sections = re.split(r"(?=^#{1,3}\s)", content, flags=re.MULTILINE)
@@ -370,10 +228,7 @@ def chunk_by_headings(
                 sub_chunks = chunk_by_paragraphs(
                     section,
                     max_chunk_chars=max_chunk_chars,
-                    use_tokens=params.use_tokens,
-                    max_chunk_tokens=max_chunk_tokens,
                     overlap_chars=overlap_chars,
-                    overlap_tokens=overlap_tokens,
                     enable_overlap=enable_overlap,
                 )
                 heading_context = _extract_heading_context(section)
@@ -408,20 +263,14 @@ def chunk_by_headings(
     if not chunks:
         return [content]
 
-    return _merge_tiny_chunks(
-        chunks,
-        params=params,
-    )
+    return _merge_tiny_chunks(chunks, params=params)
 
 
 def chunk_by_paragraphs(
     content: str,
     max_chunk_chars: int | None = None,
     *,
-    use_tokens: bool | None = None,
-    max_chunk_tokens: int | None = None,
     overlap_chars: int | None = None,
-    overlap_tokens: int | None = None,
     enable_overlap: bool | None = None,
 ) -> list[str]:
     """Split content by paragraphs for large sections.
@@ -429,23 +278,13 @@ def chunk_by_paragraphs(
     Args:
         content: Content to chunk.
         max_chunk_chars: Max characters per chunk.
-        use_tokens: Use token-based sizing.
-        max_chunk_tokens: Max tokens per chunk (token mode).
         overlap_chars: Character overlap between chunks.
-        overlap_tokens: Token overlap between chunks.
         enable_overlap: Enable overlap.
 
     Returns:
         List of content chunks.
     """
-    params = _resolve_chunking_params(
-        use_tokens,
-        max_chunk_chars,
-        max_chunk_tokens,
-        overlap_chars,
-        overlap_tokens,
-        enable_overlap,
-    )
+    params = _resolve_chunking_params(max_chunk_chars, overlap_chars, enable_overlap)
 
     paragraphs = content.split("\n\n")
     chunks: list[str] = []
@@ -463,10 +302,7 @@ def chunk_by_paragraphs(
                 pending_overlap = params.overlap(current_chunk)
                 current_chunk = ""
 
-            sub_chunks = _split_oversized_text(
-                para,
-                params=params,
-            )
+            sub_chunks = _split_oversized_text(para, params=params)
             if pending_overlap and sub_chunks:
                 sub_chunks[0] = _prepend_overlap_if_fits(
                     pending_overlap,

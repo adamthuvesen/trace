@@ -8,10 +8,6 @@ from trace_search.config import settings
 
 
 def _chunk_mode(chunking: dict[str, Any]) -> str:
-    if chunking.get("use_tokens"):
-        size = chunking.get("token_chunk_size", settings.token_chunk_size)
-        return f"token-based (max {size} tokens)"
-
     size = chunking.get("char_chunk_size", settings.char_chunk_size)
     return f"character-based (max {size} chars)"
 
@@ -19,10 +15,6 @@ def _chunk_mode(chunking: dict[str, Any]) -> str:
 def _overlap_info(chunking: dict[str, Any]) -> str:
     if not chunking.get("enable_overlap"):
         return "disabled"
-    if chunking.get("use_tokens"):
-        size = chunking.get("token_overlap_size", settings.token_overlap_size)
-        return f"enabled ({size} tokens)"
-
     size = chunking.get("char_overlap_size", settings.char_overlap_size)
     return f"enabled ({size} chars)"
 
