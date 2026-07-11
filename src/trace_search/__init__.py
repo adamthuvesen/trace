@@ -1,5 +1,7 @@
 """Trace - semantic, keyword, and hybrid search over local knowledge bases."""
 
+from typing import Any
+
 __version__ = "0.3.0"
 
 from trace_search.config import settings  # noqa: F401
@@ -18,7 +20,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     """Lazily expose runtime classes without making package import heavy."""
     if name == "WikiIndexer":
         from trace_search.indexing.wiki_indexer import WikiIndexer

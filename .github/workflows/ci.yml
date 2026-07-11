@@ -32,6 +32,9 @@ jobs:
       - name: Format
         run: uv run ruff format --check .
 
+      - name: Type check
+        run: uv run mypy
+
       - name: Test
         run: uv run python -m pytest -m "not slow"
 

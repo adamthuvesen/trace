@@ -20,6 +20,7 @@ from trace_search.retrieval.search import (
     _semantic_fetch_size,
     _semantic_lexical_boost,
 )
+from trace_search.retrieval.search_types import SearchRoute
 
 
 class TestHybridSearchQueryClassification:
@@ -37,6 +38,7 @@ class TestHybridSearchQueryClassification:
     def test_lazy_reranker_type_hints_resolve_at_runtime(self):
         assert "_reranker" in get_type_hints(HybridSearch)
         assert "return" in get_type_hints(HybridSearch._get_reranker)
+        assert "filters" in get_type_hints(SearchRoute)
 
     def test_short_definition_classified_as_keyword(self):
         query_type, weight = self._classify("What is BM25?")

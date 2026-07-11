@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Callable, Sequence
+from typing import TypedDict
 
 from trace_search.collections.diagnostics import (
     invalid_config_report,
@@ -153,7 +154,13 @@ def run_cli(
     return 0
 
 
-def _filter_kwargs(args: argparse.Namespace) -> dict[str, object]:
+class FilterKwargs(TypedDict):
+    path_prefix: str | list[str] | None
+    extensions: str | list[str] | None
+    since: str | None
+
+
+def _filter_kwargs(args: argparse.Namespace) -> FilterKwargs:
     """Extract the shared filter args into a kwargs dict for operations calls."""
     return {
         "path_prefix": args.path_prefix,

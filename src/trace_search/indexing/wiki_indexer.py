@@ -6,9 +6,11 @@ import json
 import logging
 import shutil
 from pathlib import Path
+from typing import TypedDict, cast
 
 import bm25s
 import chromadb
+from chromadb.api.types import Metadata
 from chromadb.errors import NotFoundError
 from chromadb.config import Settings as ChromaSettings
 
@@ -20,7 +22,11 @@ from trace_search.extraction.chunking import (
 )
 from trace_search.config import settings
 from trace_search.extraction.corpus import iter_kb_files
-from trace_search.indexing.embeddings import EmbeddingBackend, build_embedding_backend
+from trace_search.indexing.embeddings import (
+    EmbeddingArray,
+    EmbeddingBackend,
+    build_embedding_backend,
+)
 from trace_search.extraction.extractors import (
     SUPPORTED_EXTENSIONS,
     extract_content,
@@ -33,6 +39,7 @@ from trace_search.indexing.index_metadata import (
     invalidate_index_metadata,
     metadata_matches_active_model,
     read_index_metadata,
+    SourceChangeSet,
     utc_now_iso,
     write_index_metadata,
 )
@@ -45,6 +52,15 @@ from trace_search.indexing.index_paths import (
 from trace_search.indexing.kb_paths import get_default_index_root, should_exclude_path
 
 logger = logging.getLogger(__name__)
+
+
+class LoadedDocument(TypedDict):
+    path: str
+    title: str
+    folder: str
+    extension: str
+    mtime: float
+    content: str
 
 
 class WikiIndexer:
@@ -108,7 +124,7 @@ class WikiIndexer:
         )
 
         self._bm25: bm25s.BM25 | None = None
-        self._bm25_corpus: list[dict] | None = None
+        self._bm25_corpus: list[Metadata] | None = None
 
     def _get_relative_path(self, path: Path) -> str:
         return str(path.relative_to(self.kb_path))
@@ -121,7 +137,7 @@ class WikiIndexer:
     def _should_exclude(self, path: Path) -> bool:
         return should_exclude_path(path, self.kb_path)
 
-    def _load_single_document(self, file_path: Path) -> dict | None:
+    def _load_single_document(self, file_path: Path) -> LoadedDocument | None:
         """Extract one supported file into a doc dict, or return None to skip."""
         ext = file_path.suffix.lower()
         if ext not in SUPPORTED_EXTENSIONS:
@@ -148,9 +164,9 @@ class WikiIndexer:
             "content": content,
         }
 
-    def load_documents(self) -> list[dict]:
+    def load_documents(self) -> list[LoadedDocument]:
         """Load all supported files from knowledge base."""
-        docs: list[dict] = []
+        docs: list[LoadedDocument] = []
         for file_path in iter_kb_files(self.kb_path):
             doc = self._load_single_document(file_path)
             if doc is not None:
@@ -158,9 +174,9 @@ class WikiIndexer:
         docs.sort(key=lambda d: d["path"])
         return docs
 
-    def _load_documents_subset(self, relative_paths: list[str]) -> list[dict]:
+    def _load_documents_subset(self, relative_paths: list[str]) -> list[LoadedDocument]:
         """Load only the listed relative paths into doc dicts."""
-        docs: list[dict] = []
+        docs: list[LoadedDocument] = []
         for rel in relative_paths:
             file_path = self.kb_path / rel
             if not file_path.is_file():
@@ -213,12 +229,12 @@ class WikiIndexer:
         return "incremental"
 
     def _build_chunks(
-        self, docs: list[dict]
-    ) -> tuple[list[str], list[str], list[dict]]:
+        self, docs: list[LoadedDocument]
+    ) -> tuple[list[str], list[str], list[Metadata]]:
         """Convert documents into (chunks, ids, metadatas) ready for indexing."""
         all_chunks: list[str] = []
         all_ids: list[str] = []
-        all_metadatas: list[dict] = []
+        all_metadatas: list[Metadata] = []
 
         for doc in docs:
             chunks = chunk_by_headings(doc["content"])
@@ -249,8 +265,8 @@ class WikiIndexer:
         self,
         ids: list[str],
         chunks: list[str],
-        embeddings,
-        metadatas: list[dict],
+        embeddings: EmbeddingArray,
+        metadatas: list[Metadata],
     ) -> None:
         """Write chunks and embeddings to ChromaDB in batches."""
         batch_size = 500
@@ -264,7 +280,7 @@ class WikiIndexer:
             )
             logger.info("Indexed %s/%s chunks (ChromaDB)", end, len(chunks))
 
-    def _persist_bm25(self, chunks: list[str], metadatas: list[dict]) -> None:
+    def _persist_bm25(self, chunks: list[str], metadatas: list[Metadata]) -> None:
         """Build and save the BM25 index plus metadata to disk."""
         logger.info("Building BM25 index...")
         corpus_tokens = bm25s.tokenize(
@@ -392,7 +408,7 @@ class WikiIndexer:
         write_index_metadata(self.bm25_path.parent, metadata)
         return chunk_count
 
-    def _apply_incremental_changes(self, changes) -> None:
+    def _apply_incremental_changes(self, changes: SourceChangeSet) -> None:
         """Apply categorized file changes to the Chroma collection in place."""
         for path in changes.changed + changes.removed:
             self.collection.delete(where={"path": path})
@@ -455,7 +471,7 @@ class WikiIndexer:
         metadata_path = self.bm25_path / "metadata.json"
         if metadata_path.exists():
             with open(metadata_path) as f:
-                self._bm25_corpus = json.load(f)
+                self._bm25_corpus = cast(list[Metadata], json.load(f))
 
     @property
     def bm25(self) -> bm25s.BM25 | None:
@@ -465,7 +481,7 @@ class WikiIndexer:
         return self._bm25
 
     @property
-    def bm25_corpus(self) -> list[dict] | None:
+    def bm25_corpus(self) -> list[Metadata] | None:
         """Get BM25 corpus metadata."""
         if self._bm25_corpus is None:
             self._load_bm25()

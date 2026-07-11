@@ -67,6 +67,9 @@ uv run python -m pytest -m "not slow"          # skip embedding tests
 uv run ruff check .
 uv run ruff format --check .
 
+# Type check (strict; src/trace_search only)
+uv run mypy
+
 # Evaluation: smoke test against the committed fixture (full guide: docs/evaluation.md)
 KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
   uv run python -m tools.eval.cli --full --search adaptive

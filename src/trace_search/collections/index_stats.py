@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from trace_search.config import settings
@@ -21,7 +22,7 @@ def _overlap_info(chunking: dict[str, Any]) -> str:
 
 def render_index_stats(
     collection_stats: list[tuple[str, dict[str, object]]],
-    cache_stats: dict[str, object],
+    cache_stats: Mapping[str, object],
 ) -> str:
     """Render index statistics for one or more collections."""
     sections = []
