@@ -420,15 +420,20 @@ class CollectionRegistry:
         vs hybrid RRF). Ranks are comparable, so each hit is scored
         1/(k + rank) within its own collection and hits are interleaved by
         that fused score. Ties (equal rank) keep the given collection order.
+
+        The fused score is stored on each hit as `fused_score` so downstream
+        rendering (`format_search_context`) sorts by it instead of the raw
+        per-collection scores.
         """
-        fused: list[tuple[float, SearchResult]] = []
+        fused: list[SearchResult] = []
         for results, name in zip(result_lists, collection_names):
             for rank, hit in enumerate(results, start=1):
                 hit = hit.copy()
                 hit["collection"] = name
-                fused.append((1.0 / (CROSS_COLLECTION_RRF_K + rank), hit))
-        fused.sort(key=lambda pair: pair[0], reverse=True)
-        return [hit for _, hit in fused[:top_k]]
+                hit["fused_score"] = 1.0 / (CROSS_COLLECTION_RRF_K + rank)
+                fused.append(hit)
+        fused.sort(key=lambda h: float(h["fused_score"]), reverse=True)
+        return fused[:top_k]
 
     def get_document(self, path: str, collection: str | None) -> str:
         cols = self._resolve(collection)

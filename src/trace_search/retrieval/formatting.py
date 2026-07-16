@@ -54,7 +54,12 @@ def _normalization_key(text: str) -> str:
 
 
 def _score_for_sort(hit: dict[str, Any]) -> float:
-    score = hit.get("rerank_score", hit.get("rrf_score", hit.get("score", 0)))
+    # `fused_score` is set on every hit of a multi-collection merge; raw
+    # per-collection scores are not comparable across collections.
+    score = hit.get(
+        "fused_score",
+        hit.get("rerank_score", hit.get("rrf_score", hit.get("score", 0))),
+    )
     return float(score or 0)
 
 

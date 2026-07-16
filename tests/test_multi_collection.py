@@ -499,6 +499,54 @@ class TestMergeResults:
         )
         assert [h["path"] for h in merged] == ["k1.md", "h1.md"]
 
+    def test_format_search_context_preserves_fused_order(self):
+        """Regression: format_search_context used to re-sort merged hits by
+        raw score, demoting the hybrid collection's rank-1 hit below the
+        keyword collection's rank-2 hit in the rendered output."""
+        from trace_search.collections.collection_registry import CollectionRegistry
+        from trace_search.retrieval.formatting import format_search_context
+
+        keyword_hits = [
+            {
+                "path": "k1.md",
+                "title": "K1",
+                "folder": "",
+                "score": 8.5,
+                "source": "keyword",
+                "content": "alpha topic overview",
+            },
+            {
+                "path": "k2.md",
+                "title": "K2",
+                "folder": "",
+                "score": 7.0,
+                "source": "keyword",
+                "content": "alpha topic details",
+            },
+        ]
+        hybrid_hits = [
+            {
+                "path": "h1.md",
+                "title": "H1",
+                "folder": "",
+                "score": 0.9,
+                "rrf_score": 0.032,
+                "source": "hybrid",
+                "content": "alpha topic notes",
+            },
+        ]
+        merged = CollectionRegistry._merge_results(
+            [keyword_hits, hybrid_hits],
+            top_k=3,
+            collection_names=["kw", "hy"],
+        )
+        rendered = format_search_context(merged, query="alpha")
+        assert (
+            rendered.index("### 1. K1")
+            < rendered.index("### 2. H1")
+            < rendered.index("### 3. K2")
+        )
+
 
 class TestCrossCollectionFairness:
     """End-to-end: a small collection's relevant doc must survive merging
@@ -583,6 +631,22 @@ class TestCrossCollectionFairness:
         top2 = [(h["collection"], h["path"]) for h in merged[:2]]
         assert ("small", "kubernetes-deployment-guide.md") in top2
         assert {h["collection"] for h in merged} == {"large", "small"}
+
+    def test_rendered_adaptive_search_keeps_small_collection_on_top(self, tmp_path):
+        """The production `search` tool path: search_adaptive rendered through
+        format_search_context must present the small collection's relevant doc
+        among the top two documents, not re-sorted down by raw score."""
+        from trace_search.retrieval.formatting import format_search_context
+
+        registry = self._make_registry(tmp_path)
+        result = registry.search_adaptive(self.QUERY, top_k=5, collection=None)
+        rendered = format_search_context(
+            result.hits, query=self.QUERY, route=result.route, max_documents=5
+        )
+        assert "### 3." in rendered
+        assert rendered.index("kubernetes-deployment-guide.md") < rendered.index(
+            "### 3."
+        )
 
     def test_merge_respects_top_k(self):
         from trace_search.collections.collection_registry import CollectionRegistry
