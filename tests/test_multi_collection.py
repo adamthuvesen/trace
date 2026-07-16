@@ -429,7 +429,7 @@ class TestMultiCollectionFilters:
 
 
 class TestMergeResults:
-    def test_merge_interleaves_by_score(self):
+    def test_merge_interleaves_by_rank(self):
         from trace_search.collections.collection_registry import CollectionRegistry
 
         results_a = [
@@ -451,6 +451,202 @@ class TestMergeResults:
         assert merged[1]["path"] == "c.md"
         assert merged[1]["collection"] == "b"
         assert merged[2]["path"] == "b.md"
+
+    def test_merge_does_not_starve_small_collection(self):
+        """Regression: raw BM25 scores from a large corpus (higher IDF) used to
+        crowd out a small collection's genuinely relevant top hit."""
+        from trace_search.collections.collection_registry import CollectionRegistry
+
+        large = [
+            {"path": f"large_{i}.md", "score": 12.0 - i * 0.5, "source": "keyword"}
+            for i in range(5)
+        ]
+        small = [
+            {"path": "answer.md", "score": 3.2, "source": "keyword"},
+            {"path": "other.md", "score": 1.1, "source": "keyword"},
+        ]
+
+        # The old merge sorted raw scores: the small collection never surfaced.
+        by_raw_score = sorted(large + small, key=lambda h: h["score"], reverse=True)
+        assert all(h["path"].startswith("large_") for h in by_raw_score[:5])
+
+        merged = CollectionRegistry._merge_results(
+            [large, small],
+            top_k=5,
+            collection_names=["large", "small"],
+        )
+        assert merged[0]["path"] == "large_0.md"
+        assert merged[1]["path"] == "answer.md"
+        assert merged[1]["collection"] == "small"
+
+    def test_merge_handles_mixed_score_types_across_collections(self):
+        """Adaptive search can return raw BM25 for one collection and hybrid
+        RRF (~0.03 scale) for another; rank fusion must not compare them."""
+        from trace_search.collections.collection_registry import CollectionRegistry
+
+        keyword_hits = [
+            {"path": "k1.md", "score": 8.5, "source": "keyword"},
+            {"path": "k2.md", "score": 7.0, "source": "keyword"},
+        ]
+        hybrid_hits = [
+            {"path": "h1.md", "score": 0.9, "rrf_score": 0.032, "source": "hybrid"},
+            {"path": "h2.md", "score": 0.8, "rrf_score": 0.030, "source": "hybrid"},
+        ]
+        merged = CollectionRegistry._merge_results(
+            [keyword_hits, hybrid_hits],
+            top_k=2,
+            collection_names=["kw", "hy"],
+        )
+        assert [h["path"] for h in merged] == ["k1.md", "h1.md"]
+
+    def test_format_search_context_preserves_fused_order(self):
+        """Regression: format_search_context used to re-sort merged hits by
+        raw score, demoting the hybrid collection's rank-1 hit below the
+        keyword collection's rank-2 hit in the rendered output."""
+        from trace_search.collections.collection_registry import CollectionRegistry
+        from trace_search.retrieval.formatting import format_search_context
+
+        keyword_hits = [
+            {
+                "path": "k1.md",
+                "title": "K1",
+                "folder": "",
+                "score": 8.5,
+                "source": "keyword",
+                "content": "alpha topic overview",
+            },
+            {
+                "path": "k2.md",
+                "title": "K2",
+                "folder": "",
+                "score": 7.0,
+                "source": "keyword",
+                "content": "alpha topic details",
+            },
+        ]
+        hybrid_hits = [
+            {
+                "path": "h1.md",
+                "title": "H1",
+                "folder": "",
+                "score": 0.9,
+                "rrf_score": 0.032,
+                "source": "hybrid",
+                "content": "alpha topic notes",
+            },
+        ]
+        merged = CollectionRegistry._merge_results(
+            [keyword_hits, hybrid_hits],
+            top_k=3,
+            collection_names=["kw", "hy"],
+        )
+        rendered = format_search_context(merged, query="alpha")
+        assert (
+            rendered.index("### 1. K1")
+            < rendered.index("### 2. H1")
+            < rendered.index("### 3. K2")
+        )
+
+
+class TestCrossCollectionFairness:
+    """End-to-end: a small collection's relevant doc must survive merging
+    with a much larger collection whose BM25 statistics inflate raw scores."""
+
+    QUERY = "kubernetes deployment"
+
+    def _make_registry(self, tmp_path):
+        from tests.test_runtime_hardening import FakeBackend
+        from trace_search.collections.collection_registry import CollectionRegistry
+
+        large = tmp_path / "large"
+        small = tmp_path / "small"
+        large.mkdir()
+        small.mkdir()
+
+        # Large collection: 40 docs; a few mention the query terms in passing,
+        # so the terms are rare in a big corpus (high IDF -> big raw scores).
+        for i in range(34):
+            (large / f"note_{i:02d}.md").write_text(
+                f"# Note {i}\n\nMeeting summary about billing, invoices and "
+                f"quarterly planning item {i}.",
+                encoding="utf-8",
+            )
+        for i in range(6):
+            (large / f"kubernetes-incident-{i}.md").write_text(
+                f"# Kubernetes incident {i}\n\nRotated credentials on the "
+                "cluster. The kubernetes deployment for service "
+                f"s{i} was restarted during maintenance. Kubernetes deployment "
+                "events were archived afterwards.",
+                encoding="utf-8",
+            )
+
+        # Small collection: 3 docs; one is the genuinely relevant answer.
+        (small / "kubernetes-deployment-guide.md").write_text(
+            "# Kubernetes deployment guide\n\nHow we run a kubernetes "
+            "deployment: build the image, apply the manifest, verify the "
+            "rollout status.",
+            encoding="utf-8",
+        )
+        (small / "onboarding.md").write_text(
+            "# Onboarding\n\nAccounts, laptop setup and first week schedule.",
+            encoding="utf-8",
+        )
+        (small / "style.md").write_text(
+            "# Style guide\n\nWriting conventions for internal docs.",
+            encoding="utf-8",
+        )
+
+        registry = CollectionRegistry({"large": large, "small": small})
+        registry._backend = FakeBackend()
+        registry._warmed = True
+        for col in registry.collections.values():
+            col.ensure_index(registry.backend)
+        return registry
+
+    def test_small_collection_hit_survives_merge(self, tmp_path):
+        from trace_search.retrieval.search import SearchFilters
+
+        registry = self._make_registry(tmp_path)
+        filters = SearchFilters()
+
+        large_hits = registry.collections["large"].search(
+            "keyword", self.QUERY, 5, filters, registry.backend
+        )
+        small_hits = registry.collections["small"].search(
+            "keyword", self.QUERY, 5, filters, registry.backend
+        )
+        assert small_hits and small_hits[0]["path"] == "kubernetes-deployment-guide.md"
+
+        # Precondition for the regression: the large corpus's raw scores beat
+        # the small collection's best hit, so the old raw-score merge starved
+        # it out of the top ranks. If this stops holding, the fixture no
+        # longer exercises the bug.
+        small_best = float(small_hits[0]["score"])
+        outscoring = [h for h in large_hits if float(h["score"]) > small_best]
+        assert len(outscoring) >= 2
+
+        merged = registry.search_keyword(
+            self.QUERY, top_k=5, collection=None, filters=filters
+        )
+        top2 = [(h["collection"], h["path"]) for h in merged[:2]]
+        assert ("small", "kubernetes-deployment-guide.md") in top2
+        assert {h["collection"] for h in merged} == {"large", "small"}
+
+    def test_rendered_adaptive_search_keeps_small_collection_on_top(self, tmp_path):
+        """The production `search` tool path: search_adaptive rendered through
+        format_search_context must present the small collection's relevant doc
+        among the top two documents, not re-sorted down by raw score."""
+        from trace_search.retrieval.formatting import format_search_context
+
+        registry = self._make_registry(tmp_path)
+        result = registry.search_adaptive(self.QUERY, top_k=5, collection=None)
+        rendered = format_search_context(
+            result.hits, query=self.QUERY, route=result.route, max_documents=5
+        )
+        assert "### 3." in rendered
+        assert rendered.index("kubernetes-deployment-guide.md") < rendered.index(
+            "### 3."
+        )
 
     def test_merge_respects_top_k(self):
         from trace_search.collections.collection_registry import CollectionRegistry

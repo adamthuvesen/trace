@@ -45,6 +45,10 @@ logger = logging.getLogger(__name__)
 
 DirectSearchMode = Literal["keyword", "semantic", "hybrid"]
 
+# Standard RRF constant: dampens the gap between top ranks so one collection's
+# rank-1 hit cannot dwarf another's rank-2 hit.
+CROSS_COLLECTION_RRF_K = 60
+
 
 @dataclass
 class Collection:
@@ -408,18 +412,28 @@ class CollectionRegistry:
         top_k: int,
         collection_names: list[str],
     ) -> list[SearchResult]:
-        """Interleave results from multiple collections by score, tag with collection name."""
-        tagged: list[SearchResult] = []
+        """Fuse results from multiple collections by per-collection rank (RRF).
+
+        Raw scores are not comparable across independently indexed
+        collections: BM25/IDF statistics depend on each corpus, and adaptive
+        search can even return different score types per collection (raw BM25
+        vs hybrid RRF). Ranks are comparable, so each hit is scored
+        1/(k + rank) within its own collection and hits are interleaved by
+        that fused score. Ties (equal rank) keep the given collection order.
+
+        The fused score is stored on each hit as `fused_score` so downstream
+        rendering (`format_search_context`) sorts by it instead of the raw
+        per-collection scores.
+        """
+        fused: list[SearchResult] = []
         for results, name in zip(result_lists, collection_names):
-            for hit in results:
+            for rank, hit in enumerate(results, start=1):
                 hit = hit.copy()
                 hit["collection"] = name
-                tagged.append(hit)
-        tagged.sort(
-            key=lambda h: float(h.get("rrf_score", h.get("score", 0)) or 0),
-            reverse=True,
-        )
-        return tagged[:top_k]
+                hit["fused_score"] = 1.0 / (CROSS_COLLECTION_RRF_K + rank)
+                fused.append(hit)
+        fused.sort(key=lambda h: float(h["fused_score"]), reverse=True)
+        return fused[:top_k]
 
     def get_document(self, path: str, collection: str | None) -> str:
         cols = self._resolve(collection)
