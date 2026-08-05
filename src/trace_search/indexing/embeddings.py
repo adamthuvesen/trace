@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
+from pathlib import Path
 from typing import Protocol, TypeAlias, runtime_checkable
 
 import numpy as np
@@ -11,6 +13,30 @@ from numpy.typing import NDArray
 from trace_search.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def model_cache_dir() -> Path:
+    """Persistent cache for downloaded embedding models.
+
+    fastembed defaults to the system temp directory. macOS purges `$TMPDIR`, and
+    on 2026-08-05 it had deleted the blobs while leaving the snapshot symlinks
+    behind, so every search failed with
+    `NO_SUCHFILE: Load model ... model.onnx failed`. Nothing surfaced it —
+    `trace reindex` still exited 0, so the index looked healthy while retrieval
+    was dead. A model download is expensive and long-lived; a temp directory is
+    the wrong home for it.
+
+    Override with `TRACE_MODEL_CACHE`.
+    """
+    override = os.environ.get("TRACE_MODEL_CACHE")
+    if override:
+        path = Path(override).expanduser()
+    else:
+        base = os.environ.get("XDG_CACHE_HOME")
+        root = Path(base).expanduser() if base else Path.home() / ".cache"
+        path = root / "trace" / "models"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 EmbeddingArray: TypeAlias = NDArray[np.float32]
 
@@ -73,7 +99,10 @@ class OnnxBackend:
                 "Set EMBEDDING_BACKEND=torch to use this model."
             )
         self.model_name = model_name
-        self._model = TextEmbedding(model_name=_FASTEMBED_MODEL_MAP[model_name])
+        self._model = TextEmbedding(
+            model_name=_FASTEMBED_MODEL_MAP[model_name],
+            cache_dir=str(model_cache_dir()),
+        )
         probe = next(iter(self._model.embed(["probe"])))
         self.dim = int(np.asarray(probe).shape[-1])
 
