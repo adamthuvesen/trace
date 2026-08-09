@@ -292,7 +292,7 @@ def test_default_search_tool_uses_adaptive_registry_path(tmp_path):
             ),
         ),
     ) as search_adaptive:
-        rendered = tools["search"].fn("BM25")
+        rendered = tools["search"]("BM25")
 
     search_adaptive.assert_called_once()
     assert "**Selected:** keyword" in rendered
@@ -325,7 +325,7 @@ def test_default_search_tool_renders_all_top_k_documents(tmp_path):
             ),
         ),
     ):
-        rendered = tools["search"].fn("BM25", top_k=10)
+        rendered = tools["search"]("BM25", top_k=10)
 
     for i in range(10):
         assert f"`doc{i}.md`" in rendered
@@ -404,7 +404,7 @@ def test_specialist_keyword_tool_bypasses_adaptive_registry_path(tmp_path):
         patch.object(CollectionRegistry, "search_keyword", return_value=[]) as keyword,
         patch.object(CollectionRegistry, "search_adaptive") as search_adaptive,
     ):
-        tools["keyword_search"].fn("BM25")
+        tools["keyword_search"]("BM25")
 
     keyword.assert_called_once()
     search_adaptive.assert_not_called()

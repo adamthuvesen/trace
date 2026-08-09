@@ -102,6 +102,10 @@ Trace speaks MCP over stdio. Point it at one collection with `KB_PATH` or
 several named ones with `KB_COLLECTIONS`. The server name is `trace`; tools are
 exposed as `mcp__trace__<tool>`.
 
+Trace pins FastMCP 4.0.0b2 so clients can negotiate MCP `2026-07-28` or an
+older protocol revision. Trace still uses stdio, so the new sessionless HTTP
+deployment rules do not change its local configuration.
+
 ### Claude Code
 
 ```bash

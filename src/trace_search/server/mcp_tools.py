@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from collections.abc import Callable
 
 from fastmcp import FastMCP
 
@@ -38,8 +38,8 @@ def build_multi_mcp(
     collections: dict[str, Path],
     index_root: Path | None = None,
     instructions: str | None = None,
-) -> tuple[FastMCP, dict[str, Any]]:
-    """Build a multi-collection FastMCP server."""
+) -> tuple[FastMCP, dict[str, Callable[..., str]]]:
+    """Build a server and return its registered tool functions for direct use."""
     registry = CollectionRegistry(collections, index_root)
     operations = TraceOperations(registry)
 

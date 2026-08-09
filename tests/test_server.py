@@ -59,37 +59,35 @@ class TestToolDefinitions:
     def test_server_tool_exists(self, multi_mcp, tool_name):
         _, tools = multi_mcp
         tool = tools[tool_name]
-        assert tool is not None
-        assert hasattr(tool, "name")
-        assert tool.name == tool_name
+        assert callable(tool)
+        assert tool.__name__ == tool_name
 
     def test_all_tools_are_non_none(self, multi_mcp):
         _, tools = multi_mcp
         for name, tool in tools.items():
-            assert tool is not None, f"Tool {name} is None"
-            assert hasattr(tool, "name"), f"Tool {name} missing 'name' attribute"
+            assert callable(tool), f"Tool {name} is not callable"
 
 
 class TestToolDocstrings:
     def test_search_has_description(self, multi_mcp):
         _, tools = multi_mcp
         search = tools["search"]
-        assert search.description is not None
-        assert "BM25" in search.description or "keyword" in search.description
+        assert search.__doc__ is not None
+        assert "BM25" in search.__doc__ or "keyword" in search.__doc__
 
     def test_semantic_search_has_description(self, multi_mcp):
         _, tools = multi_mcp
-        assert "semantic" in tools["semantic_search"].description.lower()
+        assert "semantic" in (tools["semantic_search"].__doc__ or "").lower()
 
     def test_keyword_search_description_matches_direct_bm25_behavior(self, multi_mcp):
         _, tools = multi_mcp
-        desc = tools["keyword_search"].description.lower()
+        desc = (tools["keyword_search"].__doc__ or "").lower()
         assert "bm25" in desc
         assert "alias" not in desc
 
     def test_hybrid_search_has_description(self, multi_mcp):
         desc = (
-            tools["search_hybrid"].description.lower()
+            (tools["search_hybrid"].__doc__ or "").lower()
             if (tools := multi_mcp[1])
             else ""
         )
@@ -218,7 +216,7 @@ class TestGetDocumentErrorEnvelope:
         (tmp_path / "notes.psd").write_bytes(b"\x00fake")
         _, tools = build_multi_mcp("env-test", {"docs": tmp_path})
 
-        result = tools["get_document"].fn("notes.psd")
+        result = tools["get_document"]("notes.psd")
 
         assert result.startswith("Error: "), (
             f"Expected 'Error: ' prefix, got: {result!r}"
@@ -234,7 +232,7 @@ class TestGetDocumentErrorEnvelope:
 
         _, tools = build_multi_mcp("tag-test", {"docs": docs, "brain": brain})
 
-        result = tools["get_document"].fn("intro.md")
+        result = tools["get_document"]("intro.md")
 
         assert "**Collection:** docs" in result
 
@@ -243,7 +241,7 @@ class TestGetDocumentErrorEnvelope:
 
         _, tools = build_multi_mcp("solo-test", {"docs": tmp_path})
 
-        result = tools["get_document"].fn("solo.md")
+        result = tools["get_document"]("solo.md")
 
         assert "**Collection:**" not in result
 
@@ -256,7 +254,7 @@ class TestGetDocumentErrorEnvelope:
 
         _, tools = build_multi_mcp("excluded-doc-test", {"docs": tmp_path})
 
-        result = tools["get_document"].fn("node_modules/secret.md")
+        result = tools["get_document"]("node_modules/secret.md")
 
         assert result == "Document not found: node_modules/secret.md"
         assert "Should not be readable" not in result
@@ -394,7 +392,7 @@ class TestReindexForceFlag:
             return_value=7,
             autospec=True,
         ) as rebuild_mock:
-            result = tools["reindex"].fn(force=True)
+            result = tools["reindex"](force=True)
 
         assert "(forced rebuild)" in result
         assert "7 chunks indexed" in result
@@ -417,7 +415,7 @@ class TestReindexForceFlag:
             return_value=2,
             autospec=True,
         ) as rebuild_mock:
-            result = tools["reindex"].fn()
+            result = tools["reindex"]()
 
         assert "(forced rebuild)" not in result
         assert "2 chunks indexed" in result
@@ -448,7 +446,7 @@ class TestListDocumentsMultiCollectionWalk:
             return original_rglob(self, pattern)
 
         with patch.object(Path, "rglob", spy_rglob):
-            tools["list_documents"].fn(limit=50)
+            tools["list_documents"](limit=50)
 
         assert rglob_calls.count("*") == 2, (
             f"Expected exactly 2 rglob('*') calls (one per collection), got: {rglob_calls}"
@@ -465,8 +463,8 @@ class TestListDocumentsDeterminism:
 
         _, tools = build_multi_mcp("det-test", {"docs": tmp_path})
 
-        first = tools["list_documents"].fn(limit=2)
-        second = tools["list_documents"].fn(limit=2)
+        first = tools["list_documents"](limit=2)
+        second = tools["list_documents"](limit=2)
 
         assert first == second
         assert "Found 2 documents" in first
@@ -486,7 +484,7 @@ class TestListDocumentsDeterminism:
         )
 
         _, tools = build_multi_mcp("exclude-test", {"docs": tmp_path})
-        result = tools["list_documents"].fn(limit=50)
+        result = tools["list_documents"](limit=50)
 
         assert "`docs/intro.md`" in result
         assert "node_modules" not in result
@@ -502,7 +500,7 @@ class TestListDocumentsDeterminism:
         (kb / "secret-link.md").symlink_to(target)
 
         _, tools = build_multi_mcp("symlink-test", {"docs": kb})
-        result = tools["list_documents"].fn(limit=50)
+        result = tools["list_documents"](limit=50)
 
         assert "`intro.md`" in result
         assert "secret-link.md" not in result
