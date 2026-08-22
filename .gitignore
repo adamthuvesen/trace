@@ -55,8 +55,6 @@ tools/eval/results/baselines/*.json
 tools/eval/fixture_kb/
 tools/eval/golden_queries.yaml
 
-# OpenSpec (local-only change proposals)
-openspec/
 
 # Temporary
 plan.md
