@@ -38,6 +38,7 @@ def model_cache_dir() -> Path:
     path.mkdir(parents=True, exist_ok=True)
     return path
 
+
 EmbeddingArray: TypeAlias = NDArray[np.float32]
 
 
