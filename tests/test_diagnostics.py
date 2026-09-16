@@ -347,7 +347,7 @@ def test_registry_probe_uses_existing_indexes_without_rebuild(tmp_path):
     )
     write_index_metadata(col.index_path, metadata)
     fake_adaptive = SimpleNamespace(
-        search=lambda query, top_k: AdaptiveSearchResult(
+        search=lambda query, top_k, filters=None: AdaptiveSearchResult(
             hits=[{"path": "intro.md", "score": 1.0}],
             route=SearchRoute(
                 strategy="keyword",

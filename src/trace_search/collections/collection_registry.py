@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -62,6 +63,13 @@ class Collection:
     _keyword: KeywordSearch | None = field(default=None, repr=False)
     _hybrid: HybridSearch | None = field(default=None, repr=False)
     _adaptive: AdaptiveSearch | None = field(default=None, repr=False)
+    # Tool calls run on worker threads. The lock keeps two first queries from
+    # both building the index, and keeps searches off the in-memory BM25 state
+    # while a reindex clears and rewrites it. Reentrant because searches reach
+    # ensure_index through the lazy getters.
+    _lock: threading.RLock = field(
+        default_factory=threading.RLock, repr=False, compare=False
+    )
 
     def reset(self) -> None:
         """Clear all cached search components so they are rebuilt on next access."""
@@ -77,34 +85,39 @@ class Collection:
         *,
         skip_build: bool = False,
     ) -> WikiIndexer:
-        if self._indexer is None:
-            model_slug = settings.model_slug
-            self._indexer = WikiIndexer(
-                kb_path=self.kb_path,
-                chroma_path=chroma_dir(self.index_path, model_slug),
-                bm25_path=bm25_dir(self.index_path, model_slug),
-                backend=backend,
-            )
-            if not skip_build:
-                self._indexer.build_index()
-        return self._indexer
+        with self._lock:
+            if self._indexer is None:
+                model_slug = settings.model_slug
+                indexer = WikiIndexer(
+                    kb_path=self.kb_path,
+                    chroma_path=chroma_dir(self.index_path, model_slug),
+                    bm25_path=bm25_dir(self.index_path, model_slug),
+                    backend=backend,
+                )
+                if not skip_build:
+                    indexer.build_index()
+                self._indexer = indexer
+            return self._indexer
 
     def get_semantic(self, backend: EmbeddingBackend | None = None) -> SemanticSearch:
-        if self._semantic is None:
-            indexer = self.ensure_index(backend)
-            self._semantic = SemanticSearch(indexer.collection, indexer.backend)
-        return self._semantic
+        with self._lock:
+            if self._semantic is None:
+                indexer = self.ensure_index(backend)
+                self._semantic = SemanticSearch(indexer.collection, indexer.backend)
+            return self._semantic
 
     def get_keyword(self, backend: EmbeddingBackend | None = None) -> KeywordSearch:
-        if self._keyword is None:
-            self._keyword = KeywordSearch(self.ensure_index(backend))
-        return self._keyword
+        with self._lock:
+            if self._keyword is None:
+                self._keyword = KeywordSearch(self.ensure_index(backend))
+            return self._keyword
 
     def get_hybrid(self, backend: EmbeddingBackend | None = None) -> HybridSearch:
-        if self._hybrid is None:
-            indexer = self.ensure_index(backend)
-            self._hybrid = HybridSearch(indexer, indexer.backend)
-        return self._hybrid
+        with self._lock:
+            if self._hybrid is None:
+                indexer = self.ensure_index(backend)
+                self._hybrid = HybridSearch(indexer, indexer.backend)
+            return self._hybrid
 
     def get_adaptive(
         self,
@@ -112,13 +125,14 @@ class Collection:
         *,
         skip_build: bool = False,
     ) -> AdaptiveSearch:
-        if skip_build:
-            indexer = self.ensure_index(backend, skip_build=True)
-            return AdaptiveSearch(indexer, indexer.backend)
-        if self._adaptive is None:
-            indexer = self.ensure_index(backend)
-            self._adaptive = AdaptiveSearch(indexer, indexer.backend)
-        return self._adaptive
+        with self._lock:
+            if skip_build:
+                indexer = self.ensure_index(backend, skip_build=True)
+                return AdaptiveSearch(indexer, indexer.backend)
+            if self._adaptive is None:
+                indexer = self.ensure_index(backend)
+                self._adaptive = AdaptiveSearch(indexer, indexer.backend)
+            return self._adaptive
 
     def search(
         self,
@@ -129,13 +143,29 @@ class Collection:
         backend: EmbeddingBackend | None = None,
     ) -> list[SearchResult]:
         """Run one non-adaptive search mode for this collection."""
-        if mode == "keyword":
-            return self.get_keyword(backend).search(query, top_k, filters=filters)
-        if mode == "semantic":
-            return self.get_semantic(backend).search(query, top_k, filters=filters)
-        if mode == "hybrid":
-            return self.get_hybrid(backend).search(query, top_k, filters=filters)
+        with self._lock:
+            if mode == "keyword":
+                return self.get_keyword(backend).search(query, top_k, filters=filters)
+            if mode == "semantic":
+                return self.get_semantic(backend).search(query, top_k, filters=filters)
+            if mode == "hybrid":
+                return self.get_hybrid(backend).search(query, top_k, filters=filters)
         raise ValueError(f"Unknown search mode: {mode}")
+
+    def search_adaptive(
+        self,
+        query: str,
+        top_k: int,
+        filters: SearchFilters | None = None,
+        backend: EmbeddingBackend | None = None,
+        *,
+        skip_build: bool = False,
+    ) -> AdaptiveSearchResult:
+        """Run adaptive search for this collection."""
+        with self._lock:
+            return self.get_adaptive(backend, skip_build=skip_build).search(
+                query, top_k, filters=filters
+            )
 
     def get_neighbor_content(
         self,
@@ -156,8 +186,9 @@ class Collection:
         backend: EmbeddingBackend | None = None,
     ) -> list[str | None]:
         """Batch-fetch neighbor content via the collection indexer."""
-        indexer = self.ensure_index(backend)
-        return indexer.neighbor_contents_batch(requests)
+        with self._lock:
+            indexer = self.ensure_index(backend)
+            return indexer.neighbor_contents_batch(requests)
 
     def rebuild(
         self,
@@ -172,10 +203,11 @@ class Collection:
         `force=True` to drop the indexes and rebuild every file from scratch;
         cached search components are cleared so they pick up the new state.
         """
-        if force:
-            self.reset()
-        indexer = self.ensure_index(backend, skip_build=True)
-        return indexer.build_index(force=force)
+        with self._lock:
+            if force:
+                self.reset()
+            indexer = self.ensure_index(backend, skip_build=True)
+            return indexer.build_index(force=force)
 
 
 class CollectionRegistry:
@@ -184,6 +216,7 @@ class CollectionRegistry:
     def __init__(self, collections: dict[str, Path], index_root: Path | None = None):
         self._backend: EmbeddingBackend | None = None
         self._warmed: bool = False
+        self._backend_lock = threading.Lock()
         idx_root = index_root or (settings.index_path if settings.index_path else None)
         self._index_root = idx_root
 
@@ -204,10 +237,12 @@ class CollectionRegistry:
 
     @property
     def backend(self) -> EmbeddingBackend:
-        if self._backend is None:
-            self._backend = build_embedding_backend()
-            self._warm_backend()
-        return self._backend
+        # Concurrent first queries would otherwise each load the model.
+        with self._backend_lock:
+            if self._backend is None:
+                self._backend = build_embedding_backend()
+                self._warm_backend()
+            return self._backend
 
     def _warm_backend(self) -> None:
         """Warm the shared embedding backend exactly once per registry lifecycle."""
@@ -285,16 +320,11 @@ class CollectionRegistry:
         filters = filters or SearchFilters()
         cols = self._resolve(collection)
         if len(cols) == 1:
-            result = (
-                cols[0].get_adaptive(self.backend).search(query, top_k, filters=filters)
-            )
+            result = cols[0].search_adaptive(query, top_k, filters, self.backend)
             hits = [self._with_neighbor_context(cols[0], hit) for hit in result.hits]
             return AdaptiveSearchResult(hits=hits, route=result.route)
 
-        results = [
-            c.get_adaptive(self.backend).search(query, top_k, filters=filters)
-            for c in cols
-        ]
+        results = [c.search_adaptive(query, top_k, filters, self.backend) for c in cols]
         merged_hits = self._merge_results(
             [result.hits for result in results],
             top_k,
@@ -344,18 +374,13 @@ class CollectionRegistry:
             )
         cols = self._resolve(collection)
         if len(cols) == 1:
-            result = (
-                cols[0]
-                .get_adaptive(self.backend, skip_build=True)
-                .search(
-                    query,
-                    top_k,
-                )
+            result = cols[0].search_adaptive(
+                query, top_k, backend=self.backend, skip_build=True
             )
             return result.hits
 
         results = [
-            c.get_adaptive(self.backend, skip_build=True).search(query, top_k)
+            c.search_adaptive(query, top_k, backend=self.backend, skip_build=True)
             for c in cols
         ]
         return self._merge_results(

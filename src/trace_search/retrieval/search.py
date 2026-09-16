@@ -6,6 +6,7 @@ import heapq
 import logging
 import math
 import re
+import threading
 from collections import OrderedDict, defaultdict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -497,6 +498,9 @@ class SemanticSearch:
     _cache_hits: ClassVar[int] = 0
     _cache_misses: ClassVar[int] = 0
     _cache_maxsize: ClassVar[int] = 1000
+    # Searches on different collections share this cache from worker threads;
+    # an eviction between get and move_to_end would raise KeyError.
+    _cache_lock: ClassVar[threading.Lock] = threading.Lock()
 
     def __init__(
         self,
@@ -516,19 +520,20 @@ class SemanticSearch:
     def _get_query_embedding(self, query: str) -> list[float]:
         """Get embedding for query, using LRU cache keyed by (model_slug, query)."""
         cache_key = (self._model_slug, query)
-        cached = self._embedding_cache.get(cache_key)
-        if cached is not None:
-            SemanticSearch._cache_hits += 1
-            self._embedding_cache.move_to_end(cache_key)
-            return list(cached)
+        with self._cache_lock:
+            cached = self._embedding_cache.get(cache_key)
+            if cached is not None:
+                SemanticSearch._cache_hits += 1
+                self._embedding_cache.move_to_end(cache_key)
+                return list(cached)
+            SemanticSearch._cache_misses += 1
 
-        SemanticSearch._cache_misses += 1
         embedding = self.backend.encode_one(query).tolist()
 
-        if len(self._embedding_cache) >= self._cache_maxsize:
-            self._embedding_cache.popitem(last=False)
-
-        self._embedding_cache[cache_key] = embedding
+        with self._cache_lock:
+            if len(self._embedding_cache) >= self._cache_maxsize:
+                self._embedding_cache.popitem(last=False)
+            self._embedding_cache[cache_key] = embedding
         return list(embedding)
 
     @classmethod

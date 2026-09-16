@@ -127,38 +127,40 @@ def run_with_fake(
     code = run_cli(
         argv,
         operations_factory=lambda: fake_operations,
-        serve=lambda: None,
+        serve=lambda *_: None,
     )
     captured = capsys.readouterr()
     return code, captured.out, captured.err
 
 
-def test_bare_trace_starts_server(capsys):
-    served = False
+@pytest.mark.parametrize(
+    ("argv", "expected_serve"),
+    [
+        ([], ("stdio", "127.0.0.1", 7421)),
+        (["serve"], ("stdio", "127.0.0.1", 7421)),
+        (["serve", "--transport", "http"], ("http", "127.0.0.1", 7421)),
+        (
+            ["serve", "--transport", "http", "--host", "::1", "--port", "7431"],
+            ("http", "::1", 7431),
+        ),
+    ],
+)
+def test_serve_starts_server(capsys, argv, expected_serve):
+    served: list[tuple[str, str, int]] = []
 
-    def serve() -> None:
-        nonlocal served
-        served = True
+    def serve(transport: str, host: str, port: int) -> None:
+        served.append((transport, host, port))
 
-    code = run_cli([], operations_factory=FakeOperations, serve=serve)
+    code = run_cli(argv, operations_factory=FakeOperations, serve=serve)
 
     assert code == 0
-    assert served
+    assert served == [expected_serve]
     assert capsys.readouterr().out == ""
 
 
-def test_serve_subcommand_starts_server(capsys):
-    served = False
-
-    def serve() -> None:
-        nonlocal served
-        served = True
-
-    code = run_cli(["serve"], operations_factory=FakeOperations, serve=serve)
-
-    assert code == 0
-    assert served
-    assert capsys.readouterr().out == ""
+def test_serve_rejects_unknown_transport():
+    with pytest.raises(SystemExit):
+        run_cli(["serve", "--transport", "sse"], serve=lambda *_: None)
 
 
 @pytest.mark.parametrize(
@@ -286,7 +288,7 @@ def test_operation_errors_return_nonzero(capsys):
     code = run_cli(
         ["search", "anything"],
         operations_factory=failing_factory,
-        serve=lambda: None,
+        serve=lambda *_: None,
     )
 
     captured = capsys.readouterr()
@@ -298,7 +300,9 @@ def test_doctor_config_errors_keep_doctor_report(capsys):
     def failing_factory() -> FakeOperations:
         raise ValueError("Set KB_COLLECTIONS or KB_PATH")
 
-    code = run_cli(["doctor"], operations_factory=failing_factory, serve=lambda: None)
+    code = run_cli(
+        ["doctor"], operations_factory=failing_factory, serve=lambda *_: None
+    )
 
     captured = capsys.readouterr()
     assert code == 1
@@ -309,6 +313,6 @@ def test_doctor_config_errors_keep_doctor_report(capsys):
 
 def test_invalid_numeric_argument_exits_nonzero():
     with pytest.raises(SystemExit) as exc_info:
-        run_cli(["search", "anything", "--top-k", "0"], serve=lambda: None)
+        run_cli(["search", "anything", "--top-k", "0"], serve=lambda *_: None)
 
     assert exc_info.value.code != 0

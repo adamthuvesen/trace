@@ -88,7 +88,7 @@ With no subcommand, `uv run trace` starts the MCP server.
 | `trace index-stats` | Show index status |
 | `trace doctor "sample query"` | Diagnose config, visible docs, exclusions, indexes |
 | `trace reindex` | Update indexes incrementally; `--force` to rebuild |
-| `trace serve` | Start the MCP server |
+| `trace serve` | Start the MCP server (stdio; `--transport http` for a shared server) |
 
 Search commands take `--top-k` (`keyword-search` uses `--max-results`);
 `list-documents` takes `--folder` and `--limit`. Search commands and
@@ -98,13 +98,25 @@ commands take `--collection`.
 
 ## MCP server
 
-Trace speaks MCP over stdio. Point it at one collection with `KB_PATH` or
-several named ones with `KB_COLLECTIONS`. The server name is `trace`; tools are
-exposed as `mcp__trace__<tool>`.
+Trace speaks MCP over stdio by default. Point it at one collection with
+`KB_PATH` or several named ones with `KB_COLLECTIONS`. The server name is
+`trace`; tools are exposed as `mcp__trace__<tool>`.
 
 Trace pins FastMCP 4.0.0b2 so clients can negotiate MCP `2026-07-28` or an
-older protocol revision. Trace still uses stdio, so the new sessionless HTTP
-deployment rules do not change its local configuration.
+older protocol revision.
+
+To share one long-lived server between many clients instead of spawning one
+process per chat, serve streamable HTTP:
+
+```bash
+KB_COLLECTIONS="docs:/path/to/docs" \
+  uv run trace serve --transport http --host 127.0.0.1 --port 7421
+```
+
+Clients connect to `http://127.0.0.1:7421/mcp`. The server is stateless (no
+session ids to lose across a restart), has no authentication, and rejects
+requests whose `Host` or `Origin` is not local, so keep it on a loopback
+address.
 
 ### Claude Code
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Callable, Sequence
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 from trace_search.collections.diagnostics import (
     invalid_config_report,
@@ -13,8 +13,12 @@ from trace_search.collections.diagnostics import (
 )
 from trace_search.collections.operations import TraceOperations
 
+ServeTransport = Literal["stdio", "http"]
 OperationsFactory = Callable[[], TraceOperations]
-ServeRunner = Callable[[], None]
+ServeRunner = Callable[[ServeTransport, str, int], None]
+
+DEFAULT_HTTP_HOST = "127.0.0.1"
+DEFAULT_HTTP_PORT = 7421
 
 
 def positive_int(value: str) -> int:
@@ -59,9 +63,30 @@ def build_parser() -> argparse.ArgumentParser:
         prog="trace",
         description="Local search for file-backed knowledge bases.",
     )
+    # Bare `trace` has no serve flags; these defaults keep it on stdio.
+    parser.set_defaults(
+        transport="stdio", host=DEFAULT_HTTP_HOST, port=DEFAULT_HTTP_PORT
+    )
     subparsers = parser.add_subparsers(dest="command")
 
-    subparsers.add_parser("serve", help="start the Trace MCP server")
+    serve = subparsers.add_parser("serve", help="start the Trace MCP server")
+    serve.add_argument(
+        "--transport",
+        choices=["stdio", "http"],
+        default="stdio",
+        help="stdio (default) or streamable HTTP served at /mcp",
+    )
+    serve.add_argument(
+        "--host",
+        default=DEFAULT_HTTP_HOST,
+        help=f"HTTP bind address (default: {DEFAULT_HTTP_HOST})",
+    )
+    serve.add_argument(
+        "--port",
+        type=positive_int,
+        default=DEFAULT_HTTP_PORT,
+        help=f"HTTP port (default: {DEFAULT_HTTP_PORT})",
+    )
 
     search = subparsers.add_parser("search", help="adaptive search")
     search.add_argument("query")
@@ -136,7 +161,7 @@ def run_cli(
     if args.command in (None, "serve"):
         if serve is None:
             raise ValueError("serve runner is required")
-        serve()
+        serve(args.transport, args.host, args.port)
         return 0
 
     try:
