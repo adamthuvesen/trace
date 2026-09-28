@@ -22,7 +22,13 @@ from trace_search.indexing.index_metadata import (
 )
 from trace_search.extraction.corpus import iter_kb_files
 from trace_search.indexing.index_paths import bm25_dir, chroma_dir
-from trace_search.indexing.kb_paths import get_default_index_root, should_exclude_path
+from trace_search.indexing.kb_paths import (
+    TRACEIGNORE_FILENAME,
+    get_default_index_root,
+    is_traceignored,
+    load_traceignore,
+    should_exclude_path,
+)
 
 SampleQueryRunner = Callable[[str, str | None], list[dict[str, Any]]]
 
@@ -33,6 +39,7 @@ class CorpusScan:
 
     visible_by_extension: Counter[str] = field(default_factory=Counter)
     excluded_by_reason: Counter[str] = field(default_factory=Counter)
+    traceignore_active: bool = False
 
     @property
     def visible_total(self) -> int:
@@ -106,12 +113,14 @@ def _exclusion_reason(path: Path, kb_path: Path) -> str:
             return "hidden path"
         if part in excluded:
             return f"exclude pattern: {part}"
+    if is_traceignored(path, kb_path):
+        return TRACEIGNORE_FILENAME
     return "excluded"
 
 
 def scan_corpus(kb_path: Path) -> CorpusScan:
     """Scan a collection for visible supported files and excluded paths."""
-    scan = CorpusScan()
+    scan = CorpusScan(traceignore_active=load_traceignore(kb_path) is not None)
     visible_paths = {p for p in iter_kb_files(kb_path)}
     for path in kb_path.rglob("*"):
         if not path.is_file():
@@ -341,6 +350,10 @@ def _append_collection_report(
     lines.append(f"- **Knowledge base:** `{collection.kb_path}`")
     lines.append(f"- **Index root:** `{collection.index_path}`")
     lines.append(f"- **Visible supported docs:** {collection.corpus.visible_total}")
+    if collection.corpus.traceignore_active:
+        lines.append(
+            f"- **Ignore file:** `{TRACEIGNORE_FILENAME}` active at the KB root"
+        )
 
     if collection.corpus.visible_by_extension:
         ext_counts = ", ".join(

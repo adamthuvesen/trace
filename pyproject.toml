@@ -12,6 +12,7 @@ dependencies = [
     "bm25s>=0.2.0",
     "PyStemmer>=2.2.0",
     "pydantic-settings>=2.0.0",
+    "pathspec>=0.12.1",      # .traceignore (gitignore semantics)
     # Document format extractors
     "pymupdf>=1.24.0",       # PDF text extraction
     "python-docx>=1.0.0",    # Word document extraction

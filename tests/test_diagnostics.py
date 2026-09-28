@@ -50,6 +50,20 @@ def test_scan_corpus_counts_visible_and_excluded_paths(tmp_path):
     assert scan.excluded_by_reason["hidden path"] >= 1
 
 
+def test_scan_corpus_reports_active_traceignore(tmp_path):
+    kb = tmp_path / "kb"
+    (kb / "wiki").mkdir(parents=True)
+    (kb / "wiki" / "page.md").write_text("# Page", encoding="utf-8")
+    (kb / "raw.md").write_text("# Raw", encoding="utf-8")
+    (kb / ".traceignore").write_text("/*\n!/wiki/\n", encoding="utf-8")
+
+    scan = scan_corpus(kb)
+
+    assert scan.traceignore_active
+    assert scan.visible_total == 1
+    assert scan.excluded_by_reason[".traceignore"] == 1
+
+
 def test_scan_corpus_excludes_outside_symlink(tmp_path):
     kb = tmp_path / "kb"
     outside = tmp_path / "outside"

@@ -177,6 +177,25 @@ Indexes live under each collection in `.mcp-search/indexes/`. Set `INDEX_PATH`
 to store them elsewhere: single-collection mode writes there directly,
 multi-collection mode uses one subdirectory per collection.
 
+### Per-collection `.traceignore`
+
+Trace always skips dot-prefixed paths and the global `EXCLUDE_PATTERNS`
+directory names. To narrow one collection further, put a `.traceignore` at its
+KB root. It uses gitignore syntax, including `!` negation, matched against the
+KB-relative path, and document paths keep their prefix. This allowlist indexes
+only `wiki/`, minus its log files:
+
+```gitignore
+/*
+!/wiki/
+/wiki/log.md
+/wiki/log/
+```
+
+Edits take effect on the next scan without a restart. The next incremental
+`reindex` removes files that became ignored, and `doctor` notes when the
+file is active and counts what it excluded.
+
 ## Reindexing
 
 `reindex` is incremental: Trace fingerprints each file (SHA-256 + mtime + size)

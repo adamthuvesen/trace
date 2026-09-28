@@ -115,6 +115,27 @@ def test_incremental_rebuild_removes_deleted_files(kb_paths):
     assert _chunk_paths(fresh) == ["keep.md"]
 
 
+def test_incremental_rebuild_removes_newly_traceignored_files(kb_paths):
+    kb, chroma, bm25 = kb_paths
+    (kb / "wiki").mkdir()
+    (kb / "wiki" / "keep.md").write_text("# Keep", encoding="utf-8")
+    (kb / "raw.md").write_text("# Raw", encoding="utf-8")
+
+    indexer = _make_indexer(kb, chroma, bm25)
+    indexer.build_index(force=True)
+    assert _chunk_paths(indexer) == ["raw.md", "wiki/keep.md"]
+
+    (kb / ".traceignore").write_text("/*\n!/wiki/\n", encoding="utf-8")
+
+    fresh = _make_indexer(kb, chroma, bm25)
+    fresh.build_index()
+
+    assert _chunk_paths(fresh) == ["wiki/keep.md"]
+    meta = read_index_metadata(bm25.parent)
+    assert meta is not None
+    assert [record.path for record in meta.source_files] == ["wiki/keep.md"]
+
+
 def test_incremental_rebuild_adds_new_files(kb_paths):
     kb, chroma, bm25 = kb_paths
     (kb / "intro.md").write_text("# Intro", encoding="utf-8")
