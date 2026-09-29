@@ -7,10 +7,10 @@ documents on disk and serves search, document fetch, and diagnostics over a CLI
 or an MCP server. That lets an agent pull the right passages from a knowledge
 base without you pasting the whole thing into context.
 
-The default `search` is adaptive and BM25-first. Trace trusts strong lexical
-matches, but skips them when the keyword evidence is weak and falls back to
-semantic or hybrid search. Retrieval runs entirely locally. Embeddings run
-on-device (ONNX int8 by default); nothing leaves the machine.
+The default `search` is adaptive and BM25-first. When BM25's top document
+clearly leads the runner-up, Trace returns BM25's ranking. When it doesn't, it
+fuses in semantic ranking per document. Retrieval runs entirely locally, and
+embeddings run on-device (ONNX int8). Nothing leaves the machine.
 
 The CLI and MCP server wrap the same Python primitives (`WikiIndexer`,
 `AdaptiveSearch`, `CollectionRegistry`, and result formatters), so you can use
@@ -32,28 +32,32 @@ uv sync
 This command searches the committed fixture in `tests/fixtures/eval_kb`.
 
 ```console
-$ KB_PATH=tests/fixtures/eval_kb TOKENIZERS_PARALLELISM=false uv run trace search "BM25 ranking" --top-k 2
+$ KB_PATH=tests/fixtures/eval_kb uv run trace search "BM25 ranking" --top-k 2
 Found 2 results
 
 ## Strategy
-- **Selected:** keyword
-- **Fallback used:** no
-- **Reason:** BM25 returned strong exact-match results
+- **Selected:** hybrid
+- **Fallback used:** yes
+- **Reason:** BM25 matched only one document
 
 ## Context
 
 ### 1. BM25
 - **Path:** `glossary/bm25.md`
 - **Folder:** glossary
-- **Source:** keyword
+- **Source:** hybrid
 
 **Snippet 1:** BM25
 - **Match evidence:** title matches: bm25; path matches: bm25; breadcrumb matches: bm25
 - **Matched terms:** `bm25`, `ranking`
 - **Best quote:** Document: BM25 Folder: glossary # BM25 BM25 is a classic **keyword** ranking function for lexical retrieval...
 
+### 2. Reranking
+...
+
 ## Suggested Follow-ups
 - `get_document(path="glossary/bm25.md")`
+- `get_document(path="features/reranking.md")`
 ```
 
 ## CLI
@@ -79,10 +83,10 @@ With no subcommand, `uv run trace` starts the MCP server.
 
 | Command | Description |
 | --- | --- |
-| `trace search "query"` | BM25-first search with semantic/hybrid fallback |
+| `trace search "query"` | BM25-first search that fuses in semantic ranking when BM25 has no clear winner |
 | `trace semantic-search "query"` | Vector similarity search |
 | `trace keyword-search "term"` | Direct BM25 keyword search for exact terms |
-| `trace hybrid-search "query"` | Semantic + keyword combined |
+| `trace hybrid-search "query"` | BM25 and semantic ranking fused per document |
 | `trace get-document path/to/doc.md` | Fetch a document by path |
 | `trace list-documents` | List documents, optionally by folder |
 | `trace index-stats` | Show index status |
@@ -137,10 +141,10 @@ The tools map one-to-one onto the CLI:
 
 | Tool | Description |
 | --- | --- |
-| `search` | BM25-first search with semantic/hybrid fallback (default) |
+| `search` | BM25-first search that fuses in semantic ranking when BM25 has no clear winner (default) |
 | `semantic_search` | Vector similarity search |
 | `keyword_search` | Direct BM25 keyword search for exact terms |
-| `search_hybrid` | Semantic + keyword combined |
+| `search_hybrid` | BM25 and semantic ranking fused per document |
 | `get_document` | Fetch a document by path |
 | `list_documents` | List documents, optionally by folder |
 | `index_stats` | Show index status |
@@ -174,6 +178,25 @@ startup, as do invalid paths, collection names, and log levels.
 Indexes live under each collection in `.mcp-search/indexes/`. Set `INDEX_PATH`
 to store them elsewhere: single-collection mode writes there directly,
 multi-collection mode uses one subdirectory per collection.
+
+### Markdown frontmatter
+
+Trace reads YAML frontmatter instead of indexing it as text. `title`,
+`aliases`, and `summary` (or `name` and `description`) go into a short card
+at the top of the first chunk, and every other key stays out of ranking. A
+query that is a page's title or one of its aliases ranks that page first. A
+page with `status: superseded` or `status: deprecated` ranks below its
+replacement, and search output shows its status and `as_of` date.
+
+```yaml
+---
+title: Release runbook
+aliases: [deploy process, shipping checklist]
+summary: How to cut, tag, verify, and roll back a release.
+status: current
+as_of: 2026-08-04
+---
+```
 
 ### Per-collection `.traceignore`
 
@@ -226,32 +249,30 @@ which are then safe to delete.
 
 ## Retrieval quality
 
-Trace includes a small eval harness (`tools/eval/`) for golden-query checks. The committed fixture is a deliberately tricky smoke test: 24 short Markdown docs and 17 queries with near-duplicate concepts, exact-token lookups, and paraphrases.
+Trace includes an eval harness (`tools/eval/`) for golden-query checks. The committed fixture is a small, deliberately tricky smoke test: 24 short Markdown docs and 17 queries with near-duplicate concepts, exact-token lookups, and paraphrases.
 
-| Mode | Top-1 (P@1) | Top-5 (Success@5) | MRR | p50 | p95 |
+| Mode | Top-1 | Top-5 | MRR | p50 | p95 |
 | --- | --- | --- | --- | --- | --- |
-| `bm25` | 88% | 94% | 0.912 | 0.16 ms | 2.6 ms |
-| `semantic` | 88% | 100% | 0.941 | 6.71 ms | 7.1 ms |
-| `hybrid` | 88% | 100% | 0.941 | 7.10 ms | 10.9 ms |
-| `adaptive` | 88% | 100% | 0.941 | 7.20 ms | 10.6 ms |
+| `bm25` | 82% | 88% | 0.853 | 0.13 ms | 0.3 ms |
+| `semantic` | 100% | 100% | 1.000 | 3.23 ms | 3.7 ms |
+| `hybrid` | 88% | 100% | 0.941 | 3.33 ms | 5.3 ms |
+| `adaptive` | 88% | 100% | 0.941 | 3.48 ms | 4.8 ms |
 
-The shared 88% Top-1 hides the real tradeoff. BM25 is fastest and strong on
-exact terms, but misses one paraphrase entirely. Semantic and hybrid recover all
-queries in the top 5. `adaptive` keeps BM25 for strong lexical hits and falls
-back to vector search when keyword evidence is weak, matching the best recall
-while keeping lexical queries cheap.
+The fixture is paraphrase-heavy, so semantic search wins it. On real knowledge
+bases BM25 usually leads: on an 83-case private wiki eval, `adaptive` scores
+0.878 MRR against 0.864 for BM25 alone and 0.823 for semantic. The
+[2026-09-29 benchmark note](docs/benchmarks/2026-09-29-trace-overhaul.md) has
+the full numbers and what each change bought.
 
-These are smoke-test numbers, not corpus-scale benchmark claims. Full reports live in [`docs/benchmarks/`](docs/benchmarks/). Reproduce the committed gate with:
+Reproduce the fixture numbers with:
 
 ```bash
 KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
-  uv run python -m tools.eval.cli --full --search adaptive --output-dir docs/benchmarks/
+  uv run python -m tools.eval.cli --full --search adaptive
 ```
 
-For the multi-KB retrieval battle suite, see
-[`docs/retrieval-modes.md`](docs/retrieval-modes.md). It compares BM25,
-semantic, hybrid, reranked, and adaptive retrieval across committed no-secret
-fixtures and documents when each mode wins.
+For the multi-KB battle suite, see
+[`docs/retrieval-modes.md`](docs/retrieval-modes.md).
 
 ## Development
 

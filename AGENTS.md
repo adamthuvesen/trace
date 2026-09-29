@@ -19,17 +19,24 @@ Use these entry points first:
 - Local inspector: `KB_PATH=/path/to/your/docs uv run fastmcp dev src/trace_search/server/trace_server.py`
 - Package layout (`src/trace_search/`): [`config.py`](src/trace_search/config.py) at
   root; subpackages [`extraction/`](src/trace_search/extraction/) (extractors,
-  chunking, corpus), [`indexing/`](src/trace_search/indexing/) (embeddings,
-  kb_paths, index_paths, index_metadata, wiki_indexer),
-  [`retrieval/`](src/trace_search/retrieval/) (search, bm25_tokenize,
-  query_profile, search_types, hit_builders, formatting, models),
+  frontmatter, chunking, corpus), [`indexing/`](src/trace_search/indexing/)
+  (embeddings, kb_paths, index_paths, index_metadata, index_store,
+  wiki_indexer), [`retrieval/`](src/trace_search/retrieval/) (search,
+  bm25_tokenize, query_profile, search_types, hit_builders, formatting),
   [`collections/`](src/trace_search/collections/) (collection_registry,
   operations, diagnostics), [`server/`](src/trace_search/server/) (trace_server,
   cli, mcp_tools, server_warmup)
 - Keep the public import surface flat via
   [`trace_search/__init__.py`](src/trace_search/__init__.py) re-exports
   (`WikiIndexer`, `AdaptiveSearch`, `CollectionRegistry`, `format_results`, …)
-- Indexes live under the KB root unless `INDEX_PATH` is set
+- Indexes live under the KB root unless `INDEX_PATH` is set. Each build publishes
+  an immutable generation (`gen-*/`) and swaps `CURRENT` atomically; readers
+  hot-reload, and one `flock` writer per index is enforced
+  ([`indexing/index_store.py`](src/trace_search/indexing/index_store.py))
+- Bump `INDEX_METADATA_VERSION` whenever chunk text or chunk metadata changes,
+  or incremental reindex will reuse chunks built the old way
+- Run experiments against a scratch `INDEX_PATH`, never the indexes a running
+  daemon serves
 - `reindex` is incremental by default (skips unchanged files); pass `--force` / `force=true` to rebuild from scratch
 - All search tools and `list_documents` accept `path_prefix`, `extensions`, and `since` filters
 
@@ -41,7 +48,8 @@ Before editing a subsystem, read the matching doc:
 - **Running the eval harness**: [docs/evaluation.md](docs/evaluation.md)
 - **Eval / benchmark results**: [docs/benchmarks/](docs/benchmarks/)
 
-`adaptive` is the production MCP default: BM25-first, with semantic/hybrid fallback.
+`adaptive` is the production MCP default: BM25 alone when its top document scores at
+least 1.3x the runner-up, otherwise BM25 and semantic ranking fused per document.
 See [`retrieval/search.py`](src/trace_search/retrieval/search.py) and
 [`retrieval/bm25_tokenize.py`](src/trace_search/retrieval/bm25_tokenize.py).
 
