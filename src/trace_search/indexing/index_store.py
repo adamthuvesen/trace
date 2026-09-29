@@ -284,10 +284,12 @@ def write_snapshot(index_root: Path, snapshot: IndexSnapshot) -> IndexSnapshot:
         encoding="utf-8",
     )
     # A power loss must not leave CURRENT naming a generation whose files never
-    # reached the disk.
-    for folder, _, files in os.walk(tmp_dir):
+    # reached the disk. Directories are synced bottom-up so every entry
+    # (including bm25/ and its files) is durable before the rename.
+    for folder, _, files in os.walk(tmp_dir, topdown=False):
         for filename in files:
             _fsync(Path(folder) / filename)
+        _fsync(Path(folder))
     tmp_dir.rename(_generation_dir(index_root, name))
     _fsync(index_root)
 
