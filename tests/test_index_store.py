@@ -224,3 +224,19 @@ def test_corrupt_generation_fails_loudly_and_plain_reindex_recovers(kb, tmp_path
     repaired = _indexer(kb, index_root)
     repaired.build_index()
     assert _paths(KeywordSearch(repaired).search("intro")) == ["intro.md"]
+
+
+def test_hybrid_ranks_both_lists_from_one_generation(kb, tmp_path):
+    from trace_search.retrieval.search import HybridSearch
+
+    indexer = _indexer(kb, tmp_path / "idx")
+    indexer.build_index()
+    published = indexer.snapshot()
+    # A reindex lands mid-query: every later snapshot() call sees an empty index.
+    calls = iter([published])
+    indexer.snapshot = lambda: next(calls, IndexSnapshot.empty())  # type: ignore[method-assign]
+
+    hits = HybridSearch(indexer).search("welcome notes", top_k=3)
+
+    # BM25 took part in the fusion only if it ranked the same generation.
+    assert any("bm25_file_score" in hit for hit in hits)

@@ -517,13 +517,15 @@ class SemanticSearch:
         query: str,
         top_k: int = 10,
         filters: SearchFilters | None = None,
+        snapshot: IndexSnapshot | None = None,
     ) -> list[SearchResult]:
         """Search by semantic similarity, optionally scoped by filters."""
         if not query or not query.strip():
             return []
         top_k = _clamp_top_k(top_k)
         filters = filters or SearchFilters()
-        snapshot = self.indexer.snapshot()
+        if snapshot is None:
+            snapshot = self.indexer.snapshot()
         if not len(snapshot):
             return []
 
@@ -570,13 +572,15 @@ class KeywordSearch:
         keyword: str,
         max_results: int = 20,
         filters: SearchFilters | None = None,
+        snapshot: IndexSnapshot | None = None,
     ) -> list[SearchResult]:
         """Search using BM25 for fast keyword matching, optionally filtered."""
         if not keyword or not keyword.strip():
             return []
         max_results = _clamp_top_k(max_results, default=20)
         filters = filters or SearchFilters()
-        snapshot = self.indexer.snapshot()
+        if snapshot is None:
+            snapshot = self.indexer.snapshot()
         if snapshot.bm25 is None or not len(snapshot):
             return []
 
@@ -678,14 +682,17 @@ class HybridSearch:
         filters = filters or SearchFilters()
 
         n_candidates = top_k * 2
+        # Both rankings read one generation, so a reindex published mid-query
+        # cannot fuse chunks from two different index states.
+        snapshot = self.keyword.indexer.snapshot()
 
         # Semantic hits are chunks and several can share a file; fetch deeper
         # so fusion still sees enough distinct documents.
         semantic_results = self.semantic.search(
-            query, top_k=n_candidates * 2, filters=filters
+            query, top_k=n_candidates * 2, filters=filters, snapshot=snapshot
         )
         keyword_results = self.keyword.search(
-            query, max_results=n_candidates, filters=filters
+            query, max_results=n_candidates, filters=filters, snapshot=snapshot
         )
         candidates = _fuse_by_document(
             [
