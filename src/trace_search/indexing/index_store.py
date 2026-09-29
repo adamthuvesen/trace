@@ -117,17 +117,6 @@ def read_current(index_root: Path) -> str | None:
     return name or None
 
 
-def legacy_index_dirs(index_root: Path) -> list[Path]:
-    """Chroma-era index directories (Trace <= 0.3) that nothing reads any more."""
-    if not index_root.is_dir():
-        return []
-    return sorted(
-        path
-        for path in index_root.iterdir()
-        if path.is_dir() and path.name.startswith((".chroma_db_", ".bm25_index_"))
-    )
-
-
 def _tokenize(texts: list[str]) -> Any:
     return bm25s.tokenize(
         texts, stopwords="en", stemmer=english_stemmer(), show_progress=False

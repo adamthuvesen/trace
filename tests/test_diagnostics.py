@@ -109,18 +109,6 @@ def test_diagnose_index_reports_missing_indexes(tmp_path):
     assert "Run `reindex`" in "\n".join(diagnosis.messages)
 
 
-def test_diagnose_index_mentions_legacy_chroma_dirs(tmp_path):
-    kb = tmp_path / "kb"
-    kb.mkdir()
-    index_root = tmp_path / "indexes"
-    (index_root / ".chroma_db_all_minilm_l6_v2").mkdir(parents=True)
-
-    diagnosis = diagnose_index(kb, index_root)
-
-    assert diagnosis.status == "missing"
-    assert ".chroma_db_all_minilm_l6_v2" in "\n".join(diagnosis.messages)
-
-
 def test_diagnose_index_reports_unknown_without_metadata(tmp_path):
     kb = tmp_path / "kb"
     kb.mkdir()

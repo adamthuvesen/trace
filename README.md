@@ -242,10 +242,7 @@ to an existing index; a collection with no index yet is built on first use.
 ```
 
 When given a sample query, `doctor` probes existing indexes only. It tells you
-to `reindex` rather than building as a side effect. If it reports a missing
-index after an upgrade from a Chroma-era Trace, one `reindex` builds the new
-format; `doctor` lists the old `.chroma_db_*` / `.bm25_index_*` directories,
-which are then safe to delete.
+to `reindex` rather than building as a side effect.
 
 ## Retrieval quality
 

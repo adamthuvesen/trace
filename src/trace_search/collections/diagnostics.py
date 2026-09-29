@@ -19,7 +19,6 @@ from trace_search.indexing.index_metadata import (
 )
 from trace_search.extraction.corpus import iter_kb_files
 from trace_search.indexing.index_store import (
-    legacy_index_dirs,
     read_current,
     read_current_metadata,
 )
@@ -134,20 +133,13 @@ def scan_corpus(kb_path: Path) -> CorpusScan:
     return scan
 
 
-def _missing_index_diagnosis(index_path: Path) -> IndexDiagnosis:
-    messages = [
-        "No index generation has been published yet.",
-        "Run `reindex` after confirming the corpus path.",
-    ]
-    legacy = legacy_index_dirs(index_path)
-    if legacy:
-        messages.append(
-            "Chroma-era index directories from an older Trace are unused and "
-            "safe to delete: " + ", ".join(f"`{path.name}`" for path in legacy)
-        )
+def _missing_index_diagnosis() -> IndexDiagnosis:
     return IndexDiagnosis(
         status="missing",
-        messages=messages,
+        messages=[
+            "No index generation has been published yet.",
+            "Run `reindex` after confirming the corpus path.",
+        ],
         last_index_time=None,
         next_reindex="forced",
     )
@@ -208,7 +200,7 @@ def _freshness_diagnosis(kb_path: Path, metadata: IndexMetadata) -> IndexDiagnos
 def diagnose_index(kb_path: Path, index_path: Path) -> IndexDiagnosis:
     """Diagnose index presence, compatibility, freshness, and last build time."""
     if read_current(index_path) is None:
-        return _missing_index_diagnosis(index_path)
+        return _missing_index_diagnosis()
     metadata = read_current_metadata(index_path)
     if metadata is None:
         return _unknown_metadata_diagnosis()

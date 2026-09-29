@@ -38,7 +38,6 @@ from trace_search.indexing.index_store import (
     ChunkMetadata,
     IndexCorruptError,
     IndexSnapshot,
-    legacy_index_dirs,
     load_snapshot,
     read_current,
     write_snapshot,
@@ -256,12 +255,6 @@ class WikiIndexer:
             logger.warning("%s Rebuilding from scratch.", exc)
             return None
         if current.generation is None:
-            legacy = legacy_index_dirs(self.index_root)
-            if legacy:
-                logger.warning(
-                    "Ignoring Chroma-era index directories (safe to delete): %s",
-                    ", ".join(str(path) for path in legacy),
-                )
             return None
         if current.metadata is None:
             logger.info("Index metadata missing or outdated; running a full rebuild")
