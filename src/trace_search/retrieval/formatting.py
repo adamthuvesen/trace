@@ -194,6 +194,11 @@ def _append_document_group(
     if folder:
         lines.append(f"- **Folder:** {folder}")
     lines.append(f"- **Source:** {source}")
+    status = first.get("status")
+    if status and status != "current":
+        lines.append(f"- **Status:** {status}")
+    if first.get("as_of"):
+        lines.append(f"- **As of:** {first['as_of']}")
 
     per_doc_seen: set[str] = set()
     snippets_added = 0

@@ -11,8 +11,8 @@ from typing import Any
 from trace_search.config import settings
 from trace_search.extraction.corpus import iter_kb_files
 
-# v4: generation store (no Chroma); frontmatter-aware chunks.
-INDEX_METADATA_VERSION = 4
+# v4: generation store (no Chroma). v5: frontmatter-aware chunks.
+INDEX_METADATA_VERSION = 5
 
 _HASH_CHUNK_SIZE = 64 * 1024
 

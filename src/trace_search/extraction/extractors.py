@@ -31,8 +31,12 @@ SUPPORTED_EXTENSIONS_ORDERED = (
 SUPPORTED_EXTENSIONS = set(SUPPORTED_EXTENSIONS_ORDERED)
 
 
-def extract_title(content: str, path: Path) -> str:
-    """Extract title from file with fallback strategies."""
+def extract_title(content: str, path: Path, fallback: str = "") -> str:
+    """Extract title from file with fallback strategies.
+
+    ``fallback`` (e.g. a frontmatter title) is used before the file stem when
+    the document has no heading of its own.
+    """
     ext = path.suffix.lower()
 
     # Code files: use filename with extension (e.g., "schema_parser.py")
@@ -44,7 +48,7 @@ def extract_title(content: str, path: Path) -> str:
         match = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
         if match:
             return match.group(1).strip()
-        return path.stem
+        return fallback or path.stem
 
     # Documents: find first substantial line
     if ext in {".pdf", ".docx", ".pptx", ".csv"}:

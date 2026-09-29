@@ -17,6 +17,7 @@ from trace_search.extraction.chunking import (
     extract_breadcrumb,
 )
 from trace_search.extraction.corpus import iter_kb_files
+from trace_search.extraction.frontmatter import Frontmatter, split_frontmatter
 from trace_search.extraction.extractors import (
     SUPPORTED_EXTENSIONS,
     extract_content,
@@ -57,6 +58,27 @@ class LoadedDocument(TypedDict):
     extension: str
     mtime: float
     content: str
+    frontmatter: Frontmatter
+
+
+def _document_card(doc: LoadedDocument) -> tuple[str, str]:
+    """Return (aliases, lead text) for a document's first chunk.
+
+    The lead puts a page's alternate names and summary where both BM25 and the
+    embedding see them, instead of burying them in raw YAML.
+    """
+    meta = doc["frontmatter"]
+    title_key = doc["title"].casefold()
+    names = [
+        name for name in (meta.title, *meta.aliases) if name.casefold() != title_key
+    ]
+    aliases = "; ".join(dict.fromkeys(names))
+    lead = ""
+    if aliases:
+        lead += f"Also known as: {aliases}\n"
+    if meta.summary:
+        lead += f"Summary: {meta.summary}\n"
+    return aliases, lead
 
 
 class WikiIndexer:
@@ -156,14 +178,18 @@ class WikiIndexer:
         if not content.strip():
             return None
 
+        frontmatter, body = (
+            split_frontmatter(content) if ext == ".md" else (Frontmatter(), content)
+        )
         stat = file_path.stat()
         return {
             "path": self._get_relative_path(file_path),
-            "title": extract_title(content, file_path),
+            "title": extract_title(body, file_path, fallback=frontmatter.title),
             "folder": self._get_folder(file_path),
             "extension": ext,
             "mtime": stat.st_mtime,
-            "content": content,
+            "content": body,
+            "frontmatter": frontmatter,
         }
 
     def load_documents(self) -> list[LoadedDocument]:
@@ -198,24 +224,35 @@ class WikiIndexer:
         chunks: list[ChunkMetadata] = []
 
         for doc in docs:
-            pieces = chunk_by_headings(doc["content"])
+            pieces = chunk_by_headings(doc["content"]) if doc["content"].strip() else []
+            aliases, lead = _document_card(doc)
+            if not pieces:
+                pieces = [""]
+            frontmatter = doc["frontmatter"]
             for i, piece in enumerate(pieces):
                 ids.append(chunk_id(doc["path"], i))
                 texts.append(
-                    create_contextual_chunk(doc["title"], doc["folder"], piece)
+                    create_contextual_chunk(
+                        doc["title"], doc["folder"], piece, lead=lead if i == 0 else ""
+                    )
                 )
-                chunks.append(
-                    {
-                        "path": doc["path"],
-                        "title": doc["title"],
-                        "folder": doc["folder"],
-                        "chunk_index": i,
-                        "chunk_count": len(pieces),
-                        "breadcrumb": extract_breadcrumb(piece, doc["title"]),
-                        "extension": doc["extension"],
-                        "source_mtime": float(doc["mtime"]),
-                    }
-                )
+                chunk: ChunkMetadata = {
+                    "path": doc["path"],
+                    "title": doc["title"],
+                    "folder": doc["folder"],
+                    "chunk_index": i,
+                    "chunk_count": len(pieces),
+                    "breadcrumb": extract_breadcrumb(piece, doc["title"]),
+                    "extension": doc["extension"],
+                    "source_mtime": float(doc["mtime"]),
+                }
+                if aliases:
+                    chunk["aliases"] = aliases
+                if frontmatter.status:
+                    chunk["status"] = frontmatter.status
+                if frontmatter.as_of:
+                    chunk["as_of"] = frontmatter.as_of
+                chunks.append(chunk)
 
         return ids, texts, chunks
 

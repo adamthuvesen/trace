@@ -22,6 +22,9 @@ class SearchHit:
     breadcrumb: str | None = None
     extension: str | None = None
     source_mtime: float | None = None
+    aliases: str | None = None
+    status: str | None = None
+    as_of: str | None = None
     rerank_score: float | None = None
     rrf_score: float | None = None
     match_hints: list[str] | None = None
@@ -48,6 +51,12 @@ class SearchHit:
             data["extension"] = self.extension
         if self.source_mtime is not None:
             data["source_mtime"] = self.source_mtime
+        if self.aliases:
+            data["aliases"] = self.aliases
+        if self.status:
+            data["status"] = self.status
+        if self.as_of:
+            data["as_of"] = self.as_of
         if self.rerank_score is not None:
             data["rerank_score"] = self.rerank_score
         if self.rrf_score is not None:

@@ -12,6 +12,7 @@ dependencies = [
     "PyStemmer>=2.2.0",
     "pydantic-settings>=2.0.0",
     "pathspec>=0.12.1",      # .traceignore (gitignore semantics)
+    "PyYAML>=6.0.0",         # Markdown frontmatter
     # Document format extractors
     "pymupdf>=1.24.0",       # PDF text extraction
     "python-docx>=1.0.0",    # Word document extraction
@@ -40,6 +41,7 @@ dev = [
     "PyYAML>=6.0.0",
     "ruff>=0.15.13",
     "mypy>=2.2.0",
+    "types-pyyaml>=6.0.12.20260906",
 ]
 
 [build-system]

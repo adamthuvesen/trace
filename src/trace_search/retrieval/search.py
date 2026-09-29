@@ -75,6 +75,14 @@ _METADATA_BOOST_GAIN = 4.0
 _METADATA_BOOST_CAP = 1.5
 _HUB_DEMOTION = 0.4
 _NAVIGATIONAL_HUB_BASENAMES = frozenset({"index.md", "log.md", "changelog.md"})
+# Pages whose frontmatter says a newer page replaced them stay findable but
+# rank below their replacement, in every mode.
+_REPLACED_STATUSES = frozenset({"superseded", "deprecated"})
+_REPLACED_DEMOTION = 0.7
+# A query "names" a page when every query term is in its title or one alias and
+# covers at least this share of that name's terms.
+_NAME_COVERAGE = 0.6
+_NAME_MATCH_GAIN = 3.0
 _ADAPTIVE_MIN_FALLBACK_SEMANTIC_SCORE = 0.40
 # Vector similarity alone ranks near-duplicates arbitrarily; the lexical boost
 # re-ranks a wider candidate pool so exact title/term anchors can surface.
@@ -245,17 +253,21 @@ def _semantic_lexical_boost(query: str, hit: dict[str, Any]) -> float:
     if not query_terms:
         return 0.0
 
-    title_terms = _rank_terms(str(hit.get("title", "")))
     path_terms = _rank_terms(str(hit.get("path", "")))
     content_terms = _rank_terms(str(hit.get("content", "")))
 
-    boost = 0.0
-    if title_terms == query_terms:
-        boost += 0.20
-    elif query_terms and query_terms.issubset(title_terms):
-        boost += 0.08
-    elif title_terms:
-        boost += 0.04 * (len(query_terms & title_terms) / len(query_terms))
+    # A page's aliases are names just like its title.
+    boost = max(
+        (
+            0.20
+            if name == query_terms
+            else 0.08
+            if query_terms <= name
+            else 0.04 * (len(query_terms & name) / len(query_terms))
+            for name in _page_names(hit)
+        ),
+        default=0.0,
+    )
 
     if path_terms:
         boost += 0.04 * (len(query_terms & path_terms) / len(query_terms))
@@ -278,10 +290,39 @@ def _metadata_overlap(query_terms: set[str], hit: dict[str, Any]) -> float:
         | _rank_terms(str(hit.get("path", "")))
         | _rank_terms(str(hit.get("breadcrumb", "")))
         | _rank_terms(str(hit.get("folder", "")))
+        | _rank_terms(str(hit.get("aliases", "")))
     )
     if not metadata_terms:
         return 0.0
     return len(query_terms & metadata_terms) / len(query_terms)
+
+
+def _page_names(hit: dict[str, Any]) -> list[set[str]]:
+    """Term sets of a page's title and each of its aliases."""
+    names = [str(hit.get("title", "")), *str(hit.get("aliases", "")).split(";")]
+    return [
+        terms for name in names if (terms := _rank_terms(name, remove_stopwords=True))
+    ]
+
+
+def _query_names_page(query_terms: set[str], hit: dict[str, Any]) -> bool:
+    """Whether the query is essentially one of the page's names.
+
+    A navigational query ("internal tools overview", an alias like "hobby
+    builds") should land on the page it names even when longer pages repeat
+    those words more often. Partial overlap is handled by the metadata boost.
+    """
+    if not query_terms:
+        return False
+    return any(
+        query_terms <= name and len(query_terms) / len(name) >= _NAME_COVERAGE
+        for name in _page_names(hit)
+    )
+
+
+def _status_factor(hit: dict[str, Any]) -> float:
+    """Demotion factor for pages marked as replaced by a newer page."""
+    return _REPLACED_DEMOTION if hit.get("status") in _REPLACED_STATUSES else 1.0
 
 
 def _keyword_fetch_size(max_results: int) -> int:
@@ -321,6 +362,7 @@ class _KeywordHitGroup:
     best_hit: dict[str, Any]
     best_score: float
     metadata_overlap: float
+    names_query: bool = False
     chunk_scores: list[float] = field(default_factory=list)
 
     def add_hit(
@@ -353,9 +395,11 @@ class _KeywordHitGroup:
         )
         score = best + support_boost + metadata_boost
 
-        if _is_navigational_hub(str(self.best_hit.get("path", ""))):
+        if self.names_query:
+            score += best * _NAME_MATCH_GAIN
+        elif _is_navigational_hub(str(self.best_hit.get("path", ""))):
             score *= _HUB_DEMOTION
-        return score
+        return score * _status_factor(self.best_hit)
 
     def to_hit(self, file_score: float) -> dict[str, Any]:
         hit = dict(self.best_hit)
@@ -393,6 +437,7 @@ def _aggregate_keyword_hits(
                 best_hit=hit,
                 best_score=score,
                 metadata_overlap=overlap,
+                names_query=_query_names_page(query_terms, hit),
             )
             grouped[path] = group
         group.add_hit(hit, score=score, metadata_overlap=overlap)
@@ -517,7 +562,9 @@ class SemanticSearch:
             if boost:
                 hit["semantic_score"] = hit["score"]
                 hit["lexical_boost"] = boost
-            ranked_hits.append((float(hit.get("score", 0.0)) + boost, hit))
+            ranked_hits.append(
+                ((float(hit.get("score", 0.0)) + boost) * _status_factor(hit), hit)
+            )
         ranked_hits.sort(key=lambda item: item[0], reverse=True)
         return [hit for _, hit in ranked_hits[:top_k]]
 

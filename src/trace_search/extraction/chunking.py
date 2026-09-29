@@ -347,9 +347,13 @@ def chunk_by_paragraphs(
     return chunks
 
 
-def create_contextual_chunk(title: str, folder: str, chunk: str) -> str:
-    """Add document context to chunk (Anthropic's contextual retrieval pattern)."""
-    return f"Document: {title}\nFolder: {folder}\n\n{chunk}"
+def create_contextual_chunk(title: str, folder: str, chunk: str, lead: str = "") -> str:
+    """Add document context to chunk (Anthropic's contextual retrieval pattern).
+
+    ``lead`` carries the document card (aliases, summary) on the first chunk.
+    """
+    body = f"{lead}\n{chunk}" if lead else chunk
+    return f"Document: {title}\nFolder: {folder}\n\n{body}".rstrip()
 
 
 def extract_breadcrumb(chunk: str, title: str) -> str:

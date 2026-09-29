@@ -30,6 +30,9 @@ def hit_from_vector(
             if metadata.get("source_mtime") is not None
             else None
         ),
+        aliases=metadata.get("aliases"),
+        status=metadata.get("status"),
+        as_of=metadata.get("as_of"),
         content=content,
         score=similarity,
         source="semantic",
@@ -59,6 +62,9 @@ def hit_from_bm25(
             if metadata.get("source_mtime") is not None
             else None
         ),
+        aliases=metadata.get("aliases"),
+        status=metadata.get("status"),
+        as_of=metadata.get("as_of"),
         content=content,
         score=score,
         source="keyword",

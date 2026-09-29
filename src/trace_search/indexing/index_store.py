@@ -61,6 +61,7 @@ class ChunkMetadata(TypedDict):
     breadcrumb: str
     extension: str
     source_mtime: float
+    aliases: NotRequired[str]
     status: NotRequired[str]
     as_of: NotRequired[str]
 

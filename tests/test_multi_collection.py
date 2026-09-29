@@ -562,7 +562,9 @@ class TestCrossCollectionFairness:
 
         # Small collection: 3 docs; one is the genuinely relevant answer.
         (small / "kubernetes-deployment-guide.md").write_text(
-            "# Kubernetes deployment guide\n\nHow we run a kubernetes "
+            # Not titled with the query: a page the query names would get the
+            # named-page boost and no longer be outscored by the large corpus.
+            "# Shipping runbook\n\nHow we run a kubernetes "
             "deployment: build the image, apply the manifest, verify the "
             "rollout status.",
             encoding="utf-8",
