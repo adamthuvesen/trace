@@ -53,7 +53,6 @@ class IndexMetadata:
     embedding_model: str
     model_slug: str
     embedding_dims: int
-    embedding_backend: str
     document_count: int
     chunk_count: int
     source_files: list[SourceFileRecord]
@@ -143,7 +142,6 @@ def build_index_metadata(
         embedding_model=settings.embedding_model,
         model_slug=settings.model_slug,
         embedding_dims=settings.embedding_dims,
-        embedding_backend=settings.embedding_backend,
         document_count=document_count,
         chunk_count=chunk_count,
         source_files=source_files,
@@ -168,7 +166,6 @@ def index_metadata_from_dict(raw: dict[str, Any]) -> IndexMetadata | None:
             embedding_model=str(raw.get("embedding_model", "")),
             model_slug=str(raw.get("model_slug", "")),
             embedding_dims=int(raw.get("embedding_dims", 0)),
-            embedding_backend=str(raw.get("embedding_backend", "")),
             document_count=int(raw.get("document_count", 0)),
             chunk_count=int(raw.get("chunk_count", 0)),
             source_files=[
@@ -198,7 +195,6 @@ def metadata_matches_active_model(metadata: IndexMetadata) -> bool:
         metadata.embedding_model == settings.embedding_model
         and metadata.model_slug == settings.model_slug
         and metadata.embedding_dims == settings.embedding_dims
-        and metadata.embedding_backend == settings.embedding_backend
     )
 
 

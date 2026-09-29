@@ -46,7 +46,5 @@ def render_index_stats(
 
 ## Shared
 - **Embedding model:** {settings.embedding_model} (dims={settings.embedding_dims})
-- **Embedding backend:** {settings.embedding_backend}
-- **Reranker:** {settings.reranker_model} (enabled={settings.reranker_enabled})
 - **Cache:** {cache_stats["cache_size"]}/{cache_stats["cache_maxsize"]} (hit rate: {cache_stats["cache_hit_rate"]})
 """

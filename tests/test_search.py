@@ -34,9 +34,7 @@ class TestKeywordishQuery:
     def test_natural_question_is_not_keywordish(self):
         assert not is_keywordish_query("how does the growth model relate to funnels")
 
-    def test_lazy_reranker_type_hints_resolve_at_runtime(self):
-        assert "_reranker" in get_type_hints(HybridSearch)
-        assert "return" in get_type_hints(HybridSearch._get_reranker)
+    def test_route_type_hints_resolve_at_runtime(self):
         assert "filters" in get_type_hints(SearchRoute)
 
 

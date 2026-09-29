@@ -58,7 +58,7 @@ def _score_for_sort(hit: dict[str, Any]) -> float:
     # per-collection scores are not comparable across collections.
     score = hit.get(
         "fused_score",
-        hit.get("rerank_score", hit.get("rrf_score", hit.get("score", 0))),
+        hit.get("rrf_score", hit.get("score", 0)),
     )
     return float(score or 0)
 
@@ -298,11 +298,7 @@ def format_results(hits: list[dict[str, Any]], include_content: bool = True) -> 
             lines.append(f"**Similarity:** {score_str}")
         elif source == "hybrid":
             rrf = hit.get("rrf_score", 0)
-            rerank = hit.get("rerank_score")
-            if rerank is not None:
-                lines.append(f"**Rerank Score:** {rerank:.3f} (RRF: {rrf:.4f})")
-            else:
-                lines.append(f"**RRF Score:** {rrf:.4f}")
+            lines.append(f"**RRF Score:** {rrf:.4f}")
 
         if include_content:
             content = _trim_at_boundary(hit.get("content", ""), 500)

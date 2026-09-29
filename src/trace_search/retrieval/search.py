@@ -8,10 +8,10 @@ import math
 import re
 import threading
 from collections import OrderedDict, defaultdict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
 from numpy.typing import NDArray
@@ -454,12 +454,6 @@ def _aggregate_keyword_hits(
     return [hit for _, _, hit in ranked[:max_results]]
 
 
-class Reranker(Protocol):
-    """The small part of the cross-encoder API used by hybrid search."""
-
-    def predict(self, pairs: list[tuple[str, str]]) -> Sequence[float]: ...
-
-
 class SemanticSearch:
     """Exact cosine search over the snapshot's normalized embedding matrix."""
 
@@ -652,41 +646,26 @@ def _fuse_by_document(
 
 
 class HybridSearch:
-    """Combined semantic + keyword search with RRF ranking and optional reranking."""
-
-    # Lazy-loaded reranker (shared across instances)
-    _reranker: ClassVar[Reranker | None] = None
+    """Semantic + keyword search fused by reciprocal rank per document."""
 
     def __init__(self, indexer: WikiIndexer):
         """Initialize hybrid search over an indexer's current snapshot."""
         self.semantic = SemanticSearch(indexer)
         self.keyword = KeywordSearch(indexer)
 
-    @classmethod
-    def _get_reranker(cls) -> Reranker | None:
-        if not settings.reranker_enabled:
-            return None
-        if cls._reranker is None:
-            from sentence_transformers import CrossEncoder
-
-            cls._reranker = CrossEncoder(settings.reranker_model)
-        return cls._reranker
-
     def search(
         self,
         query: str,
         top_k: int = 10,
         semantic_weight: float = 0.5,
-        rerank: bool | None = None,
         filters: SearchFilters | None = None,
     ) -> list[SearchResult]:
-        """Hybrid search using RRF with optional cross-encoder reranking.
+        """Hybrid search: BM25 files and semantic chunks fused per document.
 
         Args:
             query: Search query
             top_k: Number of results to return
             semantic_weight: Weight of the semantic ranking in the fusion (0-1).
-            rerank: Override reranking setting (None uses RERANKER_ENABLED env var)
             filters: Optional filters; applied within both underlying searches.
         """
         if not query or not query.strip():
@@ -694,11 +673,7 @@ class HybridSearch:
         top_k = _clamp_top_k(top_k)
         filters = filters or SearchFilters()
 
-        use_rerank = rerank if rerank is not None else settings.reranker_enabled
-
-        # Reranking benefits from a wider candidate pool.
-        candidate_multiplier = 3 if use_rerank else 2
-        n_candidates = top_k * candidate_multiplier
+        n_candidates = top_k * 2
 
         # Semantic hits are chunks and several can share a file; fetch deeper
         # so fusion still sees enough distinct documents.
@@ -715,16 +690,6 @@ class HybridSearch:
             ],
             n_candidates,
         )
-
-        if use_rerank and candidates:
-            reranker = self._get_reranker()
-            if reranker is not None:
-                pairs = [(query, c["content"]) for c in candidates]
-                scores = reranker.predict(pairs)
-
-                for i, c in enumerate(candidates):
-                    c["rerank_score"] = float(scores[i])
-                candidates.sort(key=lambda x: x["rerank_score"], reverse=True)
 
         return candidates[:top_k]
 
@@ -767,7 +732,7 @@ def add_match_hints(query: str, hits: list[dict[str, Any]]) -> list[dict[str, An
         item = hit.copy()
         hints = _lexical_match_hints(query, item)
         if not hints and item.get("source") in {"semantic", "hybrid"}:
-            score = item.get("rerank_score", item.get("rrf_score", item.get("score")))
+            score = item.get("rrf_score", item.get("score"))
             if isinstance(score, float):
                 hints.append(f"{item.get('source')} retrieval score: {score:.3f}")
             else:

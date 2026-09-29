@@ -198,7 +198,7 @@ def test_outdated_metadata_promotes_to_full_rebuild(kb_paths):
     assert meta.version == INDEX_METADATA_VERSION
 
 
-def test_embedding_backend_mismatch_promotes_to_full_rebuild(kb_paths):
+def test_embedding_model_mismatch_promotes_to_full_rebuild(kb_paths):
     kb, index_root = kb_paths
     (kb / "intro.md").write_text("# Intro", encoding="utf-8")
 
@@ -207,8 +207,7 @@ def test_embedding_backend_mismatch_promotes_to_full_rebuild(kb_paths):
 
     metadata_file = _current_metadata_file(index_root)
     raw = json.loads(metadata_file.read_text(encoding="utf-8"))
-    stale_backend = "torch" if settings.embedding_backend != "torch" else "onnx"
-    raw["embedding_backend"] = stale_backend
+    raw["embedding_model"] = "some-other-model"
     metadata_file.write_text(json.dumps(raw), encoding="utf-8")
 
     fresh = _make_indexer(kb, index_root)
@@ -216,7 +215,7 @@ def test_embedding_backend_mismatch_promotes_to_full_rebuild(kb_paths):
 
     meta = read_current_metadata(index_root)
     assert meta is not None
-    assert meta.embedding_backend != stale_backend
+    assert meta.embedding_model == settings.embedding_model
 
 
 def test_chunk_ids_are_stable_for_unchanged_files(kb_paths):

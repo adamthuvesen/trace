@@ -25,7 +25,6 @@ class SearchHit:
     aliases: str | None = None
     status: str | None = None
     as_of: str | None = None
-    rerank_score: float | None = None
     rrf_score: float | None = None
     match_hints: list[str] | None = None
     collection: str | None = None
@@ -57,8 +56,6 @@ class SearchHit:
             data["status"] = self.status
         if self.as_of:
             data["as_of"] = self.as_of
-        if self.rerank_score is not None:
-            data["rerank_score"] = self.rerank_score
         if self.rrf_score is not None:
             data["rrf_score"] = self.rrf_score
         if self.match_hints is not None:

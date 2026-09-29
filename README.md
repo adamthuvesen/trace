@@ -167,8 +167,6 @@ mode for debugging or deterministic comparison.
 | `INDEX_PATH` | Root path for indexes (`~` expanded) | unset |
 | `LOG_LEVEL` | `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`/`NOTSET` | `INFO` |
 | `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` or `BAAI/bge-base-en-v1.5` | `all-MiniLM-L6-v2` |
-| `EMBEDDING_BACKEND` | `onnx` (int8, faster) or `torch` | `onnx` |
-| `RERANKER_ENABLED` | Enable reranking | `false` |
 
 `KB_PATH` and `KB_COLLECTIONS` are mutually exclusive. Setting both fails at
 startup, as do invalid paths, collection names, and log levels.
