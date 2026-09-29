@@ -29,7 +29,10 @@ def test_adaptive_search_keeps_strong_keyword_results():
     adaptive = AdaptiveSearch.__new__(AdaptiveSearch)
     adaptive.keyword = MagicMock()
     adaptive.hybrid = MagicMock()
-    adaptive.keyword.search.return_value = [_hit(score=3.0)]
+    adaptive.keyword.search.return_value = [
+        _hit(score=3.0),
+        _hit(path="other.md", score=1.0),
+    ]
 
     result = adaptive.search("BM25", top_k=3)
 

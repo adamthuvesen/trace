@@ -803,7 +803,10 @@ class AdaptiveSearch:
         if not hits:
             return False, "BM25 returned no positive-score results"
         if len(hits) == 1:
-            return True, "BM25 found a single matching document"
+            # One lexical match is as likely a coincidence (a paraphrase that
+            # shares one word with some page) as a precise hit; fusion keeps it
+            # on top when semantic ranking agrees.
+            return False, "BM25 matched only one document"
         best = float(hits[0].get("score", 0) or 0)
         runner_up = float(hits[1].get("score", 0) or 0)
         margin = best / runner_up if runner_up > 0 else float("inf")

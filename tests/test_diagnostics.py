@@ -225,9 +225,7 @@ def test_diagnose_index_forces_reindex_when_model_mismatch_has_source_changes(
     )
     metadata_file = _publish_metadata(index_root, metadata)
     raw = json.loads(metadata_file.read_text(encoding="utf-8"))
-    raw["embedding_backend"] = (
-        "torch" if settings.embedding_backend != "torch" else "onnx"
-    )
+    raw["embedding_model"] = "some-other-model"
     metadata_file.write_text(json.dumps(raw), encoding="utf-8")
     doc.write_text("# Intro\n\nchanged", encoding="utf-8")
 
@@ -352,9 +350,7 @@ def test_registry_probe_skips_incompatible_indexes(tmp_path):
     mismatched = metadata.__class__(
         **{
             **metadata.to_dict(),
-            "embedding_backend": (
-                "torch" if settings.embedding_backend != "torch" else "onnx"
-            ),
+            "embedding_model": "some-other-model",
         }
     )
     _publish_metadata(col.index_path, mismatched)
@@ -383,5 +379,5 @@ def test_registry_probe_uses_existing_indexes_without_rebuild(tmp_path):
 
     hits = registry.probe_search("intro widget", 5, "docs")
 
-    assert [hit["path"] for hit in hits] == ["intro.md"]
+    assert hits[0]["path"] == "intro.md"
     assert read_current(col.index_path) == generation
