@@ -64,10 +64,20 @@ _FASTEMBED_MODEL_MAP: dict[str, str] = {
 }
 
 
+# ONNX Runtime keeps the arena it grows for the largest batch, so a big batch
+# during a full rebuild pins memory in a long-lived server: embedding a 3,200-chunk wiki
+# peaked at 2.4 GB with fastembed's default of 256 and 0.4 GB with 16, at the
+# same speed.
+_EMBED_BATCH_SIZE = 16
+
+
 class OnnxBackend:
     """Backend wrapping `fastembed.TextEmbedding` (pre-quantized ONNX int8)."""
 
     def __init__(self, model_name: str):
+        # The HF tokenizer warns and disables itself when the process forks
+        # after first use; say up front that it runs single-threaded.
+        os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
         from fastembed import TextEmbedding
 
         if model_name not in _FASTEMBED_MODEL_MAP:
@@ -86,7 +96,7 @@ class OnnxBackend:
     def encode(self, texts: list[str]) -> EmbeddingArray:
         if not texts:
             return np.empty((0, self.dim), dtype=np.float32)
-        vectors = list(self._model.embed(list(texts)))
+        vectors = list(self._model.embed(list(texts), batch_size=_EMBED_BATCH_SIZE))
         return np.asarray(np.stack(vectors), dtype=np.float32)
 
     def encode_one(self, text: str) -> EmbeddingArray:
