@@ -7,7 +7,6 @@ from trace_search.server.cli import (
     run_cli,
 )
 from trace_search.config import configure_logging, get_settings
-from trace_search.server.mcp_tools import build_multi_mcp
 
 
 def run_server(
@@ -16,6 +15,9 @@ def run_server(
     port: int = DEFAULT_HTTP_PORT,
 ) -> None:
     """Run the Trace MCP server over stdio or streamable HTTP."""
+    # FastMCP costs ~0.4 s to import; CLI subcommands never need it.
+    from trace_search.server.mcp_tools import build_multi_mcp
+
     configure_logging()
     mcp, _ = build_multi_mcp("trace", get_settings().parsed_collections)
     if transport == "stdio":
