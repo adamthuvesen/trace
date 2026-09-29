@@ -140,8 +140,15 @@ def test_force_rebuild_after_all_docs_removed_publishes_empty_index(tmp_path):
     assert KeywordSearch(indexer).search("widget") == []
 
 
-def test_load_documents_is_deterministic(tmp_path, monkeypatch):
-    """load_documents should return documents in stable path order."""
+def _indexed_docs(indexer: WikiIndexer) -> list[dict[str, str]]:
+    """Build the index and return its documents in index order."""
+    indexer.build_index()
+    paths = dict.fromkeys(chunk["path"] for chunk in indexer.snapshot().chunks)
+    return [{"path": path} for path in paths]
+
+
+def test_indexed_documents_are_deterministic(tmp_path, monkeypatch):
+    """The index lists documents in stable path order."""
     from trace_search.config import get_settings
 
     (tmp_path / "b").mkdir()
@@ -155,7 +162,7 @@ def test_load_documents_is_deterministic(tmp_path, monkeypatch):
 
     try:
         indexer = WikiIndexer(backend=FakeBackend())
-        docs = indexer.load_documents()
+        docs = _indexed_docs(indexer)
     finally:
         get_settings.cache_clear()
 
@@ -163,7 +170,7 @@ def test_load_documents_is_deterministic(tmp_path, monkeypatch):
     assert paths == sorted(paths)
 
 
-def test_load_documents_allows_hidden_parent_dirs(tmp_path, monkeypatch):
+def test_indexing_allows_hidden_parent_dirs(tmp_path, monkeypatch):
     """Hidden ancestors outside the KB root should not exclude valid documents."""
     from trace_search.config import get_settings
 
@@ -176,15 +183,15 @@ def test_load_documents_allows_hidden_parent_dirs(tmp_path, monkeypatch):
 
     try:
         indexer = WikiIndexer(backend=FakeBackend())
-        docs = indexer.load_documents()
+        docs = _indexed_docs(indexer)
     finally:
         get_settings.cache_clear()
 
     assert [doc["path"] for doc in docs] == ["intro.md"]
 
 
-def test_load_documents_single_rglob_walk(tmp_path, monkeypatch):
-    """load_documents should traverse the KB with exactly one rglob('*') call."""
+def test_indexing_walks_the_kb_once(tmp_path, monkeypatch):
+    """A build should traverse the KB with exactly one rglob('*') call."""
     from unittest.mock import patch
     from trace_search.config import get_settings
 
@@ -205,7 +212,7 @@ def test_load_documents_single_rglob_walk(tmp_path, monkeypatch):
     try:
         indexer = WikiIndexer(backend=FakeBackend())
         with patch.object(Path, "rglob", spy_rglob):
-            docs = indexer.load_documents()
+            docs = _indexed_docs(indexer)
     finally:
         get_settings.cache_clear()
 
@@ -257,7 +264,7 @@ class TestExcludePatternMatching:
 
         assert should_exclude_path(link, kb)
 
-    def test_load_documents_skips_outside_symlink_but_keeps_inside_symlink(
+    def test_indexing_skips_outside_symlink_but_keeps_inside_symlink(
         self, tmp_path, monkeypatch
     ):
         from trace_search.config import get_settings
@@ -275,7 +282,7 @@ class TestExcludePatternMatching:
         get_settings.cache_clear()
         try:
             indexer = WikiIndexer(backend=FakeBackend())
-            docs = indexer.load_documents()
+            docs = _indexed_docs(indexer)
         finally:
             get_settings.cache_clear()
 

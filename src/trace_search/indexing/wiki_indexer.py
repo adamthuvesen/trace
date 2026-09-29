@@ -16,7 +16,6 @@ from trace_search.extraction.chunking import (
     create_contextual_chunk,
     extract_breadcrumb,
 )
-from trace_search.extraction.corpus import iter_kb_files
 from trace_search.extraction.frontmatter import Frontmatter, split_frontmatter
 from trace_search.extraction.extractors import (
     SUPPORTED_EXTENSIONS,
@@ -191,16 +190,6 @@ class WikiIndexer:
             "content": body,
             "frontmatter": frontmatter,
         }
-
-    def load_documents(self) -> list[LoadedDocument]:
-        """Load all supported files from knowledge base."""
-        docs: list[LoadedDocument] = []
-        for file_path in iter_kb_files(self.kb_path):
-            doc = self._load_single_document(file_path)
-            if doc is not None:
-                docs.append(doc)
-        docs.sort(key=lambda d: d["path"])
-        return docs
 
     def _load_documents_subset(self, relative_paths: list[str]) -> list[LoadedDocument]:
         """Load only the listed relative paths into doc dicts."""

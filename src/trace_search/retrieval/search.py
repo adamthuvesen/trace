@@ -8,7 +8,6 @@ import math
 import re
 import threading
 from collections import OrderedDict, defaultdict
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
 from datetime import UTC, datetime
@@ -20,13 +19,9 @@ from numpy.typing import NDArray
 from trace_search.retrieval.bm25_tokenize import tokenize_keywords
 from trace_search.config import settings
 from trace_search.indexing.index_store import ChunkMetadata, IndexSnapshot
-from trace_search.retrieval.hit_builders import (
-    hit_from_bm25,
-    hit_from_vector,
-    hits_to_dicts,
-)
-from trace_search.retrieval.models import SearchHit
+from trace_search.retrieval.hit_builders import chunk_hit
 from trace_search.retrieval.formatting import (  # noqa: F401 - package re-exports
+    _query_terms,
     format_results,
     format_search_context,
 )
@@ -537,17 +532,15 @@ class SemanticSearch:
         rows = np.argpartition(-scores, pool - 1)[:pool]
         rows = rows[np.argsort(-scores[rows], kind="stable")]
 
-        hits = hits_to_dicts(
-            [
-                hit_from_vector(
-                    snapshot.chunk_ids[row],
-                    snapshot.chunks[row],
-                    snapshot.texts[row],
-                    float(scores[row]),
-                )
-                for row in rows
-            ]
-        )
+        hits = [
+            chunk_hit(
+                snapshot.chunks[row],
+                snapshot.texts[row],
+                float(scores[row]),
+                "semantic",
+            )
+            for row in rows
+        ]
         ranked_hits: list[tuple[float, dict[str, Any]]] = []
         for hit in hits:
             boost = _semantic_lexical_boost(query, hit)
@@ -597,7 +590,7 @@ class KeywordSearch:
             weight_mask=mask.astype(np.float32) if mask is not None else None,
         )
 
-        built: list[SearchHit] = []
+        hits: list[SearchResult] = []
         for i, result in enumerate(results[0]):
             score = float(scores[0][i])
             if score <= 0:
@@ -605,13 +598,13 @@ class KeywordSearch:
             row = int(result)
             if row < 0 or row >= len(snapshot):
                 continue
-            built.append(
-                hit_from_bm25(snapshot.chunks[row], snapshot.texts[row], score)
+            hits.append(
+                chunk_hit(snapshot.chunks[row], snapshot.texts[row], score, "keyword")
             )
 
         return _aggregate_keyword_hits(
             keyword,
-            hits_to_dicts(built),
+            hits,
             max_results,
             corpus_size=len(snapshot),
             require_anchor_for_weak_hits=filters.is_empty,
@@ -696,16 +689,6 @@ class HybridSearch:
         )
 
         return candidates[:top_k]
-
-
-NeighborLookup = Callable[[str, int, int], list[dict[str, Any]]]
-
-
-def _query_terms(query: str) -> list[str]:
-    """Extract meaningful lowercase terms for hints and snippets."""
-    return [
-        term for term in re.findall(r"[A-Za-z0-9_/-]+", query.lower()) if len(term) > 1
-    ]
 
 
 def _lexical_match_hints(query: str, hit: dict[str, Any]) -> list[str]:
