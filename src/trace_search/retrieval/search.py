@@ -10,6 +10,7 @@ import threading
 from collections import OrderedDict, defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from functools import lru_cache
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -227,7 +228,10 @@ def _normalize_rank_term(term: str) -> str:
     return term[:-1] if len(term) > 3 and term.endswith("s") else term
 
 
-def _rank_terms(text: str, *, remove_stopwords: bool = False) -> set[str]:
+# Titles, paths, breadcrumbs, and chunk texts repeat across queries and across
+# the hundreds of chunk hits one query scores; tokenizing them once matters.
+@lru_cache(maxsize=65536)
+def _rank_terms(text: str, *, remove_stopwords: bool = False) -> frozenset[str]:
     terms: set[str] = set()
     for term in re.findall(r"[A-Za-z0-9_/-]+", text):
         if len(term) <= 1:
@@ -238,7 +242,7 @@ def _rank_terms(text: str, *, remove_stopwords: bool = False) -> set[str]:
                 terms.add(_normalize_rank_term(part))
     if remove_stopwords:
         terms -= LEXICAL_STOPWORDS
-    return terms
+    return frozenset(terms)
 
 
 def _semantic_lexical_boost(query: str, hit: dict[str, Any]) -> float:
@@ -276,7 +280,7 @@ def _semantic_lexical_boost(query: str, hit: dict[str, Any]) -> float:
     return min(boost, 0.30)
 
 
-def _metadata_overlap(query_terms: set[str], hit: dict[str, Any]) -> float:
+def _metadata_overlap(query_terms: frozenset[str], hit: dict[str, Any]) -> float:
     if not query_terms:
         return 0.0
     metadata_terms = (
@@ -291,7 +295,7 @@ def _metadata_overlap(query_terms: set[str], hit: dict[str, Any]) -> float:
     return len(query_terms & metadata_terms) / len(query_terms)
 
 
-def _page_names(hit: dict[str, Any]) -> list[set[str]]:
+def _page_names(hit: dict[str, Any]) -> list[frozenset[str]]:
     """Term sets of a page's title and each of its aliases."""
     names = [str(hit.get("title", "")), *str(hit.get("aliases", "")).split(";")]
     return [
@@ -299,7 +303,7 @@ def _page_names(hit: dict[str, Any]) -> list[set[str]]:
     ]
 
 
-def _query_names_page(query_terms: set[str], hit: dict[str, Any]) -> bool:
+def _query_names_page(query_terms: frozenset[str], hit: dict[str, Any]) -> bool:
     """Whether the query is essentially one of the page's names.
 
     A navigational query ("internal tools overview", an alias like "hobby

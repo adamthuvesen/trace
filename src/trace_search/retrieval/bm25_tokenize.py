@@ -22,4 +22,5 @@ def tokenize_keywords(text: str) -> object:
         [text],
         stopwords="en",
         stemmer=english_stemmer(),
+        show_progress=False,
     )
