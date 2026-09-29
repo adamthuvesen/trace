@@ -616,6 +616,9 @@ class KeywordSearch:
 
 
 _RRF_K = 60
+# BM25 leads the fusion. 0.4 beat 0.5 on a private wiki (adaptive MRR +0.013) and
+# a team KB (hybrid +0.028) and tied on the paraphrase-heavy smoke fixture.
+_SEMANTIC_FUSION_WEIGHT = 0.4
 
 
 def _fuse_by_document(
@@ -658,7 +661,7 @@ class HybridSearch:
         self,
         query: str,
         top_k: int = 10,
-        semantic_weight: float = 0.5,
+        semantic_weight: float = _SEMANTIC_FUSION_WEIGHT,
         filters: SearchFilters | None = None,
     ) -> list[SearchResult]:
         """Hybrid search: BM25 files and semantic chunks fused per document.
