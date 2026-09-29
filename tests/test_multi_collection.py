@@ -196,26 +196,6 @@ class TestCollectionRegistry:
         assert len(reg._resolve("all")) == 2
 
 
-class TestCollectionReset:
-    def test_reset_clears_all_slots(self, tmp_path):
-        from unittest.mock import MagicMock
-
-        from trace_search.collections.collection_registry import Collection
-
-        col = Collection(name="x", kb_path=tmp_path, index_path=tmp_path)
-        col._indexer = MagicMock()
-        col._semantic = MagicMock()
-        col._keyword = MagicMock()
-        col._hybrid = MagicMock()
-
-        col.reset()
-
-        assert col._indexer is None
-        assert col._semantic is None
-        assert col._keyword is None
-        assert col._hybrid is None
-
-
 class TestListDocumentsLimit:
     def test_limit_respected_single_folder(self, tmp_path):
         from trace_search.collections.collection_registry import CollectionRegistry
@@ -371,7 +351,7 @@ class TestMultiCollectionFilters:
         registry._backend = FakeBackend()
         registry._warmed = True
         for col in registry.collections.values():
-            col.ensure_index(registry.backend)
+            col.indexer(registry.shared_backend)
         return registry
 
     def test_adaptive_search_path_prefix_scopes_each_collection(self, tmp_path):
@@ -600,7 +580,7 @@ class TestCrossCollectionFairness:
         registry._backend = FakeBackend()
         registry._warmed = True
         for col in registry.collections.values():
-            col.ensure_index(registry.backend)
+            col.indexer(registry.shared_backend)
         return registry
 
     def test_small_collection_hit_survives_merge(self, tmp_path):
@@ -610,10 +590,10 @@ class TestCrossCollectionFairness:
         filters = SearchFilters()
 
         large_hits = registry.collections["large"].search(
-            "keyword", self.QUERY, 5, filters, registry.backend
+            "keyword", self.QUERY, 5, filters, registry.shared_backend
         )
         small_hits = registry.collections["small"].search(
-            "keyword", self.QUERY, 5, filters, registry.backend
+            "keyword", self.QUERY, 5, filters, registry.shared_backend
         )
         assert small_hits and small_hits[0]["path"] == "kubernetes-deployment-guide.md"
 

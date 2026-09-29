@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import time
 from collections import Counter
 from collections.abc import Callable
@@ -17,11 +16,13 @@ from trace_search.indexing.index_metadata import (
     SourceChangeSet,
     categorize_source_changes,
     metadata_matches_active_model,
-    metadata_path,
-    read_index_metadata,
 )
 from trace_search.extraction.corpus import iter_kb_files
-from trace_search.indexing.index_paths import bm25_dir, chroma_dir
+from trace_search.indexing.index_store import (
+    legacy_index_dirs,
+    read_current,
+    read_current_metadata,
+)
 from trace_search.indexing.kb_paths import (
     TRACEIGNORE_FILENAME,
     get_default_index_root,
@@ -133,63 +134,34 @@ def scan_corpus(kb_path: Path) -> CorpusScan:
     return scan
 
 
-def _read_metadata_version(index_path: Path) -> int | None:
-    """Best-effort raw read of the persisted metadata schema version."""
-    path = metadata_path(index_path)
-    if not path.exists():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        return int(raw.get("version", 0))
-    except (OSError, ValueError, TypeError, json.JSONDecodeError):
-        return None
-
-
-def _missing_index_diagnosis(
-    index_path: Path,
-    *,
-    chroma_path: Path,
-    bm25_path: Path,
-) -> IndexDiagnosis | None:
-    missing = []
-    if not chroma_path.exists():
-        missing.append("ChromaDB")
-    if not bm25_path.exists():
-        missing.append("BM25")
-    if not missing:
-        return None
-
+def _missing_index_diagnosis(index_path: Path) -> IndexDiagnosis:
+    messages = [
+        "No index generation has been published yet.",
+        "Run `reindex` after confirming the corpus path.",
+    ]
+    legacy = legacy_index_dirs(index_path)
+    if legacy:
+        messages.append(
+            "Chroma-era index directories from an older Trace are unused and "
+            "safe to delete: " + ", ".join(f"`{path.name}`" for path in legacy)
+        )
     return IndexDiagnosis(
         status="missing",
-        messages=[
-            f"Missing {' and '.join(missing)} index files.",
-            "Run `reindex` after confirming the corpus path.",
-        ],
+        messages=messages,
         last_index_time=None,
-        metadata_version=_read_metadata_version(index_path),
         next_reindex="forced",
-        changes=None,
     )
 
 
-def _unknown_metadata_diagnosis(raw_version: int | None) -> IndexDiagnosis:
-    if raw_version is not None and raw_version != INDEX_METADATA_VERSION:
-        reason_msg = (
-            f"Index metadata is at schema v{raw_version}; "
-            f"current schema is v{INDEX_METADATA_VERSION}."
-        )
-        next_msg = "Next `reindex` will be forced (schema upgrade)."
-    else:
-        reason_msg = "Index exists but has no readable Trace metadata."
-        next_msg = "Next `reindex` will be forced (no metadata)."
-
+def _unknown_metadata_diagnosis() -> IndexDiagnosis:
     return IndexDiagnosis(
         status="unknown",
-        messages=[reason_msg, next_msg],
+        messages=[
+            "Index metadata is unreadable or from another Trace version.",
+            "Next `reindex` will be forced.",
+        ],
         last_index_time=None,
-        metadata_version=raw_version,
         next_reindex="forced",
-        changes=None,
     )
 
 
@@ -235,22 +207,11 @@ def _freshness_diagnosis(kb_path: Path, metadata: IndexMetadata) -> IndexDiagnos
 
 def diagnose_index(kb_path: Path, index_path: Path) -> IndexDiagnosis:
     """Diagnose index presence, compatibility, freshness, and last build time."""
-    model_slug = settings.model_slug
-    chroma_path = chroma_dir(index_path, model_slug)
-    bm25_path = bm25_dir(index_path, model_slug)
-
-    missing = _missing_index_diagnosis(
-        index_path,
-        chroma_path=chroma_path,
-        bm25_path=bm25_path,
-    )
-    if missing is not None:
-        return missing
-
-    raw_version = _read_metadata_version(index_path)
-    metadata = read_index_metadata(index_path)
+    if read_current(index_path) is None:
+        return _missing_index_diagnosis(index_path)
+    metadata = read_current_metadata(index_path)
     if metadata is None:
-        return _unknown_metadata_diagnosis(raw_version)
+        return _unknown_metadata_diagnosis()
     return _freshness_diagnosis(kb_path, metadata)
 
 

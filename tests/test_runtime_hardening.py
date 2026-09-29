@@ -3,79 +3,16 @@
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
-
-class FakeEmbeddings(list):
-    """List-like embedding container with numpy-like tolist support."""
-
-    def __getitem__(self, key):
-        value = super().__getitem__(key)
-        if isinstance(key, slice):
-            return FakeEmbeddings(value)
-        return value
-
-    def tolist(self) -> list:
-        return list(self)
-
-
-class FakeCollection:
-    """In-memory Chroma collection for deterministic tests."""
-
-    def __init__(self) -> None:
-        self._rows: dict[str, dict] = {}
-
-    def count(self) -> int:
-        return len(self._rows)
-
-    def get(self) -> dict[str, list[str]]:
-        return {"ids": list(self._rows.keys())}
-
-    def delete(self, ids: list[str]) -> None:
-        for doc_id in ids:
-            self._rows.pop(doc_id, None)
-
-    def add(
-        self,
-        *,
-        ids: list[str],
-        documents: list[str],
-        embeddings: list[list[float]],
-        metadatas: list[dict],
-    ) -> None:
-        for i, doc_id in enumerate(ids):
-            if doc_id in self._rows:
-                raise ValueError(f"duplicate id: {doc_id}")
-            self._rows[doc_id] = {
-                "document": documents[i],
-                "embedding": embeddings[i],
-                "metadata": metadatas[i],
-            }
-
-
-class FakeChromaClient:
-    """Minimal stand-in for chromadb.PersistentClient."""
-
-    def __init__(self, path: str, settings) -> None:  # noqa: ARG002
-        self.path = path
-        self._collections: dict[str, FakeCollection] = {}
-
-    def get_or_create_collection(
-        self,
-        name: str,
-        metadata: dict | None = None,  # noqa: ARG002
-    ) -> FakeCollection:
-        if name not in self._collections:
-            self._collections[name] = FakeCollection()
-        return self._collections[name]
-
-    def delete_collection(self, name: str) -> None:
-        self._collections.pop(name, None)
+from trace_search.indexing.kb_paths import should_exclude_path
+from trace_search.indexing.wiki_indexer import WikiIndexer
+from trace_search.retrieval.search import KeywordSearch
 
 
 class FakeBackend:
@@ -85,9 +22,7 @@ class FakeBackend:
         self.model_name = model_name
         self.dim = 3
 
-    def encode(self, texts: list[str]) -> FakeEmbeddings:
-        import numpy as np
-
+    def encode(self, texts: list[str]):
         arr = np.asarray(
             [[float(i), 0.0, 0.0] for i, _ in enumerate(texts)], dtype=np.float32
         )
@@ -95,44 +30,6 @@ class FakeBackend:
 
     def encode_one(self, text: str):
         return self.encode([text])[0]
-
-
-class FakeBM25:
-    """Minimal BM25 stand-in for indexing path tests."""
-
-    def __init__(self, k1: float = 1.2, b: float = 0.5) -> None:
-        self.k1 = k1
-        self.b = b
-
-    def index(self, corpus_tokens: list[str]) -> None:  # noqa: ARG002
-        return None
-
-    def save(self, path: str, corpus: list[str] | None = None) -> None:  # noqa: ARG002
-        out = Path(path)
-        out.mkdir(parents=True, exist_ok=True)
-        (out / "bm25.fake").write_text("ok", encoding="utf-8")
-
-    @classmethod
-    def load(cls, path: str, load_corpus: bool = True):  # noqa: ARG003
-        if not Path(path).exists():
-            raise FileNotFoundError(path)
-        return cls()
-
-
-@pytest.fixture
-def patched_indexer_runtime(monkeypatch):
-    """Patch heavy indexer dependencies with lightweight fakes."""
-    import trace_search.indexing.wiki_indexer as indexer_module
-
-    monkeypatch.setattr(indexer_module.chromadb, "PersistentClient", FakeChromaClient)
-    monkeypatch.setattr(
-        indexer_module,
-        "build_embedding_backend",
-        lambda: FakeBackend(),
-    )
-    monkeypatch.setattr(indexer_module.bm25s, "tokenize", lambda texts, **kwargs: texts)
-    monkeypatch.setattr(indexer_module.bm25s, "BM25", FakeBM25)
-    return indexer_module
 
 
 def test_package_import_without_kb_path_succeeds():
@@ -201,7 +98,6 @@ def test_settings_load_kb_path_from_dotenv(tmp_path, monkeypatch):
 def test_runtime_requires_kb_path(monkeypatch):
     """Indexer runtime should fail with clear error if KB_PATH is missing."""
     from trace_search.config import get_settings
-    from trace_search.indexing.wiki_indexer import WikiIndexer
 
     monkeypatch.delenv("KB_PATH", raising=False)
     get_settings.cache_clear()
@@ -212,28 +108,7 @@ def test_runtime_requires_kb_path(monkeypatch):
         get_settings.cache_clear()
 
 
-def test_chroma_path_env_override_is_honored(
-    tmp_path, monkeypatch, patched_indexer_runtime
-):
-    """CHROMA_PATH env var should override computed Chroma path."""
-    from trace_search.config import get_settings
-
-    custom_chroma = tmp_path / "custom-chroma"
-    monkeypatch.setenv("KB_PATH", str(tmp_path))
-    monkeypatch.setenv("CHROMA_PATH", str(custom_chroma))
-    get_settings.cache_clear()
-
-    try:
-        indexer = patched_indexer_runtime.WikiIndexer()
-    finally:
-        get_settings.cache_clear()
-
-    assert indexer.chroma_path == custom_chroma
-
-
-def test_default_indexes_live_under_mcp_search_indexes(
-    tmp_path, monkeypatch, patched_indexer_runtime
-):
+def test_default_indexes_live_under_mcp_search_indexes(tmp_path, monkeypatch):
     """Direct WikiIndexer defaults should match documented server index layout."""
     from trace_search.config import get_settings
 
@@ -241,103 +116,31 @@ def test_default_indexes_live_under_mcp_search_indexes(
     get_settings.cache_clear()
 
     try:
-        indexer = patched_indexer_runtime.WikiIndexer()
+        indexer = WikiIndexer(backend=FakeBackend())
     finally:
         get_settings.cache_clear()
 
     expected_root = tmp_path / ".mcp-search" / "indexes"
-    assert indexer.chroma_path.parent == expected_root
-    assert indexer.bm25_path.parent == expected_root
+    assert indexer.index_root == expected_root
 
 
-def test_force_rebuild_with_empty_docs_clears_stale_indexes(
-    tmp_path,
-    monkeypatch,
-    patched_indexer_runtime,
-):
-    """force=True with no docs should clear stale Chroma/BM25 state."""
-    from trace_search.config import get_settings
+def test_force_rebuild_after_all_docs_removed_publishes_empty_index(tmp_path):
+    """Deleting every doc and force-rebuilding must not keep serving stale chunks."""
 
-    monkeypatch.setenv("KB_PATH", str(tmp_path))
-    get_settings.cache_clear()
+    kb = tmp_path / "kb"
+    kb.mkdir()
+    (kb / "stale.md").write_text("# Stale\n\nstale widget notes", encoding="utf-8")
+    indexer = WikiIndexer(kb, index_root=tmp_path / "idx", backend=FakeBackend())
+    assert indexer.build_index(force=True) == 1
 
-    try:
-        indexer = patched_indexer_runtime.WikiIndexer()
-        indexer.collection.add(
-            ids=["stale.md::0"],
-            documents=["stale"],
-            embeddings=[[0.0, 0.0, 0.0]],
-            metadatas=[
-                {"path": "stale.md", "title": "stale", "folder": "", "chunk_index": 0}
-            ],
-        )
-        indexer.bm25_path.mkdir(parents=True, exist_ok=True)
-        (indexer.bm25_path / "metadata.json").write_text("[]", encoding="utf-8")
+    (kb / "stale.md").unlink()
 
-        monkeypatch.setattr(indexer, "load_documents", lambda: [])
-        result = indexer.build_index(force=True)
-    finally:
-        get_settings.cache_clear()
-
-    assert result == 0
-    assert indexer.collection.count() == 0
-    assert not indexer.bm25_path.exists()
+    assert indexer.build_index(force=True) == 0
+    assert len(indexer.snapshot()) == 0
+    assert KeywordSearch(indexer).search("widget") == []
 
 
-def test_partial_index_state_recovers_without_duplicate_ids(
-    tmp_path,
-    monkeypatch,
-    patched_indexer_runtime,
-):
-    """If only one backend exists, rebuild should reconcile cleanly."""
-    from trace_search.config import get_settings
-
-    monkeypatch.setenv("KB_PATH", str(tmp_path))
-    get_settings.cache_clear()
-
-    try:
-        indexer = patched_indexer_runtime.WikiIndexer()
-
-        # Partial state: Chroma has stale row, BM25 directory is missing.
-        indexer.collection.add(
-            ids=["doc.md::0"],
-            documents=["stale"],
-            embeddings=[[0.0, 0.0, 0.0]],
-            metadatas=[
-                {"path": "doc.md", "title": "Doc", "folder": "", "chunk_index": 0}
-            ],
-        )
-        if indexer.bm25_path.exists():
-            shutil.rmtree(indexer.bm25_path)
-
-        monkeypatch.setattr(
-            indexer,
-            "load_documents",
-            lambda: [
-                {
-                    "path": "doc.md",
-                    "title": "Doc",
-                    "folder": "",
-                    "content": "# Doc\n\nCurrent content",
-                    "hash": "abc",
-                }
-            ],
-        )
-
-        count = indexer.build_index(force=False)
-    finally:
-        get_settings.cache_clear()
-
-    assert count == 1
-    assert indexer.collection.count() == 1
-    assert indexer.bm25_path.exists()
-
-
-def test_load_documents_is_deterministic(
-    tmp_path,
-    monkeypatch,
-    patched_indexer_runtime,
-):
+def test_load_documents_is_deterministic(tmp_path, monkeypatch):
     """load_documents should return documents in stable path order."""
     from trace_search.config import get_settings
 
@@ -351,7 +154,7 @@ def test_load_documents_is_deterministic(
     get_settings.cache_clear()
 
     try:
-        indexer = patched_indexer_runtime.WikiIndexer()
+        indexer = WikiIndexer(backend=FakeBackend())
         docs = indexer.load_documents()
     finally:
         get_settings.cache_clear()
@@ -360,11 +163,7 @@ def test_load_documents_is_deterministic(
     assert paths == sorted(paths)
 
 
-def test_load_documents_allows_hidden_parent_dirs(
-    tmp_path,
-    monkeypatch,
-    patched_indexer_runtime,
-):
+def test_load_documents_allows_hidden_parent_dirs(tmp_path, monkeypatch):
     """Hidden ancestors outside the KB root should not exclude valid documents."""
     from trace_search.config import get_settings
 
@@ -376,7 +175,7 @@ def test_load_documents_allows_hidden_parent_dirs(
     get_settings.cache_clear()
 
     try:
-        indexer = patched_indexer_runtime.WikiIndexer()
+        indexer = WikiIndexer(backend=FakeBackend())
         docs = indexer.load_documents()
     finally:
         get_settings.cache_clear()
@@ -384,9 +183,7 @@ def test_load_documents_allows_hidden_parent_dirs(
     assert [doc["path"] for doc in docs] == ["intro.md"]
 
 
-def test_load_documents_single_rglob_walk(
-    tmp_path, monkeypatch, patched_indexer_runtime
-):
+def test_load_documents_single_rglob_walk(tmp_path, monkeypatch):
     """load_documents should traverse the KB with exactly one rglob('*') call."""
     from unittest.mock import patch
     from trace_search.config import get_settings
@@ -406,7 +203,7 @@ def test_load_documents_single_rglob_walk(
         return original_rglob(self, pattern)
 
     try:
-        indexer = patched_indexer_runtime.WikiIndexer()
+        indexer = WikiIndexer(backend=FakeBackend())
         with patch.object(Path, "rglob", spy_rglob):
             docs = indexer.load_documents()
     finally:
@@ -420,62 +217,34 @@ def test_load_documents_single_rglob_walk(
 
 
 class TestExcludePatternMatching:
-    def _make_indexer(self, kb_path, patched_indexer_runtime, monkeypatch):
-        from trace_search.config import get_settings
-
-        monkeypatch.setenv("KB_PATH", str(kb_path))
-        get_settings.cache_clear()
-        try:
-            return patched_indexer_runtime.WikiIndexer()
-        finally:
-            get_settings.cache_clear()
-
-    def test_nested_node_modules_is_excluded(
-        self, tmp_path, monkeypatch, patched_indexer_runtime
-    ):
+    def test_nested_node_modules_is_excluded(self, tmp_path):
         """node_modules directory nested under KB root should be excluded."""
-        indexer = self._make_indexer(tmp_path, patched_indexer_runtime, monkeypatch)
         p = tmp_path / "project" / "node_modules" / "foo.md"
-        assert indexer._should_exclude(p)
+        assert should_exclude_path(p, tmp_path)
 
-    def test_substring_lookalike_is_not_excluded(
-        self, tmp_path, monkeypatch, patched_indexer_runtime
-    ):
+    def test_substring_lookalike_is_not_excluded(self, tmp_path):
         """A file whose name contains an exclude token as a substring is not excluded."""
-        indexer = self._make_indexer(tmp_path, patched_indexer_runtime, monkeypatch)
         p = tmp_path / "notes" / "my_node_modules_writeup.md"
-        assert not indexer._should_exclude(p)
+        assert not should_exclude_path(p, tmp_path)
 
-    def test_kb_rooted_under_git_mirror_not_excluded(
-        self, tmp_path, monkeypatch, patched_indexer_runtime
-    ):
+    def test_kb_rooted_under_git_mirror_not_excluded(self, tmp_path):
         """A KB rooted under a path that contains .git in a parent segment is not excluded."""
         mirror = tmp_path / ".git-mirror" / "docs"
         mirror.mkdir(parents=True)
-        indexer = self._make_indexer(mirror, patched_indexer_runtime, monkeypatch)
-        p = mirror / "intro.md"
-        assert not indexer._should_exclude(p)
+        assert not should_exclude_path(mirror / "intro.md", mirror)
 
-    def test_hidden_dir_within_kb_excluded_by_leading_dot(
-        self, tmp_path, monkeypatch, patched_indexer_runtime
-    ):
+    def test_hidden_dir_within_kb_excluded_by_leading_dot(self, tmp_path):
         """A file inside a .hidden dir is excluded because the part starts with '.'."""
-        indexer = self._make_indexer(tmp_path, patched_indexer_runtime, monkeypatch)
         p = tmp_path / ".venv" / "lib" / "site.py"
-        assert indexer._should_exclude(p)
+        assert should_exclude_path(p, tmp_path)
 
-    def test_hidden_parent_outside_kb_is_not_excluded(
-        self, tmp_path, monkeypatch, patched_indexer_runtime
-    ):
+    def test_hidden_parent_outside_kb_is_not_excluded(self, tmp_path):
         """Only KB-relative hidden parts should be excluded."""
         kb = tmp_path / ".mirror" / "docs"
         kb.mkdir(parents=True)
-        indexer = self._make_indexer(kb, patched_indexer_runtime, monkeypatch)
-        assert not indexer._should_exclude(kb / "intro.md")
+        assert not should_exclude_path(kb / "intro.md", kb)
 
-    def test_symlink_to_outside_kb_is_excluded(
-        self, tmp_path, monkeypatch, patched_indexer_runtime
-    ):
+    def test_symlink_to_outside_kb_is_excluded(self, tmp_path):
         """Resolved paths must stay inside the KB root."""
         kb = tmp_path / "kb"
         outside = tmp_path / "outside"
@@ -486,12 +255,10 @@ class TestExcludePatternMatching:
         link = kb / "secret-link.md"
         link.symlink_to(target)
 
-        indexer = self._make_indexer(kb, patched_indexer_runtime, monkeypatch)
-
-        assert indexer._should_exclude(link)
+        assert should_exclude_path(link, kb)
 
     def test_load_documents_skips_outside_symlink_but_keeps_inside_symlink(
-        self, tmp_path, monkeypatch, patched_indexer_runtime
+        self, tmp_path, monkeypatch
     ):
         from trace_search.config import get_settings
 
@@ -507,7 +274,7 @@ class TestExcludePatternMatching:
         monkeypatch.setenv("KB_PATH", str(kb))
         get_settings.cache_clear()
         try:
-            indexer = patched_indexer_runtime.WikiIndexer()
+            indexer = WikiIndexer(backend=FakeBackend())
             docs = indexer.load_documents()
         finally:
             get_settings.cache_clear()
@@ -516,99 +283,3 @@ class TestExcludePatternMatching:
         assert "real.md" in paths
         assert "inside-link.md" in paths
         assert "outside-link.md" not in paths
-
-
-class TestAtomicChromaReset:
-    def test_count_is_zero_after_reset(
-        self, tmp_path, monkeypatch, patched_indexer_runtime
-    ):
-        """After _clear_chroma_collection, count() must be 0."""
-        from trace_search.config import get_settings
-
-        monkeypatch.setenv("KB_PATH", str(tmp_path))
-        get_settings.cache_clear()
-        try:
-            indexer = patched_indexer_runtime.WikiIndexer()
-            indexer.collection.add(
-                ids=["doc::0"],
-                documents=["content"],
-                embeddings=[[0.1, 0.0, 0.0]],
-                metadatas=[
-                    {"path": "doc.md", "title": "Doc", "folder": "", "chunk_index": 0}
-                ],
-            )
-            assert indexer.collection.count() == 1
-
-            indexer._clear_chroma_collection()
-
-            assert indexer.collection.count() == 0
-        finally:
-            get_settings.cache_clear()
-
-    def test_new_handle_accepts_writes_after_reset(
-        self, tmp_path, monkeypatch, patched_indexer_runtime
-    ):
-        """Writes after reset should land in the new collection handle."""
-        from trace_search.config import get_settings
-
-        monkeypatch.setenv("KB_PATH", str(tmp_path))
-        get_settings.cache_clear()
-        try:
-            indexer = patched_indexer_runtime.WikiIndexer()
-            indexer._clear_chroma_collection()
-
-            indexer.collection.add(
-                ids=["new::0"],
-                documents=["new content"],
-                embeddings=[[0.5, 0.0, 0.0]],
-                metadatas=[
-                    {"path": "new.md", "title": "New", "folder": "", "chunk_index": 0}
-                ],
-            )
-            assert indexer.collection.count() == 1
-        finally:
-            get_settings.cache_clear()
-
-    def test_missing_collection_delete_is_tolerated(
-        self, tmp_path, monkeypatch, patched_indexer_runtime
-    ):
-        from chromadb.errors import NotFoundError
-        from trace_search.config import get_settings
-
-        monkeypatch.setenv("KB_PATH", str(tmp_path))
-        get_settings.cache_clear()
-        try:
-            indexer = patched_indexer_runtime.WikiIndexer()
-
-            def raise_missing(name: str) -> None:
-                raise NotFoundError(f"Collection [{name}] does not exist")
-
-            indexer.client.delete_collection = raise_missing
-
-            indexer._clear_chroma_collection()
-
-            assert indexer.collection.count() == 0
-        finally:
-            get_settings.cache_clear()
-
-    def test_unexpected_collection_delete_failure_stops_rebuild(
-        self, tmp_path, monkeypatch, patched_indexer_runtime
-    ):
-        from trace_search.config import get_settings
-
-        monkeypatch.setenv("KB_PATH", str(tmp_path))
-        get_settings.cache_clear()
-        try:
-            indexer = patched_indexer_runtime.WikiIndexer()
-            monkeypatch.setattr(
-                indexer.client,
-                "delete_collection",
-                lambda name: (_ for _ in ()).throw(RuntimeError("database locked")),
-            )
-
-            with pytest.raises(RuntimeError, match="database locked"):
-                indexer.build_index(force=True)
-
-            assert not indexer.bm25_path.exists()
-        finally:
-            get_settings.cache_clear()

@@ -199,9 +199,17 @@ file is active and counts what it excluded.
 ## Reindexing
 
 `reindex` is incremental: Trace fingerprints each file (SHA-256 + mtime + size)
-and reprocesses only what was added, changed, or removed. Run
-`trace reindex --force` (`force=true` over MCP) to drop both indexes and rebuild
-from scratch after a model change or to recover from corruption.
+and re-embeds only what was added or changed; removed files drop out. Run
+`trace reindex --force` (`force=true` over MCP) to rebuild every file after a
+model change or to recover from corruption.
+
+Each build writes a complete new index generation (chunks, an embedding matrix,
+and the BM25 index) and then atomically points `CURRENT` at it. A running server
+notices the new generation on its next search, so a CLI `reindex` beside a
+long-lived daemon takes effect without a restart, and a failed build leaves the
+previous generation serving. Only one process can reindex a collection at a
+time: a second writer fails fast with the first one's pid. Searches never write
+to an existing index; a collection with no index yet is built on first use.
 
 `doctor` reports the next-reindex plan and a change summary:
 
@@ -213,9 +221,10 @@ from scratch after a model change or to recover from corruption.
 ```
 
 When given a sample query, `doctor` probes existing indexes only. It tells you
-to `reindex` rather than building as a side effect. If it reports unknown
-metadata (an older `v1` schema), one `reindex` repopulates model and freshness
-metadata; that run is forced, later runs are incremental.
+to `reindex` rather than building as a side effect. If it reports a missing
+index after an upgrade from a Chroma-era Trace, one `reindex` builds the new
+format; `doctor` lists the old `.chroma_db_*` / `.bm25_index_*` directories,
+which are then safe to delete.
 
 ## Retrieval quality
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,8 +11,8 @@ from typing import Any
 from trace_search.config import settings
 from trace_search.extraction.corpus import iter_kb_files
 
-INDEX_METADATA_VERSION = 3
-INDEX_METADATA_FILENAME = "index_metadata.json"
+# v4: generation store (no Chroma); frontmatter-aware chunks.
+INDEX_METADATA_VERSION = 4
 
 _HASH_CHUNK_SIZE = 64 * 1024
 
@@ -68,11 +67,6 @@ class IndexMetadata:
 def utc_now_iso() -> str:
     """Return a stable UTC timestamp string."""
     return datetime.now(UTC).isoformat()
-
-
-def metadata_path(index_root: Path) -> Path:
-    """Return the metadata path for an index root."""
-    return index_root / INDEX_METADATA_FILENAME
 
 
 def hash_file(path: Path) -> str:
@@ -157,35 +151,13 @@ def build_index_metadata(
     )
 
 
-def write_index_metadata(index_root: Path, metadata: IndexMetadata) -> None:
-    """Persist metadata under the collection index root."""
-    index_root.mkdir(parents=True, exist_ok=True)
-    metadata_path(index_root).write_text(
-        json.dumps(metadata.to_dict(), indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-
-
-def invalidate_index_metadata(index_root: Path) -> None:
-    """Remove metadata to force a full rebuild on the next reindex."""
-    path = metadata_path(index_root)
-    try:
-        path.unlink()
-    except FileNotFoundError:
-        pass
-
-
-def read_index_metadata(index_root: Path) -> IndexMetadata | None:
-    """Read index metadata, returning None when absent, unreadable, or outdated.
+def index_metadata_from_dict(raw: dict[str, Any]) -> IndexMetadata | None:
+    """Parse persisted metadata, returning None when it is from another schema.
 
     Metadata written by an older schema version is treated as missing so the
     caller forces a full rebuild and writes fresh metadata.
     """
-    path = metadata_path(index_root)
-    if not path.exists():
-        return None
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
         version = int(raw.get("version", 0))
         if version != INDEX_METADATA_VERSION:
             return None
@@ -216,7 +188,7 @@ def read_index_metadata(index_root: Path) -> IndexMetadata | None:
                 if isinstance(warning, str)
             ],
         )
-    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+    except (ValueError, TypeError, AttributeError):
         return None
 
 

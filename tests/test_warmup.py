@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock
+from types import SimpleNamespace
 
 import pytest
 
@@ -42,7 +42,7 @@ def test_registry_warms_backend_on_first_load(tmp_path: Path, monkeypatch):
     )
     registry = CollectionRegistry({"fixture": tmp_path})
 
-    assert registry.backend is backend
+    assert registry.shared_backend() is backend
     assert len(backend.encoded_batches) == 1
 
 
@@ -54,8 +54,8 @@ def test_registry_warms_backend_exactly_once(tmp_path: Path, monkeypatch):
     )
     registry = CollectionRegistry({"fixture": tmp_path})
 
-    assert registry.backend is registry.backend
-    assert registry.backend is backend
+    assert registry.shared_backend() is registry.shared_backend()
+    assert registry.shared_backend() is backend
     assert len(backend.encoded_batches) == 1
 
 
@@ -69,7 +69,7 @@ def test_warmup_does_not_populate_query_cache():
 
 def test_warmup_input_still_cache_misses_as_user_query():
     backend = RecordingBackend()
-    semantic = SemanticSearch(MagicMock(), backend)
+    semantic = SemanticSearch(SimpleNamespace(backend=backend))
     warm_embedding_model(backend)
 
     before_misses = SemanticSearch._cache_misses

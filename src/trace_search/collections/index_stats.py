@@ -34,12 +34,11 @@ def render_index_stats(
         sections.append(f"""## Collection: {name}
 
 - **Knowledge base:** `{stats["kb_path"]}`
-- **ChromaDB chunks:** {stats["total_chunks"]}
-- **BM25 documents:** {stats["bm25_docs"]}
-- **BM25 available:** {stats["bm25_available"]}
+- **Documents:** {stats["documents"]}
+- **Chunks:** {stats["total_chunks"]}
+- **Generation:** {stats["generation"]}
 - **Chunking:** {_chunk_mode(chunking)}, overlap {_overlap_info(chunking)}
-- **ChromaDB path:** `{stats["chroma_path"]}`
-- **BM25 path:** `{stats["bm25_path"]}`""")
+- **Index root:** `{stats["index_root"]}`""")
 
     return f"""# Index Statistics
 

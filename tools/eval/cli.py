@@ -250,10 +250,10 @@ def main(
 
     indexer = WikiIndexer()
 
-    if indexer.collection.count() == 0:
+    if not indexer.has_index():
         click.echo("Building index (first time)...")
     else:
-        click.echo(f"Refreshing existing index: {indexer.collection.count()} chunks")
+        click.echo(f"Refreshing existing index: {len(indexer.snapshot())} chunks")
     indexer.build_index()
 
     # Mirror production bootstrap so eval p95 reflects what MCP consumers see.

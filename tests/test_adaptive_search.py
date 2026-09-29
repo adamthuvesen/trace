@@ -332,8 +332,8 @@ def test_default_search_tool_renders_all_top_k_documents(tmp_path):
 
 
 def test_multi_collection_adaptive_search_batches_neighbor_fetches(tmp_path):
-    """Multi-collection adaptive search should issue one ChromaDB get() per collection,
-    not one per hit."""
+    """Multi-collection adaptive search should fetch neighbors once per collection,
+    not once per hit."""
     from trace_search.retrieval.search import AdaptiveSearchResult
     from trace_search.collections.collection_registry import CollectionRegistry
 
@@ -365,7 +365,9 @@ def test_multi_collection_adaptive_search_batches_neighbor_fetches(tmp_path):
 
     hits_by_col = {"kb1": make_hits("kb1"), "kb2": make_hits("kb2")}
 
+    adaptive_by_indexer = {}
     for name, col in registry.collections.items():
+        col._indexer = MagicMock()
         adaptive = MagicMock()
         adaptive.search.return_value = AdaptiveSearchResult(
             hits=hits_by_col[name],
@@ -375,12 +377,13 @@ def test_multi_collection_adaptive_search_batches_neighbor_fetches(tmp_path):
                 fallback_used=False,
             ),
         )
-        col._adaptive = adaptive
+        adaptive_by_indexer[id(col._indexer)] = adaptive
 
-        indexer = MagicMock()
-        col._indexer = indexer
-
-    result = registry.search_adaptive("query", top_k=10, collection=None)
+    with patch(
+        "trace_search.collections.collection_registry.AdaptiveSearch",
+        side_effect=lambda indexer: adaptive_by_indexer[id(indexer)],
+    ):
+        result = registry.search_adaptive("query", top_k=10, collection=None)
 
     assert len(result.hits) == 10
     assert {h["collection"] for h in result.hits} == {"kb1", "kb2"}

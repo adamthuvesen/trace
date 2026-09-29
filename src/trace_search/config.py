@@ -66,7 +66,6 @@ class Settings(BaseSettings):
         description="Path to knowledge base (required for indexing and document access)",
     )
     index_path: Path | None = None  # Defaults to kb_path if not set
-    chroma_path: Path | None = None  # Explicit ChromaDB path (optional)
 
     # Multi-collection mode: "name:path,name:path,..."
     kb_collections: str | None = Field(
@@ -127,7 +126,6 @@ class Settings(BaseSettings):
     @field_validator(
         "kb_path",
         "index_path",
-        "chroma_path",
         "eval_golden_queries",
         mode="before",
     )

@@ -11,24 +11,17 @@ from collections import OrderedDict, defaultdict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from pathlib import Path as _Path
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 
-from chromadb import Collection
-from chromadb.api.types import Where
-from chromadb.base_types import (
-    InclusionExclusionOperator,
-    LiteralValue,
-    LogicalOperator,
-    WhereOperator,
-)
+import numpy as np
+from numpy.typing import NDArray
 
 from trace_search.retrieval.bm25_tokenize import tokenize_keywords
 from trace_search.config import settings
-from trace_search.indexing.embeddings import EmbeddingBackend, build_embedding_backend
+from trace_search.indexing.index_store import ChunkMetadata, IndexSnapshot
 from trace_search.retrieval.hit_builders import (
     hit_from_bm25,
-    hit_from_chroma,
+    hit_from_vector,
     hits_to_dicts,
 )
 from trace_search.retrieval.models import SearchHit
@@ -58,10 +51,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Cap how many candidates a single retrieval call may over-fetch when filters
-# are active. Keeps per-query latency bounded even on very large corpora.
-_FILTER_OVERSAMPLE = 5
-_MAX_OVERSAMPLE_FETCH = 500
+_MAX_CHUNK_FETCH = 500
 # File-level BM25 rolls chunk hits up into files, so the chunk pool must be deep
 # enough to cover enough distinct files. Long files (navigational hubs, verbose
 # essays) each occupy many chunk slots, so a shallow pool starves precise pages
@@ -86,8 +76,9 @@ _METADATA_BOOST_CAP = 1.5
 _HUB_DEMOTION = 0.4
 _NAVIGATIONAL_HUB_BASENAMES = frozenset({"index.md", "log.md", "changelog.md"})
 _ADAPTIVE_MIN_FALLBACK_SEMANTIC_SCORE = 0.40
-_SEMANTIC_OVERSAMPLE = 1
-_SEMANTIC_MAX_CANDIDATES = 50
+# Vector similarity alone ranks near-duplicates arbitrarily; the lexical boost
+# re-ranks a wider candidate pool so exact title/term anchors can surface.
+_SEMANTIC_CANDIDATE_POOL = 50
 
 
 def _clamp_top_k(top_k: int, default: int = 10, max_val: int = 100) -> int:
@@ -101,9 +92,9 @@ def _clamp_top_k(top_k: int, default: int = 10, max_val: int = 100) -> int:
 class SearchFilters:
     """Optional scope filters applied across all search modes.
 
-    Filters are evaluated pre-ranking: vector and metadata-aware stores push
-    them down at fetch time; BM25 over-fetches and applies them to candidates
-    before truncation. The empty `SearchFilters()` is a no-op.
+    Filters are evaluated before ranking as a row mask over the index snapshot:
+    BM25 receives it as a weight mask and vector search skips masked rows. The
+    empty `SearchFilters()` is a no-op.
     """
 
     path_prefix: tuple[str, ...] = ()
@@ -229,77 +220,6 @@ def parse_filters(
     )
 
 
-def filters_to_chroma_where(filters: SearchFilters) -> Where | None:
-    """Build a Chroma `where` clause from filters, or None if no push-down applies.
-
-    Chroma metadata filtering supports equality, `$in`, `$gte`, `$lte`, `$and`,
-    and `$or`, but no prefix-matching on string fields. So `extension` and
-    `since` push down; `path_prefix` is applied post-fetch.
-    """
-    clauses: list[Where] = []
-
-    if filters.extensions:
-        if len(filters.extensions) == 1:
-            extension_clause: Where = {"extension": filters.extensions[0]}
-        else:
-            extension_values: list[LiteralValue] = list(filters.extensions)
-            in_operator: dict[InclusionExclusionOperator, list[LiteralValue]] = {
-                "$in": extension_values
-            }
-            extension_clause = {"extension": in_operator}
-        clauses.append(extension_clause)
-
-    if filters.since is not None:
-        gte_operator: dict[WhereOperator | LogicalOperator, LiteralValue] = {
-            "$gte": filters.since.timestamp()
-        }
-        since_clause: Where = {"source_mtime": gte_operator}
-        clauses.append(since_clause)
-
-    if not clauses:
-        return None
-    if len(clauses) == 1:
-        return clauses[0]
-    return {"$and": clauses}
-
-
-def apply_filters_to_hits(
-    hits: list[dict[str, Any]],
-    filters: SearchFilters,
-) -> list[dict[str, Any]]:
-    """Return hits that satisfy every supplied filter."""
-    if filters.is_empty:
-        return hits
-
-    kept: list[dict[str, Any]] = []
-    for hit in hits:
-        path = str(hit.get("path", ""))
-        ext = hit.get("extension")
-        if not ext:
-            ext = _Path(path).suffix.lower()
-        mtime_raw = hit.get("source_mtime")
-        mtime = float(mtime_raw) if mtime_raw is not None else None
-        if filters.matches_record(path, str(ext), mtime):
-            kept.append(hit)
-    return kept
-
-
-def _candidate_fetch_size(top_k: int, filters: SearchFilters) -> int:
-    """Decide how many candidates to fetch when filters may discard some."""
-    if filters.is_empty:
-        return top_k
-    return min(top_k * _FILTER_OVERSAMPLE, _MAX_OVERSAMPLE_FETCH)
-
-
-def _semantic_fetch_size(top_k: int, filters: SearchFilters) -> int:
-    """Fetch enough vector candidates for local lexical tie-breaking."""
-    semantic_top_k = max(
-        top_k,
-        min(top_k * _SEMANTIC_OVERSAMPLE, _SEMANTIC_MAX_CANDIDATES),
-    )
-    return _candidate_fetch_size(semantic_top_k, filters)
-
-
 def _normalize_rank_term(term: str) -> str:
     term = term.lower()
     return term[:-1] if len(term) > 3 and term.endswith("s") else term
@@ -364,13 +284,26 @@ def _metadata_overlap(query_terms: set[str], hit: dict[str, Any]) -> float:
     return len(query_terms & metadata_terms) / len(query_terms)
 
 
-def _keyword_fetch_size(max_results: int, filters: SearchFilters) -> int:
-    fetch_n = max(max_results * _BM25_FILE_OVERSAMPLE, _BM25_MIN_FILE_FETCH)
-    if not filters.is_empty:
-        # Filters discard candidate chunks after fetch; widen the pool so the
-        # surviving set still covers enough distinct files.
-        fetch_n = max(fetch_n, _candidate_fetch_size(max_results, filters))
-    return min(fetch_n, _MAX_OVERSAMPLE_FETCH)
+def _keyword_fetch_size(max_results: int) -> int:
+    return min(
+        max(max_results * _BM25_FILE_OVERSAMPLE, _BM25_MIN_FILE_FETCH),
+        _MAX_CHUNK_FETCH,
+    )
+
+
+def _filter_mask(
+    snapshot: IndexSnapshot, filters: SearchFilters
+) -> NDArray[np.bool_] | None:
+    """Rows that satisfy the filters, or None when no filter is active."""
+    if filters.is_empty:
+        return None
+
+    def keep(chunk: ChunkMetadata) -> bool:
+        return filters.matches_record(
+            chunk["path"], chunk["extension"], chunk["source_mtime"]
+        )
+
+    return snapshot.row_mask(filters, keep)
 
 
 def _weak_file_score(corpus_size: int) -> float:
@@ -489,10 +422,10 @@ class Reranker(Protocol):
 
 
 class SemanticSearch:
-    """Vector-based semantic search using ChromaDB."""
+    """Exact cosine search over the snapshot's normalized embedding matrix."""
 
     # Class-level LRU cache keyed by (model_slug, query) to prevent cross-model collisions
-    _embedding_cache: ClassVar[OrderedDict[tuple[str, str], list[float]]] = (
+    _embedding_cache: ClassVar[OrderedDict[tuple[str, str], NDArray[np.float32]]] = (
         OrderedDict()
     )
     _cache_hits: ClassVar[int] = 0
@@ -502,39 +435,31 @@ class SemanticSearch:
     # an eviction between get and move_to_end would raise KeyError.
     _cache_lock: ClassVar[threading.Lock] = threading.Lock()
 
-    def __init__(
-        self,
-        collection: Collection,
-        backend: EmbeddingBackend | None = None,
-    ):
-        """Initialize semantic search.
-
-        Args:
-            collection: ChromaDB collection with indexed documents.
-            backend: Embedding backend for encoding queries. Uses default if None.
-        """
-        self.collection = collection
-        self.backend = backend or build_embedding_backend()
+    def __init__(self, indexer: WikiIndexer):
+        """Initialize semantic search over an indexer's current snapshot."""
+        self.indexer = indexer
         self._model_slug = settings.model_slug
 
-    def _get_query_embedding(self, query: str) -> list[float]:
-        """Get embedding for query, using LRU cache keyed by (model_slug, query)."""
+    def _get_query_embedding(self, query: str) -> NDArray[np.float32]:
+        """Get the normalized query embedding, cached by (model_slug, query)."""
         cache_key = (self._model_slug, query)
         with self._cache_lock:
             cached = self._embedding_cache.get(cache_key)
             if cached is not None:
                 SemanticSearch._cache_hits += 1
                 self._embedding_cache.move_to_end(cache_key)
-                return list(cached)
+                return cached
             SemanticSearch._cache_misses += 1
 
-        embedding = self.backend.encode_one(query).tolist()
+        vector = np.asarray(self.indexer.backend.encode_one(query), dtype=np.float32)
+        norm = float(np.linalg.norm(vector))
+        embedding = vector / norm if norm else vector
 
         with self._cache_lock:
             if len(self._embedding_cache) >= self._cache_maxsize:
                 self._embedding_cache.popitem(last=False)
             self._embedding_cache[cache_key] = embedding
-        return list(embedding)
+        return embedding
 
     @classmethod
     def get_cache_stats(cls) -> dict[str, int | str]:
@@ -560,39 +485,32 @@ class SemanticSearch:
             return []
         top_k = _clamp_top_k(top_k)
         filters = filters or SearchFilters()
+        snapshot = self.indexer.snapshot()
+        if not len(snapshot):
+            return []
 
-        query_embedding = self._get_query_embedding(query)
-        n_results = _semantic_fetch_size(top_k, filters)
-        where = filters_to_chroma_where(filters)
+        scores = snapshot.embeddings @ self._get_query_embedding(query)
+        mask = _filter_mask(snapshot, filters)
+        pool = min(max(top_k, _SEMANTIC_CANDIDATE_POOL), len(snapshot))
+        if mask is not None:
+            scores = np.where(mask, scores, -np.inf)
+            pool = min(pool, int(mask.sum()))
+        if pool <= 0:
+            return []
+        rows = np.argpartition(-scores, pool - 1)[:pool]
+        rows = rows[np.argsort(-scores[rows], kind="stable")]
 
-        query_embeddings: list[Sequence[float]] = [query_embedding]
-        results = self.collection.query(
-            query_embeddings=query_embeddings,
-            n_results=n_results,
-            include=["documents", "metadatas", "distances"],
-            where=where,
-        )
-        documents = results["documents"]
-        metadatas = results["metadatas"]
-        distances = results["distances"]
-        if documents is None or metadatas is None or distances is None:
-            raise ValueError("Chroma query did not return requested result fields")
-
-        built: list[SearchHit] = []
-        for i, doc_id in enumerate(results["ids"][0]):
-            distance = distances[0][i]
-            similarity = 1 - distance
-            metadata = metadatas[0][i]
-            built.append(
-                hit_from_chroma(
-                    doc_id,
-                    metadata,
-                    documents[0][i],
-                    similarity,
+        hits = hits_to_dicts(
+            [
+                hit_from_vector(
+                    snapshot.chunk_ids[row],
+                    snapshot.chunks[row],
+                    snapshot.texts[row],
+                    float(scores[row]),
                 )
-            )
-
-        hits = apply_filters_to_hits(hits_to_dicts(built), filters)
+                for row in rows
+            ]
+        )
         ranked_hits: list[tuple[float, dict[str, Any]]] = []
         for hit in hits:
             boost = _semantic_lexical_boost(query, hit)
@@ -608,11 +526,7 @@ class KeywordSearch:
     """BM25-based keyword search for fast lexical matching."""
 
     def __init__(self, indexer: WikiIndexer):
-        """Initialize keyword search.
-
-        Args:
-            indexer: WikiIndexer with loaded BM25 index and corpus metadata.
-        """
+        """Initialize keyword search over an indexer's current snapshot."""
         self.indexer = indexer
 
     def search(
@@ -626,46 +540,41 @@ class KeywordSearch:
             return []
         max_results = _clamp_top_k(max_results, default=20)
         filters = filters or SearchFilters()
-
-        bm25 = self.indexer.bm25
-        metadata_list = self.indexer.bm25_corpus
-
-        if bm25 is None or not metadata_list:
+        snapshot = self.indexer.snapshot()
+        if snapshot.bm25 is None or not len(snapshot):
             return []
 
-        query_tokens = tokenize_keywords(keyword)
+        mask = _filter_mask(snapshot, filters)
+        if mask is not None and not mask.any():
+            return []
 
         # Fetch a wider chunk pool so sibling chunks can vote for a file-level
-        # result before truncation.
-        fetch_n = _keyword_fetch_size(max_results, filters)
-        fetch_n = min(fetch_n, len(metadata_list))
-        results, scores = bm25.retrieve(query_tokens, k=fetch_n)
+        # result before truncation. The mask filters before ranking.
+        fetch_n = min(_keyword_fetch_size(max_results), len(snapshot))
+        results, scores = snapshot.bm25.retrieve(
+            tokenize_keywords(keyword),
+            k=fetch_n,
+            show_progress=False,
+            weight_mask=mask.astype(np.float32) if mask is not None else None,
+        )
 
         built: list[SearchHit] = []
         for i, result in enumerate(results[0]):
             score = float(scores[0][i])
             if score <= 0:
                 continue
-
-            if isinstance(result, dict):
-                doc_idx = result.get("id", -1)
-                doc_content = result.get("text", "")
-            else:
-                doc_idx = int(result)
-                doc_content = ""
-
-            if doc_idx < 0 or doc_idx >= len(metadata_list):
+            row = int(result)
+            if row < 0 or row >= len(snapshot):
                 continue
+            built.append(
+                hit_from_bm25(snapshot.chunks[row], snapshot.texts[row], score)
+            )
 
-            metadata = metadata_list[doc_idx]
-            built.append(hit_from_bm25(metadata, doc_content, score))
-
-        hits = apply_filters_to_hits(hits_to_dicts(built), filters)
         return _aggregate_keyword_hits(
             keyword,
-            hits,
+            hits_to_dicts(built),
             max_results,
-            corpus_size=len(metadata_list),
+            corpus_size=len(snapshot),
             require_anchor_for_weak_hits=filters.is_empty,
         )
 
@@ -676,14 +585,9 @@ class HybridSearch:
     # Lazy-loaded reranker (shared across instances)
     _reranker: ClassVar[Reranker | None] = None
 
-    def __init__(self, indexer: WikiIndexer, backend: EmbeddingBackend | None = None):
-        """Initialize hybrid search.
-
-        Args:
-            indexer: WikiIndexer with ChromaDB collection and BM25 index.
-            backend: Embedding backend for semantic search. Uses default if None.
-        """
-        self.semantic = SemanticSearch(indexer.collection, backend)
+    def __init__(self, indexer: WikiIndexer):
+        """Initialize hybrid search over an indexer's current snapshot."""
+        self.semantic = SemanticSearch(indexer)
         self.keyword = KeywordSearch(indexer)
 
     @classmethod
@@ -831,9 +735,9 @@ def add_match_hints(query: str, hits: list[dict[str, Any]]) -> list[dict[str, An
 class AdaptiveSearch:
     """BM25-first adaptive search with transparent fallback behavior."""
 
-    def __init__(self, indexer: WikiIndexer, backend: EmbeddingBackend | None = None):
+    def __init__(self, indexer: WikiIndexer):
         self.keyword = KeywordSearch(indexer)
-        self.hybrid = HybridSearch(indexer, backend)
+        self.hybrid = HybridSearch(indexer)
 
     @staticmethod
     def _fallback_confident(hits: list[dict[str, Any]]) -> bool:

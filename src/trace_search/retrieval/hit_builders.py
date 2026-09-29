@@ -9,13 +9,13 @@ from trace_search.indexing.index_paths import chunk_id
 from trace_search.retrieval.models import SearchHit
 
 
-def hit_from_chroma(
+def hit_from_vector(
     doc_id: str,
     metadata: Mapping[str, Any],
     content: str,
     similarity: float,
 ) -> SearchHit:
-    """Build a semantic hit from a Chroma query result row."""
+    """Build a semantic hit from one embedding-matrix row."""
     return SearchHit(
         id=doc_id,
         path=str(metadata["path"]),

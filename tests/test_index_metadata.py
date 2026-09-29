@@ -10,18 +10,14 @@ from trace_search.indexing.index_metadata import (
     categorize_source_changes,
     collect_source_files,
     hash_file,
-    invalidate_index_metadata,
+    index_metadata_from_dict,
     metadata_matches_active_model,
-    metadata_path,
-    read_index_metadata,
     utc_now_iso,
-    write_index_metadata,
 )
 
 
 def test_metadata_round_trip_records_active_model_and_sources(tmp_path):
     kb = tmp_path / "kb"
-    index_root = tmp_path / "indexes"
     kb.mkdir()
     (kb / "intro.md").write_text("# Intro\n\nBM25 notes", encoding="utf-8")
 
@@ -32,73 +28,30 @@ def test_metadata_round_trip_records_active_model_and_sources(tmp_path):
         document_count=1,
         chunk_count=2,
     )
-    write_index_metadata(index_root, metadata)
 
-    loaded = read_index_metadata(index_root)
+    loaded = index_metadata_from_dict(json.loads(json.dumps(metadata.to_dict())))
 
-    assert loaded is not None
+    assert loaded == metadata
     assert loaded.version == INDEX_METADATA_VERSION
-    assert loaded.document_count == 1
-    assert loaded.chunk_count == 2
     record = loaded.source_files[0]
     assert record.path == "intro.md"
     assert record.content_sha
     assert metadata_matches_active_model(loaded)
 
 
-def test_missing_metadata_returns_none(tmp_path):
-    assert read_index_metadata(tmp_path / "missing") is None
-
-
-def test_older_metadata_version_is_treated_as_missing(tmp_path):
+def test_other_metadata_versions_are_treated_as_missing(tmp_path):
     kb = tmp_path / "kb"
-    index_root = tmp_path / "indexes"
     kb.mkdir()
-    (kb / "intro.md").write_text("# Intro", encoding="utf-8")
-    metadata = build_index_metadata(
-        kb_path=kb,
-        build_started_at=utc_now_iso(),
-        build_completed_at=utc_now_iso(),
-        document_count=1,
-        chunk_count=1,
-    )
-    write_index_metadata(index_root, metadata)
-
-    raw = json.loads(metadata_path(index_root).read_text(encoding="utf-8"))
-    raw["version"] = 1
-    metadata_path(index_root).write_text(json.dumps(raw), encoding="utf-8")
-
-    assert read_index_metadata(index_root) is None
-
-
-def test_token_chunking_metadata_version_is_treated_as_missing(tmp_path):
-    kb = tmp_path / "kb"
-    index_root = tmp_path / "indexes"
-    kb.mkdir()
-    metadata = build_index_metadata(
+    raw = build_index_metadata(
         kb_path=kb,
         build_started_at=utc_now_iso(),
         build_completed_at=utc_now_iso(),
         document_count=0,
         chunk_count=0,
-    )
-    write_index_metadata(index_root, metadata)
+    ).to_dict()
 
-    raw = json.loads(metadata_path(index_root).read_text(encoding="utf-8"))
-    raw["version"] = 2
-    metadata_path(index_root).write_text(json.dumps(raw), encoding="utf-8")
-
-    assert read_index_metadata(index_root) is None
-
-
-def test_invalidate_index_metadata_is_idempotent(tmp_path):
-    index_root = tmp_path / "indexes"
-    invalidate_index_metadata(index_root)  # no metadata file yet — must not raise
-
-    index_root.mkdir()
-    metadata_path(index_root).write_text("{}", encoding="utf-8")
-    invalidate_index_metadata(index_root)
-    assert not metadata_path(index_root).exists()
+    for version in (1, 2, 3, INDEX_METADATA_VERSION + 1):
+        assert index_metadata_from_dict({**raw, "version": version}) is None
 
 
 def test_model_mismatch_detection(tmp_path):

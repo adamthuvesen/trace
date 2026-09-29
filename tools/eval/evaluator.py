@@ -138,15 +138,15 @@ def create_searcher(
     )
 
     if search_mode == "semantic":
-        return SemanticSearch(indexer.collection, indexer.backend)
+        return SemanticSearch(indexer)
     if search_mode == "bm25":
         return KeywordSearch(indexer)
     if search_mode == "hybrid":
-        return HybridSearch(indexer, indexer.backend)
+        return HybridSearch(indexer)
     if search_mode == "reranked":
-        return HybridSearch(indexer, indexer.backend)
+        return HybridSearch(indexer)
     if search_mode == "adaptive":
-        return AdaptiveSearch(indexer, indexer.backend)
+        return AdaptiveSearch(indexer)
     raise ValueError(f"Unknown search mode: {search_mode}")
 
 
