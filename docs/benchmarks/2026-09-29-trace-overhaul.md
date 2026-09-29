@@ -81,6 +81,21 @@ Adaptive p50 rose because it now fuses on a share of queries (22% on the team KB
 | Chunks of 2,000 characters | Semantic −0.037 on the wiki, −0.061 on the team KB |
 | Semantic fusion weight 0.3 or 0.5 | 0.4 matched or beat both on the real corpora |
 | Per-query-type fusion weights (0.7 questions, 0.4 keywords) | Same as a flat weight on both real corpora. Removed. |
+| Stronger embedding models (fastembed 0.8.1) | Better alone, no better in `adaptive`. See below. |
+
+### Embedding models
+
+Wiki, unscoped, semantic fusion weight 0.4. Weights of 0.5 and 0.6 did not help any model. The team KB scored 0.972 `adaptive` MRR with every model.
+
+| Model | Semantic | Hybrid | Adaptive | Query embed p50 | Full rebuild |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `all-MiniLM-L6-v2` (kept) | 0.823 | 0.892 | 0.891 | 1.4 ms | 21 s |
+| `BAAI/bge-small-en-v1.5` | 0.842 | 0.896 | 0.895 | 2.9 ms | 143 s |
+| `ibm-granite/granite-embedding-small-english-r2` | 0.860 | 0.892 | 0.889 | 3.2 ms | 179 s |
+| `google/embeddinggemma-300m` | 0.863 | 0.885 | 0.882 | 17.6 ms | 478 s |
+| `Qwen/Qwen3-Embedding-0.6B-Q` | 0.866 | 0.892 | 0.889 | 591 ms | 24 min |
+
+BM25 decides most rankings on these corpora, so better semantic ranking alone barely moves fused results. Revisit if a corpus leans on paraphrase more than on shared vocabulary.
 
 ## Reproduce
 
