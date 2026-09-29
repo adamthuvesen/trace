@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -14,7 +15,9 @@ from trace_search.config import settings
 from trace_search.indexing.index_store import (
     ChunkMetadata,
     IndexBusyError,
+    IndexCorruptError,
     IndexSnapshot,
+    load_snapshot,
     read_current,
     writer_lock,
 )
@@ -198,3 +201,26 @@ def test_path_prefix_filter_ranks_only_matching_rows():
     assert _paths(keyword_hits) == ["wiki/router.md"]
     assert _paths(semantic_hits) == ["wiki/router.md"]
     SemanticSearch._embedding_cache.clear()
+
+
+def test_generation_missing_its_bm25_files_is_not_served_silently(kb, tmp_path):
+    index_root = tmp_path / "idx"
+    _indexer(kb, index_root).build_index()
+    shutil.rmtree(index_root / read_current(index_root) / "bm25")
+
+    # Keyword search would quietly return nothing if this loaded with no BM25.
+    with pytest.raises(FileNotFoundError):
+        load_snapshot(index_root)
+
+
+def test_corrupt_generation_fails_loudly_and_plain_reindex_recovers(kb, tmp_path):
+    index_root = tmp_path / "idx"
+    _indexer(kb, index_root).build_index()
+    (index_root / read_current(index_root) / "chunks.json").write_text("{", "utf-8")
+
+    with pytest.raises(IndexCorruptError, match="Run `reindex`"):
+        KeywordSearch(_indexer(kb, index_root)).search("intro")
+
+    repaired = _indexer(kb, index_root)
+    repaired.build_index()
+    assert _paths(KeywordSearch(repaired).search("intro")) == ["intro.md"]

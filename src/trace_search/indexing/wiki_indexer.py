@@ -36,6 +36,7 @@ from trace_search.indexing.index_metadata import (
 from trace_search.indexing.index_paths import chunk_id
 from trace_search.indexing.index_store import (
     ChunkMetadata,
+    IndexCorruptError,
     IndexSnapshot,
     legacy_index_dirs,
     load_snapshot,
@@ -69,7 +70,9 @@ def _document_card(doc: LoadedDocument) -> tuple[str, str]:
     meta = doc["frontmatter"]
     title_key = doc["title"].casefold()
     names = [
-        name for name in (meta.title, *meta.aliases) if name.casefold() != title_key
+        name
+        for name in (meta.title, *meta.aliases)
+        if name and name.casefold() != title_key
     ]
     aliases = "; ".join(dict.fromkeys(names))
     lead = ""
@@ -247,7 +250,11 @@ class WikiIndexer:
 
     def _reusable_snapshot(self) -> IndexSnapshot | None:
         """The on-disk generation, when its chunks can be reused incrementally."""
-        current = self.snapshot()
+        try:
+            current = self.snapshot()
+        except IndexCorruptError as exc:
+            logger.warning("%s Rebuilding from scratch.", exc)
+            return None
         if current.generation is None:
             legacy = legacy_index_dirs(self.index_root)
             if legacy:

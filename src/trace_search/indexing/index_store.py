@@ -18,7 +18,7 @@ import logging
 import os
 import shutil
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -68,6 +68,10 @@ class ChunkMetadata(TypedDict):
 
 class IndexBusyError(RuntimeError):
     """Another process holds the index writer lock."""
+
+
+class IndexCorruptError(RuntimeError):
+    """The current generation's files cannot be read."""
 
 
 @contextmanager
@@ -161,6 +165,9 @@ class IndexSnapshot:
     _masks: dict[object, NDArray[np.bool_]] = field(
         default_factory=dict, compare=False, repr=False
     )
+    _row_terms: dict[int, frozenset[str]] = field(
+        default_factory=dict, compare=False, repr=False
+    )
 
     def __post_init__(self) -> None:
         rows = len(self.chunk_ids)
@@ -217,6 +224,20 @@ class IndexSnapshot:
     def __len__(self) -> int:
         return len(self.chunk_ids)
 
+    def row_terms(
+        self, row: int, extract: Callable[[str], frozenset[str]]
+    ) -> frozenset[str]:
+        """Terms of one chunk's text, computed once per snapshot.
+
+        Cached here rather than globally so the cache is bounded by the corpus
+        and released with the generation it belongs to.
+        """
+        terms = self._row_terms.get(row)
+        if terms is None:
+            terms = extract(self.texts[row])
+            self._row_terms[row] = terms
+        return terms
+
     def row_mask(self, key: object, keep: Any) -> NDArray[np.bool_]:
         """Boolean row mask for a filter, cached per snapshot by ``key``."""
         mask = self._masks.get(key)
@@ -230,6 +251,15 @@ class IndexSnapshot:
 
 def _generation_dir(index_root: Path, name: str) -> Path:
     return index_root / name
+
+
+def _fsync(path: Path) -> None:
+    """Flush a file or directory entry to disk before it is published."""
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def write_snapshot(index_root: Path, snapshot: IndexSnapshot) -> IndexSnapshot:
@@ -264,11 +294,19 @@ def write_snapshot(index_root: Path, snapshot: IndexSnapshot) -> IndexSnapshot:
         json.dumps(snapshot.metadata.to_dict(), indent=2, sort_keys=True),
         encoding="utf-8",
     )
+    # A power loss must not leave CURRENT naming a generation whose files never
+    # reached the disk.
+    for folder, _, files in os.walk(tmp_dir):
+        for filename in files:
+            _fsync(Path(folder) / filename)
     tmp_dir.rename(_generation_dir(index_root, name))
+    _fsync(index_root)
 
     pointer_tmp = index_root / (CURRENT_FILENAME + _TMP_SUFFIX)
     pointer_tmp.write_text(name, encoding="utf-8")
+    _fsync(pointer_tmp)
     os.replace(pointer_tmp, index_root / CURRENT_FILENAME)
+    _fsync(index_root)
     _prune_generations(index_root, keep=name)
     logger.info("Published index generation %s (%d chunks)", name, len(snapshot))
 
@@ -313,6 +351,9 @@ def _load_generation(index_root: Path, name: str) -> IndexSnapshot:
         json.loads((gen_dir / _METADATA_FILENAME).read_text(encoding="utf-8"))
     )
     bm25_dir = gen_dir / _BM25_DIRNAME
+    if raw_chunks["texts"] and not bm25_dir.is_dir():
+        # A writer pruned this generation mid-load; let the caller retry.
+        raise FileNotFoundError(bm25_dir)
     bm25 = bm25s.BM25.load(str(bm25_dir)) if bm25_dir.is_dir() else None
     return IndexSnapshot(
         generation=name,
@@ -337,6 +378,11 @@ def load_snapshot(index_root: Path) -> IndexSnapshot | None:
             if attempt == _LOAD_ATTEMPTS - 1:
                 raise
             logger.info("Index generation %s vanished mid-load; retrying", name)
+        except (OSError, ValueError, KeyError) as exc:
+            raise IndexCorruptError(
+                f"Index generation {name} in {index_root} is unreadable ({exc}). "
+                "Run `reindex` to rebuild it."
+            ) from exc
     return None
 
 

@@ -223,10 +223,7 @@ def _normalize_rank_term(term: str) -> str:
     return term[:-1] if len(term) > 3 and term.endswith("s") else term
 
 
-# Titles, paths, breadcrumbs, and chunk texts repeat across queries and across
-# the hundreds of chunk hits one query scores; tokenizing them once matters.
-@lru_cache(maxsize=65536)
-def _rank_terms(text: str, *, remove_stopwords: bool = False) -> frozenset[str]:
+def _extract_rank_terms(text: str, remove_stopwords: bool = False) -> frozenset[str]:
     terms: set[str] = set()
     for term in re.findall(r"[A-Za-z0-9_/-]+", text):
         if len(term) <= 1:
@@ -240,14 +237,23 @@ def _rank_terms(text: str, *, remove_stopwords: bool = False) -> frozenset[str]:
     return frozenset(terms)
 
 
-def _semantic_lexical_boost(query: str, hit: dict[str, Any]) -> float:
+# Titles, paths, breadcrumbs, and aliases repeat across the hundreds of chunk
+# hits one query scores; tokenizing them once matters. Chunk texts are cached
+# per snapshot instead (`IndexSnapshot.row_terms`), so this stays small.
+@lru_cache(maxsize=16384)
+def _rank_terms(text: str, *, remove_stopwords: bool = False) -> frozenset[str]:
+    return _extract_rank_terms(text, remove_stopwords)
+
+
+def _semantic_lexical_boost(
+    query: str, hit: dict[str, Any], content_terms: frozenset[str]
+) -> float:
     """Small deterministic boost for exact lexical anchors in semantic results."""
     query_terms = _rank_terms(query, remove_stopwords=True)
     if not query_terms:
         return 0.0
 
     path_terms = _rank_terms(str(hit.get("path", "")))
-    content_terms = _rank_terms(str(hit.get("content", "")))
 
     # A page's aliases are names just like its title.
     boost = max(
@@ -532,18 +538,16 @@ class SemanticSearch:
         rows = np.argpartition(-scores, pool - 1)[:pool]
         rows = rows[np.argsort(-scores[rows], kind="stable")]
 
-        hits = [
-            chunk_hit(
+        ranked_hits: list[tuple[float, dict[str, Any]]] = []
+        for row in rows:
+            hit = chunk_hit(
                 snapshot.chunks[row],
                 snapshot.texts[row],
                 float(scores[row]),
                 "semantic",
             )
-            for row in rows
-        ]
-        ranked_hits: list[tuple[float, dict[str, Any]]] = []
-        for hit in hits:
-            boost = _semantic_lexical_boost(query, hit)
+            content_terms = snapshot.row_terms(int(row), _extract_rank_terms)
+            boost = _semantic_lexical_boost(query, hit, content_terms)
             if boost:
                 hit["semantic_score"] = hit["score"]
                 hit["lexical_boost"] = boost

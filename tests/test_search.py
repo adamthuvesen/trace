@@ -17,6 +17,7 @@ from trace_search.retrieval.search import (
     _clamp_top_k,
     _fuse_by_document,
     _keyword_fetch_size,
+    _extract_rank_terms,
     _semantic_lexical_boost,
 )
 from trace_search.retrieval.search_types import SearchRoute
@@ -381,8 +382,10 @@ class TestSemanticLexicalBoost:
             "content": "EMBEDDING_BACKEND config chooses onnx or torch.",
         }
 
-        assert _semantic_lexical_boost(query, exact) > _semantic_lexical_boost(
-            query, partial
+        assert _semantic_lexical_boost(
+            query, exact, _extract_rank_terms(exact["content"])
+        ) > _semantic_lexical_boost(
+            query, partial, _extract_rank_terms(partial["content"])
         )
 
     def test_content_overlap_boosts_header_queries(self):
@@ -398,8 +401,10 @@ class TestSemanticLexicalBoost:
             "content": "Retry HTTP 408, 429, and 503 with backoff.",
         }
 
-        assert _semantic_lexical_boost(query, rate_limit) > _semantic_lexical_boost(
-            query, retryable
+        assert _semantic_lexical_boost(
+            query, rate_limit, _extract_rank_terms(rate_limit["content"])
+        ) > _semantic_lexical_boost(
+            query, retryable, _extract_rank_terms(retryable["content"])
         )
 
 

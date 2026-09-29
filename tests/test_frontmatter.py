@@ -124,3 +124,12 @@ def test_superseded_page_ranks_below_its_replacement_but_stays_findable(tmp_path
 
     assert [hit["path"] for hit in hits] == ["new.md", "old.md"]
     assert hits[1]["status"] == "superseded"
+
+
+def test_aliases_without_a_frontmatter_title_have_no_empty_name(tmp_path):
+    page = "---\naliases: [hobby builds]\n---\n# Internal tools\n\nList.\n"
+    indexer = _index(tmp_path, {"repos.md": page})
+    snapshot = indexer.snapshot()
+    row = snapshot.row_by_id["repos.md::0"]
+
+    assert snapshot.chunks[row]["aliases"] == "hobby builds"
