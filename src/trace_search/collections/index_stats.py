@@ -14,9 +14,9 @@ def _chunk_mode(chunking: dict[str, Any]) -> str:
 
 
 def _overlap_info(chunking: dict[str, Any]) -> str:
-    if not chunking.get("enable_overlap"):
-        return "disabled"
     size = chunking.get("char_overlap_size", settings.char_overlap_size)
+    if not size:
+        return "disabled"
     return f"enabled ({size} chars)"
 
 

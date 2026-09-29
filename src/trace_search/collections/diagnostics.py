@@ -15,7 +15,7 @@ from trace_search.indexing.index_metadata import (
     IndexMetadata,
     SourceChangeSet,
     categorize_source_changes,
-    metadata_matches_active_model,
+    metadata_matches_settings,
 )
 from trace_search.extraction.corpus import iter_kb_files
 from trace_search.indexing.index_store import (
@@ -169,10 +169,10 @@ def _freshness_diagnosis(kb_path: Path, metadata: IndexMetadata) -> IndexDiagnos
     messages: list[str] = []
     status = "healthy"
 
-    if not metadata_matches_active_model(metadata):
+    if not metadata_matches_settings(metadata):
         status = "incompatible"
         messages.append(
-            "Index metadata does not match the active embedding model/backend."
+            "Index was built with a different embedding model or chunk settings."
         )
 
     changes = categorize_source_changes(kb_path, metadata)

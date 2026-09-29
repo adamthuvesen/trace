@@ -89,13 +89,13 @@ class Settings(BaseSettings):
         default=0.5, ge=0, le=1, description="BM25 b (document length normalization)"
     )
 
-    # Chunking settings
-    enable_chunk_overlap: bool = True
+    # Chunking. 1500 chars beat 1000 and 2000 on both measured corpora
+    # (docs/benchmarks/2026-09-29-trace-overhaul.md).
     char_chunk_size: int = Field(
-        default=1000, gt=0, le=10000, description="Max chars per chunk"
+        default=1500, gt=0, le=10000, description="Max chars per chunk"
     )
     char_overlap_size: int = Field(
-        default=100, ge=0, description="Character overlap between chunks"
+        default=100, ge=0, description="Character overlap between chunks; 0 disables"
     )
 
     # Directory exclusions (comma-separated)

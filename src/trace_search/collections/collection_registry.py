@@ -21,7 +21,7 @@ from trace_search.extraction.extractors import (
     SUPPORTED_EXTENSIONS,
     extract_content,
 )
-from trace_search.indexing.index_metadata import metadata_matches_active_model
+from trace_search.indexing.index_metadata import metadata_matches_settings
 from trace_search.indexing.index_store import read_current, read_current_metadata
 from trace_search.indexing.kb_paths import get_default_index_root, should_exclude_path
 from trace_search.retrieval.search import (
@@ -277,7 +277,7 @@ class CollectionRegistry:
                 missing.append(col.name)
                 continue
             metadata = read_current_metadata(col.index_path)
-            if metadata is None or not metadata_matches_active_model(metadata):
+            if metadata is None or not metadata_matches_settings(metadata):
                 incompatible.append(col.name)
         if missing:
             names = ", ".join(sorted(missing))

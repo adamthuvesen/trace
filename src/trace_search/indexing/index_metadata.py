@@ -11,8 +11,9 @@ from typing import Any
 from trace_search.config import settings
 from trace_search.extraction.corpus import iter_kb_files
 
-# v4: generation store (no Chroma). v5: frontmatter-aware chunks.
-INDEX_METADATA_VERSION = 5
+# v4: generation store (no Chroma). v5: frontmatter-aware chunks. v6: records
+# chunk settings.
+INDEX_METADATA_VERSION = 6
 
 _HASH_CHUNK_SIZE = 64 * 1024
 
@@ -53,6 +54,8 @@ class IndexMetadata:
     embedding_model: str
     model_slug: str
     embedding_dims: int
+    char_chunk_size: int
+    char_overlap_size: int
     document_count: int
     chunk_count: int
     source_files: list[SourceFileRecord]
@@ -142,6 +145,8 @@ def build_index_metadata(
         embedding_model=settings.embedding_model,
         model_slug=settings.model_slug,
         embedding_dims=settings.embedding_dims,
+        char_chunk_size=settings.char_chunk_size,
+        char_overlap_size=settings.char_overlap_size,
         document_count=document_count,
         chunk_count=chunk_count,
         source_files=source_files,
@@ -166,6 +171,8 @@ def index_metadata_from_dict(raw: dict[str, Any]) -> IndexMetadata | None:
             embedding_model=str(raw.get("embedding_model", "")),
             model_slug=str(raw.get("model_slug", "")),
             embedding_dims=int(raw.get("embedding_dims", 0)),
+            char_chunk_size=int(raw.get("char_chunk_size", 0)),
+            char_overlap_size=int(raw.get("char_overlap_size", 0)),
             document_count=int(raw.get("document_count", 0)),
             chunk_count=int(raw.get("chunk_count", 0)),
             source_files=[
@@ -189,12 +196,18 @@ def index_metadata_from_dict(raw: dict[str, Any]) -> IndexMetadata | None:
         return None
 
 
-def metadata_matches_active_model(metadata: IndexMetadata) -> bool:
-    """Return whether metadata matches the active embedding settings."""
+def metadata_matches_settings(metadata: IndexMetadata) -> bool:
+    """Whether the index was built with the active embedding and chunk settings.
+
+    Reusing chunks built under different settings would leave a silently
+    mixed index, so any mismatch forces a full rebuild.
+    """
     return bool(
         metadata.embedding_model == settings.embedding_model
         and metadata.model_slug == settings.model_slug
         and metadata.embedding_dims == settings.embedding_dims
+        and metadata.char_chunk_size == settings.char_chunk_size
+        and metadata.char_overlap_size == settings.char_overlap_size
     )
 
 

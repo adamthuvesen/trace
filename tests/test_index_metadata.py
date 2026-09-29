@@ -11,7 +11,7 @@ from trace_search.indexing.index_metadata import (
     collect_source_files,
     hash_file,
     index_metadata_from_dict,
-    metadata_matches_active_model,
+    metadata_matches_settings,
     utc_now_iso,
 )
 
@@ -36,7 +36,7 @@ def test_metadata_round_trip_records_active_model_and_sources(tmp_path):
     record = loaded.source_files[0]
     assert record.path == "intro.md"
     assert record.content_sha
-    assert metadata_matches_active_model(loaded)
+    assert metadata_matches_settings(loaded)
 
 
 def test_other_metadata_versions_are_treated_as_missing(tmp_path):
@@ -71,7 +71,7 @@ def test_model_mismatch_detection(tmp_path):
         }
     )
 
-    assert not metadata_matches_active_model(mismatched)
+    assert not metadata_matches_settings(mismatched)
 
 
 def test_collect_source_files_reuses_prior_hash_when_stat_matches(tmp_path):

@@ -31,7 +31,7 @@ from trace_search.indexing.embeddings import (
 from trace_search.indexing.index_metadata import (
     build_index_metadata,
     categorize_source_changes,
-    metadata_matches_active_model,
+    metadata_matches_settings,
     utc_now_iso,
 )
 from trace_search.indexing.index_paths import chunk_id
@@ -270,8 +270,10 @@ class WikiIndexer:
         if current.metadata is None:
             logger.info("Index metadata missing or outdated; running a full rebuild")
             return None
-        if not metadata_matches_active_model(current.metadata):
-            logger.info("Index was built with another embedding model; rebuilding")
+        if not metadata_matches_settings(current.metadata):
+            logger.info(
+                "Index was built with other model or chunk settings; rebuilding"
+            )
             return None
         return current
 
@@ -401,7 +403,6 @@ class WikiIndexer:
             "kb_path": str(self.kb_path),
             "index_root": str(self.index_root),
             "chunking": {
-                "enable_overlap": settings.enable_chunk_overlap,
                 "char_chunk_size": settings.char_chunk_size,
                 "char_overlap_size": settings.char_overlap_size,
             },

@@ -218,6 +218,23 @@ def test_embedding_model_mismatch_promotes_to_full_rebuild(kb_paths):
     assert meta.embedding_model == settings.embedding_model
 
 
+def test_chunk_size_change_rechunks_unchanged_files(kb_paths, monkeypatch):
+    kb, index_root = kb_paths
+    body = "\n\n".join(f"Paragraph {i} " + "word " * 30 for i in range(12))
+    (kb / "long.md").write_text(f"# Long\n\n{body}", encoding="utf-8")
+
+    _make_indexer(kb, index_root).build_index(force=True)
+    coarse = len(_make_indexer(kb, index_root).snapshot())
+
+    monkeypatch.setattr(settings, "char_chunk_size", 400, raising=False)
+    fresh = _make_indexer(kb, index_root)
+    fresh.build_index()
+
+    assert len(fresh.snapshot()) > coarse
+    meta = read_current_metadata(index_root)
+    assert meta is not None and meta.char_chunk_size == 400
+
+
 def test_chunk_ids_are_stable_for_unchanged_files(kb_paths):
     kb, index_root = kb_paths
     (kb / "intro.md").write_text(
