@@ -800,7 +800,11 @@ class AdaptiveSearch:
             )
 
         top_k = _clamp_top_k(top_k)
-        keyword_hits = self.keyword.search(query, max_results=top_k, filters=filters)
+        # The confidence gate compares the top hit with the runner-up, so fetch
+        # at least two even when the caller asked for one.
+        keyword_hits = self.keyword.search(
+            query, max_results=max(top_k, 2), filters=filters
+        )
         if not keyword_hits and is_keywordish_query(query):
             return AdaptiveSearchResult(
                 hits=[],
@@ -816,7 +820,7 @@ class AdaptiveSearch:
 
         if strong:
             return AdaptiveSearchResult(
-                hits=add_match_hints(query, keyword_hits),
+                hits=add_match_hints(query, keyword_hits[:top_k]),
                 route=SearchRoute(
                     strategy="keyword",
                     reason=reason,

@@ -396,3 +396,20 @@ def test_specialist_keyword_tool_bypasses_adaptive_registry_path(tmp_path):
 
     keyword.assert_called_once()
     search_adaptive.assert_not_called()
+
+
+def test_adaptive_search_top_one_still_compares_against_runner_up():
+    """top_k=1 must not hide the runner-up the confidence gate needs."""
+    adaptive = AdaptiveSearch.__new__(AdaptiveSearch)
+    adaptive.keyword = MagicMock()
+    adaptive.hybrid = MagicMock()
+    adaptive.keyword.search.side_effect = lambda query, max_results, filters: [
+        _hit(path="right.md", score=4.0),
+        _hit(path="runner-up.md", score=1.0),
+    ][:max_results]
+
+    result = adaptive.search("BM25", top_k=1)
+
+    assert result.route.strategy == "keyword"
+    assert [hit["path"] for hit in result.hits] == ["right.md"]
+    adaptive.hybrid.search.assert_not_called()
