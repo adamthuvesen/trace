@@ -8,94 +8,57 @@ import numpy as np
 
 from trace_search.config import settings
 from trace_search.indexing.index_store import IndexSnapshot
-from trace_search.retrieval.query_profile import (
-    WEIGHT_KEYWORD,
-    WEIGHT_QUESTION,
-    classify_query,
-    is_conceptual_query,
-    is_keywordish_query,
-)
+from trace_search.retrieval.query_profile import is_keywordish_query
 from trace_search.retrieval.search import (
     _BM25_MIN_FILE_FETCH,
     HybridSearch,
     KeywordSearch,
     SemanticSearch,
     _clamp_top_k,
+    _fuse_by_document,
     _keyword_fetch_size,
     _semantic_lexical_boost,
 )
 from trace_search.retrieval.search_types import SearchRoute
 
 
-class TestHybridSearchQueryClassification:
-    """Exercises shared query_profile.classify_query."""
+class TestKeywordishQuery:
+    def test_identifier_query_is_keywordish(self):
+        assert is_keywordish_query("HTTP 429 Retry-After burst limit")
 
-    @staticmethod
-    def _classify(query: str) -> tuple[str, float]:
-        return classify_query(query)
+    def test_dense_noun_phrase_is_keywordish(self):
+        assert is_keywordish_query(
+            "term frequency saturation document length normalization"
+        )
 
-    def test_question_classified_as_question(self):
-        query_type, weight = self._classify("How does semantic ranking work?")
-        assert query_type == "question"
-        assert weight == WEIGHT_QUESTION
+    def test_natural_question_is_not_keywordish(self):
+        assert not is_keywordish_query("how does the growth model relate to funnels")
 
     def test_lazy_reranker_type_hints_resolve_at_runtime(self):
         assert "_reranker" in get_type_hints(HybridSearch)
         assert "return" in get_type_hints(HybridSearch._get_reranker)
         assert "filters" in get_type_hints(SearchRoute)
 
-    def test_short_definition_classified_as_keyword(self):
-        query_type, weight = self._classify("What is BM25?")
-        assert query_type == "keyword"
-        assert weight == WEIGHT_KEYWORD
 
-    def test_short_keyword_query_classified_as_keyword(self):
-        query_type, weight = self._classify("frontmatter")
-        assert query_type == "keyword"
-        assert weight == WEIGHT_KEYWORD
+class TestDocumentFusion:
+    def test_page_found_by_both_retrievers_outranks_single_retriever_tops(self):
+        # Semantic returns chunks (two from kw-top.md); keyword returns files.
+        # both.md is second in each list and should win once fused per document.
+        keyword = [
+            {"id": "kw-top.md::0", "path": "kw-top.md"},
+            {"id": "both.md::0", "path": "both.md"},
+        ]
+        semantic = [
+            {"id": "sem-top.md::3", "path": "sem-top.md"},
+            {"id": "sem-top.md::1", "path": "sem-top.md"},
+            {"id": "both.md::2", "path": "both.md"},
+        ]
 
-        query_type, weight = self._classify("heading chunking")
-        assert query_type == "keyword"
+        fused = _fuse_by_document([(0.5, keyword), (0.5, semantic)], limit=3)
 
-    def test_short_acronym_query_classified_as_keyword(self):
-        """Acronyms should not trigger expansion; routed as plain keyword."""
-        query_type, weight = self._classify("RRF")
-        assert query_type == "keyword"
-        assert weight == WEIGHT_KEYWORD
-
-    def test_long_query_classified_as_default(self):
-        query_type, weight = self._classify(
-            "compare semantic and keyword search behavior"
-        )
-        assert query_type == "default"
-        assert weight == WEIGHT_QUESTION
-
-    def test_weight_constants_defined(self):
-        assert WEIGHT_KEYWORD == 0.4
-        assert WEIGHT_QUESTION == 0.7
-
-    def test_question_weight_favors_semantic(self):
-        assert WEIGHT_QUESTION > 0.5
-
-    def test_keyword_weight_favors_bm25(self):
-        assert WEIGHT_KEYWORD < 0.5
-
-    def test_weights_in_valid_range(self):
-        weights = [WEIGHT_KEYWORD, WEIGHT_QUESTION]
-        for w in weights:
-            assert 0 <= w <= 1, f"Weight {w} should be between 0 and 1"
-
-    def test_identifier_query_classified_as_keywordish(self):
-        assert is_keywordish_query("HTTP 429 Retry-After burst limit")
-        assert not is_conceptual_query("HTTP 429 Retry-After burst limit")
-        assert self._classify("HTTP 429 Retry-After burst limit")[1] == WEIGHT_KEYWORD
-
-    def test_dense_noun_phrase_classified_as_keywordish(self):
-        query = "term frequency saturation document length normalization"
-
-        assert is_keywordish_query(query)
-        assert not is_conceptual_query(query)
-        assert self._classify(query)[1] == WEIGHT_KEYWORD
+        assert [hit["path"] for hit in fused] == ["both.md", "kw-top.md", "sem-top.md"]
+        assert fused[0]["id"] == "both.md::0"  # keyword's chunk represents it
+        assert all(hit["source"] == "hybrid" for hit in fused)
 
 
 class TestEmptyCorpusSearch:

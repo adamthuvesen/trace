@@ -1,10 +1,9 @@
-"""Query classification helpers for hybrid and adaptive search."""
+"""Query heuristics for adaptive search."""
 
 from __future__ import annotations
 
 import re
 
-QUESTION_STARTERS = frozenset({"what", "how", "where", "when", "why", "which", "who"})
 LEXICAL_STOPWORDS = frozenset(
     {
         "a",
@@ -27,27 +26,10 @@ LEXICAL_STOPWORDS = frozenset(
     }
 )
 
-# AdaptiveSearch keyword-strength heuristics
-BM25_WEAK_BEST_SCORE = 0.05
-ADAPTIVE_KEYWORD_STRENGTH_TOP_K = 3
-# A hit counts toward BM25 "confidence" only if its score is at least this
-# fraction of the best hit's. A common word in a conceptual query can match many
-# documents weakly and inflate the raw hit count; this keeps the long weak tail
-# from masquerading as a confident keyword result.
-BM25_STRONG_HIT_FRACTION = 0.5
-# A conceptual query also needs a clearly dominant top hit to trust BM25. When the
-# best score barely edges the runner-up, the lexical match is coincidental — a
-# vocabulary-mismatch query with no real keyword anchor — and vector search is the
-# safer route.
+# Adaptive search trusts BM25 alone when its top document scores at least this
+# multiple of the runner-up. Below it, the lexical evidence does not single out
+# one page, and fusing in semantic ranking wins more often than it loses.
 BM25_DOMINANCE_MARGIN = 1.3
-# When the best BM25 hit is far ahead of the runner-up, trust it even for a
-# conceptual query with a short strong-hit list: that shape usually means the
-# query contains a grounded lexical anchor, not coincidental common words.
-BM25_DECISIVE_TOP_MARGIN = 1.8
-
-# HybridSearch default semantic weights
-WEIGHT_QUESTION = 0.7
-WEIGHT_KEYWORD = 0.4
 
 
 def _words(query: str) -> list[str]:
@@ -77,34 +59,3 @@ def is_keywordish_query(query: str) -> bool:
 
     dense_terms = [word for word in words if word not in LEXICAL_STOPWORDS]
     return len(words) <= 6 and len(dense_terms) == len(words)
-
-
-def classify_query(query: str) -> tuple[str, float]:
-    """Classify query type and return optimal semantic weight."""
-    words = _words(query)
-
-    if not words:
-        return ("default", WEIGHT_QUESTION)
-
-    if is_keywordish_query(query):
-        return ("keyword", WEIGHT_KEYWORD)
-
-    if words[0] in QUESTION_STARTERS:
-        return ("question", WEIGHT_QUESTION)
-
-    if len(words) <= 2:
-        return ("keyword", WEIGHT_KEYWORD)
-
-    return ("default", WEIGHT_QUESTION)
-
-
-def is_conceptual_query(query: str) -> bool:
-    """Return whether a query likely needs semantic/hybrid retrieval."""
-    words = _words(query)
-    if not words:
-        return False
-    if is_keywordish_query(query):
-        return False
-    if words[0] in QUESTION_STARTERS:
-        return True
-    return len(words) >= 5

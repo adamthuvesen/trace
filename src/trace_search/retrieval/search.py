@@ -30,14 +30,8 @@ from trace_search.retrieval.formatting import (  # noqa: F401 - package re-expor
     format_search_context,
 )
 from trace_search.retrieval.query_profile import (
-    ADAPTIVE_KEYWORD_STRENGTH_TOP_K,
     BM25_DOMINANCE_MARGIN,
-    BM25_DECISIVE_TOP_MARGIN,
-    BM25_STRONG_HIT_FRACTION,
-    BM25_WEAK_BEST_SCORE,
     LEXICAL_STOPWORDS,
-    classify_query,
-    is_conceptual_query,
     is_keywordish_query,
 )
 from trace_search.retrieval.search_types import (
@@ -626,6 +620,37 @@ class KeywordSearch:
         )
 
 
+_RRF_K = 60
+
+
+def _fuse_by_document(
+    weighted_lists: list[tuple[float, list[SearchResult]]], limit: int
+) -> list[SearchResult]:
+    """Reciprocal-rank fusion at document level.
+
+    Each list contributes its best-ranked chunk per document, so a page that
+    both retrievers find combines its evidence instead of splitting it across
+    chunk ids. The representative hit comes from the first list that has the
+    document.
+    """
+    fused: dict[str, float] = defaultdict(float)
+    representative: dict[str, SearchResult] = {}
+    for weight, hits in weighted_lists:
+        seen: set[str] = set()
+        for hit in hits:
+            path = str(hit["path"])
+            if path in seen:
+                continue
+            fused[path] += weight / (_RRF_K + len(seen) + 1)
+            seen.add(path)
+            representative.setdefault(path, hit)
+    ranked = heapq.nlargest(limit, fused, key=fused.__getitem__)
+    return [
+        {**representative[path], "rrf_score": fused[path], "source": "hybrid"}
+        for path in ranked
+    ]
+
+
 class HybridSearch:
     """Combined semantic + keyword search with RRF ranking and optional reranking."""
 
@@ -651,7 +676,7 @@ class HybridSearch:
         self,
         query: str,
         top_k: int = 10,
-        semantic_weight: float | None = None,
+        semantic_weight: float = 0.5,
         rerank: bool | None = None,
         filters: SearchFilters | None = None,
     ) -> list[SearchResult]:
@@ -660,7 +685,7 @@ class HybridSearch:
         Args:
             query: Search query
             top_k: Number of results to return
-            semantic_weight: Weight for semantic vs keyword (0-1). If None, auto-detected.
+            semantic_weight: Weight of the semantic ranking in the fusion (0-1).
             rerank: Override reranking setting (None uses RERANKER_ENABLED env var)
             filters: Optional filters; applied within both underlying searches.
         """
@@ -669,53 +694,27 @@ class HybridSearch:
         top_k = _clamp_top_k(top_k)
         filters = filters or SearchFilters()
 
-        query_type: str | None = None
-        if semantic_weight is None:
-            query_type, semantic_weight = classify_query(query)
-            logger.debug(
-                "Query classified as '%s', weight=%s", query_type, semantic_weight
-            )
-
         use_rerank = rerank if rerank is not None else settings.reranker_enabled
 
         # Reranking benefits from a wider candidate pool.
         candidate_multiplier = 3 if use_rerank else 2
         n_candidates = top_k * candidate_multiplier
 
+        # Semantic hits are chunks and several can share a file; fetch deeper
+        # so fusion still sees enough distinct documents.
         semantic_results = self.semantic.search(
-            query, top_k=n_candidates, filters=filters
+            query, top_k=n_candidates * 2, filters=filters
         )
         keyword_results = self.keyword.search(
             query, max_results=n_candidates, filters=filters
         )
-
-        rrf_scores: dict[str, float] = defaultdict(float)
-        doc_data: dict[str, SearchResult] = {}
-        k = 60  # RRF constant
-
-        # Dedup by chunk ID, not file path, so multiple chunks of one doc can co-rank.
-        for rank, hit in enumerate(semantic_results):
-            chunk_id = hit["id"]
-            rrf_scores[chunk_id] += semantic_weight * (1 / (k + rank + 1))
-            if chunk_id not in doc_data:
-                doc_data[chunk_id] = hit
-
-        for rank, hit in enumerate(keyword_results):
-            chunk_id = hit["id"]
-            rrf_scores[chunk_id] += (1 - semantic_weight) * (1 / (k + rank + 1))
-            if chunk_id not in doc_data:
-                doc_data[chunk_id] = hit
-
-        ranked_ids = heapq.nlargest(
-            top_k * candidate_multiplier, rrf_scores, key=rrf_scores.__getitem__
+        candidates = _fuse_by_document(
+            [
+                (1 - semantic_weight, keyword_results),
+                (semantic_weight, semantic_results),
+            ],
+            n_candidates,
         )
-
-        candidates: list[SearchResult] = []
-        for chunk_id in ranked_ids:
-            result = doc_data[chunk_id].copy()
-            result["rrf_score"] = rrf_scores[chunk_id]
-            result["source"] = "hybrid"
-            candidates.append(result)
 
         if use_rerank and candidates:
             reranker = self._get_reranker()
@@ -794,56 +793,23 @@ class AdaptiveSearch:
         return best_score >= _ADAPTIVE_MIN_FALLBACK_SEMANTIC_SCORE
 
     @staticmethod
-    def _keyword_strength(
-        query: str,
-        hits: list[dict[str, Any]],
-        top_k: int,
-    ) -> tuple[bool, str]:
+    def _keyword_strength(hits: list[dict[str, Any]]) -> tuple[bool, str]:
+        """Trust BM25 alone only when its top document clearly leads.
+
+        A near-tie at the top means the lexical evidence does not single out a
+        page (common words in a broad question, or several pages sharing the
+        vocabulary), so fusing in semantic ranking is the better bet.
+        """
         if not hits:
             return False, "BM25 returned no positive-score results"
-
-        best_score = float(hits[0].get("score", 0) or 0)
-        distinct_docs = {hit.get("path") for hit in hits}
-        requested = max(1, min(top_k, ADAPTIVE_KEYWORD_STRENGTH_TOP_K))
-        conceptual = is_conceptual_query(query)
-        # Confidence for conceptual queries is the count of *strong* hits, not the
-        # raw hit count: a common query word (e.g. "set" in "how do I set X")
-        # matches many docs weakly and would otherwise look like a confident BM25
-        # result, letting adaptive search skip a fallback it should take.
-        strong_hits = sum(
-            1
-            for hit in hits
-            if float(hit.get("score", 0) or 0) >= BM25_STRONG_HIT_FRACTION * best_score
-        )
-
-        if best_score <= 0:
-            return False, "BM25 best score was not positive"
-        if best_score < BM25_WEAK_BEST_SCORE:
-            return False, "BM25 best score was very low"
-        runner_up = float(hits[1].get("score", 0) or 0) if len(hits) > 1 else 0.0
-        metadata_overlap = float(hits[0].get("bm25_metadata_overlap", 0) or 0)
-        if conceptual and metadata_overlap > 0:
-            return True, "conceptual query had an anchored BM25 file hit"
-        if len(hits) > 1 and len(distinct_docs) == 1 and conceptual:
-            return False, "BM25 results were duplicate-heavy for a conceptual query"
-        if (
-            conceptual
-            and runner_up > 0
-            and best_score >= BM25_DECISIVE_TOP_MARGIN * runner_up
-        ):
-            return True, "conceptual query had a decisive BM25 top hit"
-        if conceptual and strong_hits < requested:
-            return False, "conceptual query had too few strong BM25 hits"
-        if conceptual and strong_hits < top_k:
-            return False, "conceptual query lacks enough strong BM25 hits"
-        if (
-            conceptual
-            and runner_up > 0
-            and best_score < BM25_DOMINANCE_MARGIN * runner_up
-        ):
-            return False, "no dominant BM25 match for a conceptual query"
-
-        return True, "BM25 returned strong exact-match results"
+        if len(hits) == 1:
+            return True, "BM25 found a single matching document"
+        best = float(hits[0].get("score", 0) or 0)
+        runner_up = float(hits[1].get("score", 0) or 0)
+        margin = best / runner_up if runner_up > 0 else float("inf")
+        if margin >= BM25_DOMINANCE_MARGIN:
+            return True, f"BM25 top hit leads the runner-up {margin:.2f}x"
+        return False, f"no dominant BM25 hit (top leads runner-up {margin:.2f}x)"
 
     def search(
         self,
@@ -877,7 +843,7 @@ class AdaptiveSearch:
                 ),
             )
 
-        strong, reason = self._keyword_strength(query, keyword_hits, top_k)
+        strong, reason = self._keyword_strength(keyword_hits)
 
         if strong:
             return AdaptiveSearchResult(
