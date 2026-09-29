@@ -1,4 +1,4 @@
-"""Tests for the embedding backend abstraction."""
+"""Tests for the embedding backend."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from trace_search.config import get_settings
 from trace_search.indexing.embeddings import (
     EmbeddingBackend,
     OnnxBackend,
-    TorchBackend,
     build_embedding_backend,
 )
 
@@ -22,14 +21,6 @@ def _reset_settings():
 
 
 @pytest.mark.slow
-def test_torch_backend_satisfies_protocol():
-    backend = TorchBackend("all-MiniLM-L6-v2")
-    assert isinstance(backend, EmbeddingBackend)
-    assert backend.model_name == "all-MiniLM-L6-v2"
-    assert backend.dim == 384
-
-
-@pytest.mark.slow
 def test_onnx_backend_satisfies_protocol():
     backend = OnnxBackend("all-MiniLM-L6-v2")
     assert isinstance(backend, EmbeddingBackend)
@@ -39,66 +30,35 @@ def test_onnx_backend_satisfies_protocol():
 
 @pytest.mark.slow
 def test_encode_shape_and_dtype():
-    for backend in (TorchBackend("all-MiniLM-L6-v2"), OnnxBackend("all-MiniLM-L6-v2")):
-        out = backend.encode(["hello world", "second sentence"])
-        assert out.shape == (2, 384)
-        assert out.dtype == np.float32
+    backend = OnnxBackend("all-MiniLM-L6-v2")
+    assert backend.encode(["hello world", "second sentence"]).shape == (2, 384)
+    out = backend.encode_one("hello world")
+    assert out.shape == (384,)
+    assert out.dtype == np.float32
 
 
 @pytest.mark.slow
-def test_encode_one_shape_and_dtype():
-    for backend in (TorchBackend("all-MiniLM-L6-v2"), OnnxBackend("all-MiniLM-L6-v2")):
-        out = backend.encode_one("hello world")
-        assert out.shape == (384,)
-        assert out.dtype == np.float32
+def test_factory_returns_onnx():
+    assert isinstance(build_embedding_backend(), OnnxBackend)
 
 
-@pytest.mark.slow
-def test_factory_returns_torch(monkeypatch):
-    monkeypatch.setenv("EMBEDDING_BACKEND", "torch")
-    get_settings.cache_clear()
-    backend = build_embedding_backend()
-    assert isinstance(backend, TorchBackend)
-
-
-@pytest.mark.slow
-def test_factory_returns_onnx(monkeypatch):
-    monkeypatch.setenv("EMBEDDING_BACKEND", "onnx")
-    get_settings.cache_clear()
-    backend = build_embedding_backend()
-    assert isinstance(backend, OnnxBackend)
-
-
-def test_invalid_backend_value_raises(monkeypatch):
-    monkeypatch.setenv("EMBEDDING_BACKEND", "mps")
-    get_settings.cache_clear()
-    from pydantic import ValidationError
-
-    with pytest.raises(ValidationError):
-        # Trigger settings construction via any attribute read on the fresh cache
-        from trace_search.config import Settings
-
-        Settings()
+def test_unsupported_model_is_rejected_before_loading():
+    with pytest.raises(ValueError, match="not supported"):
+        OnnxBackend("no-such-model")
 
 
 def test_empty_encode_returns_empty_matrix():
-    torch_backend = TorchBackend.__new__(TorchBackend)
-    torch_backend.dim = 384
-    onnx_backend = OnnxBackend.__new__(OnnxBackend)
-    onnx_backend.dim = 384
-
-    for backend in (torch_backend, onnx_backend):
-        out = backend.encode([])
-        assert out.shape == (0, 384)
-        assert out.dtype == np.float32
+    backend = OnnxBackend.__new__(OnnxBackend)
+    backend.dim = 384
+    out = backend.encode([])
+    assert out.shape == (0, 384)
+    assert out.dtype == np.float32
 
 
-def test_eval_cli_has_ab_flag():
-    """Smoke test: --ab flag is registered on the eval CLI."""
+def test_eval_cli_registers_stress_and_keyword_flags():
     from tools.eval.cli import main
 
     param_names = {p.name for p in main.params}
-    assert "ab" in param_names
     for name in (
         "ci_stress",
         "include_stress",

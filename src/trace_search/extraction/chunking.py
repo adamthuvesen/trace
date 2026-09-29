@@ -156,19 +156,15 @@ def _heading_level_changed(current_level: int | None, next_level: int | None) ->
 def _resolve_chunking_params(
     max_chunk_chars: int | None,
     overlap_chars: int | None,
-    enable_overlap: bool | None,
 ) -> ChunkingParams:
-    """Resolve chunking parameters with defaults from settings."""
-    if max_chunk_chars is None:
-        max_chunk_chars = settings.char_chunk_size
-    if overlap_chars is None:
-        overlap_chars = settings.char_overlap_size
-    if enable_overlap is None:
-        enable_overlap = settings.enable_chunk_overlap
-
+    """Resolve chunking parameters with defaults from settings (overlap 0 = off)."""
     return ChunkingParams(
-        max_size=max_chunk_chars,
-        overlap_size=0 if not enable_overlap else overlap_chars,
+        max_size=settings.char_chunk_size
+        if max_chunk_chars is None
+        else max_chunk_chars,
+        overlap_size=settings.char_overlap_size
+        if overlap_chars is None
+        else overlap_chars,
     )
 
 
@@ -177,20 +173,18 @@ def chunk_by_headings(
     max_chunk_chars: int | None = None,
     *,
     overlap_chars: int | None = None,
-    enable_overlap: bool | None = None,
 ) -> list[str]:
     """Split content by markdown headings, respecting size limits.
 
     Args:
         content: Markdown content to chunk.
         max_chunk_chars: Max characters per chunk.
-        overlap_chars: Character overlap between chunks.
-        enable_overlap: Enable overlap.
+        overlap_chars: Character overlap between chunks; 0 disables overlap.
 
     Returns:
         List of content chunks.
     """
-    params = _resolve_chunking_params(max_chunk_chars, overlap_chars, enable_overlap)
+    params = _resolve_chunking_params(max_chunk_chars, overlap_chars)
 
     # Split on headings (keep the heading with content)
     sections = re.split(r"(?=^#{1,3}\s)", content, flags=re.MULTILINE)
@@ -229,7 +223,6 @@ def chunk_by_headings(
                     section,
                     max_chunk_chars=max_chunk_chars,
                     overlap_chars=overlap_chars,
-                    enable_overlap=enable_overlap,
                 )
                 heading_context = _extract_heading_context(section)
                 sub_chunks = _prefix_heading_context(
@@ -271,20 +264,18 @@ def chunk_by_paragraphs(
     max_chunk_chars: int | None = None,
     *,
     overlap_chars: int | None = None,
-    enable_overlap: bool | None = None,
 ) -> list[str]:
     """Split content by paragraphs for large sections.
 
     Args:
         content: Content to chunk.
         max_chunk_chars: Max characters per chunk.
-        overlap_chars: Character overlap between chunks.
-        enable_overlap: Enable overlap.
+        overlap_chars: Character overlap between chunks; 0 disables overlap.
 
     Returns:
         List of content chunks.
     """
-    params = _resolve_chunking_params(max_chunk_chars, overlap_chars, enable_overlap)
+    params = _resolve_chunking_params(max_chunk_chars, overlap_chars)
 
     paragraphs = content.split("\n\n")
     chunks: list[str] = []
@@ -347,9 +338,13 @@ def chunk_by_paragraphs(
     return chunks
 
 
-def create_contextual_chunk(title: str, folder: str, chunk: str) -> str:
-    """Add document context to chunk (Anthropic's contextual retrieval pattern)."""
-    return f"Document: {title}\nFolder: {folder}\n\n{chunk}"
+def create_contextual_chunk(title: str, folder: str, chunk: str, lead: str = "") -> str:
+    """Add document context to chunk (Anthropic's contextual retrieval pattern).
+
+    ``lead`` carries the document card (aliases, summary) on the first chunk.
+    """
+    body = f"{lead}\n{chunk}" if lead else chunk
+    return f"Document: {title}\nFolder: {folder}\n\n{body}".rstrip()
 
 
 def extract_breadcrumb(chunk: str, title: str) -> str:

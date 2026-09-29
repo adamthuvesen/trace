@@ -346,8 +346,7 @@ def main(
             click.echo(f"Indexing {kb.kb_id}: {kb.kb_path}")
             indexer = WikiIndexer(
                 kb_path=kb.kb_path,
-                chroma_path=tmp_root / kb.kb_id / "chroma",
-                bm25_path=tmp_root / kb.kb_id / "bm25",
+                index_root=tmp_root / kb.kb_id,
                 backend=backend,
             )
             indexer.build_index(force=True)

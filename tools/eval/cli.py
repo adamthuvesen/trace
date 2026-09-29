@@ -105,11 +105,7 @@ def resolve_eval_scope(
     "--search",
     type=click.Choice(SEARCH_MODES),
     default="hybrid",
-    help=(
-        "Search mode to evaluate "
-        "(default: hybrid; reranked forces cross-encoder reranking; "
-        "adaptive matches MCP default)"
-    ),
+    help=("Search mode to evaluate (default: hybrid; adaptive matches MCP default)"),
 )
 @click.option(
     "--category",
@@ -173,11 +169,6 @@ def resolve_eval_scope(
     default=RUNS_DIR,
     help=f"Output directory for results (default: {RUNS_DIR})",
 )
-@click.option(
-    "--ab",
-    is_flag=True,
-    help="Run torch vs onnx backends side-by-side and print a comparison",
-)
 def main(
     quick: bool,
     full: bool,
@@ -194,7 +185,6 @@ def main(
     promote: bool,
     verbose: bool,
     output_dir: Path,
-    ab: bool,
 ) -> None:
     """Run Trace search evaluation suite."""
     if verbose:
@@ -239,21 +229,12 @@ def main(
     click.echo(f"Embedding model: {settings.embedding_model}")
     click.echo()
 
-    if ab:
-        _run_ab(
-            search_mode=search,
-            quick_only=quick_only,
-            categories=categories,
-            file_types=file_types,
-        )
-        return
-
     indexer = WikiIndexer()
 
-    if indexer.collection.count() == 0:
+    if not indexer.has_index():
         click.echo("Building index (first time)...")
     else:
-        click.echo(f"Refreshing existing index: {indexer.collection.count()} chunks")
+        click.echo(f"Refreshing existing index: {len(indexer.snapshot())} chunks")
     indexer.build_index()
 
     # Mirror production bootstrap so eval p95 reflects what MCP consumers see.
@@ -312,79 +293,6 @@ def main(
             click.echo()
             suffix = " (stress subset)" if ci_stress else ""
             click.echo(f"CI: All thresholds passed{suffix}")
-
-
-def _run_ab(
-    search_mode: str,
-    quick_only: bool,
-    categories: list[str] | None,
-    file_types: list[str] | None,
-) -> None:
-    """Run the golden set under torch then onnx and print a side-by-side report."""
-    import os
-
-    from trace_search.config import get_settings
-    from trace_search.indexing.embeddings import build_embedding_backend
-    from trace_search.indexing.wiki_indexer import WikiIndexer
-    from trace_search.retrieval.search import SemanticSearch
-    from trace_search.server.server_warmup import warm_embedding_model
-
-    results: dict[str, dict] = {}
-    per_query_top1: dict[str, dict[str, str]] = {}
-
-    for backend_name in ("torch", "onnx"):
-        os.environ["EMBEDDING_BACKEND"] = backend_name
-        get_settings.cache_clear()
-        SemanticSearch._embedding_cache.clear()
-        SemanticSearch._cache_hits = 0
-        SemanticSearch._cache_misses = 0
-
-        click.echo(f"\n=== Running backend: {backend_name} ===")
-        backend = build_embedding_backend()
-        indexer = WikiIndexer(backend=backend)
-        indexer.build_index()
-        warm_embedding_model(indexer.backend)
-
-        report = run_evaluation(
-            indexer=indexer,
-            search_mode=search_mode,
-            quick_only=quick_only,
-            categories=categories,
-            file_types=file_types,
-            stress_only=False,
-            include_stress=False,
-        )
-        results[backend_name] = {
-            "top1_path": report.top_1_path_accuracy,
-            "top5_path": report.top_5_path_accuracy,
-            "top1_keyword": report.top_1_keyword_accuracy,
-            "top5_keyword": report.top_5_keyword_accuracy,
-            "p50": report.latency_p50_ms,
-            "p95": report.latency_p95_ms,
-        }
-        per_query_top1[backend_name] = {
-            qr.query_id: qr.retrieved_path for qr in report.results
-        }
-
-    click.echo("\n=== A/B SUMMARY ===")
-    click.echo(f"{'metric':<18}{'torch':>14}{'onnx':>14}{'delta':>14}")
-    for metric in ("top1_path", "top5_path", "top1_keyword", "top5_keyword"):
-        t = results["torch"][metric]
-        o = results["onnx"][metric]
-        click.echo(f"{metric:<18}{t:>13.1%} {o:>13.1%} {o - t:>+13.1%}")
-    for metric in ("p50", "p95"):
-        t = results["torch"][metric]
-        o = results["onnx"][metric]
-        click.echo(f"{metric + ' ms':<18}{t:>13.1f} {o:>13.1f} {o - t:>+13.1f}")
-
-    diverged = [
-        (qid, per_query_top1["torch"][qid], per_query_top1["onnx"][qid])
-        for qid in per_query_top1["torch"]
-        if per_query_top1["torch"][qid] != per_query_top1["onnx"][qid]
-    ]
-    click.echo(f"\nDiverged top-1 queries: {len(diverged)}")
-    for qid, torch_path, onnx_path in diverged:
-        click.echo(f"  - {qid}: torch={torch_path!r} vs onnx={onnx_path!r}")
 
 
 if __name__ == "__main__":

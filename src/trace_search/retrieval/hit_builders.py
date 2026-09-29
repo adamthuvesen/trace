@@ -1,70 +1,35 @@
-"""Construct normalized search hits from retrieval backends."""
+"""Build search hits from indexed chunks."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
 from trace_search.indexing.index_paths import chunk_id
-from trace_search.retrieval.models import SearchHit
+from trace_search.indexing.index_store import ChunkMetadata
+
+# Frontmatter-derived fields ride along only when the page set them.
+_OPTIONAL_FIELDS = ("aliases", "status", "as_of")
 
 
-def hit_from_chroma(
-    doc_id: str,
-    metadata: Mapping[str, Any],
-    content: str,
-    similarity: float,
-) -> SearchHit:
-    """Build a semantic hit from a Chroma query result row."""
-    return SearchHit(
-        id=doc_id,
-        path=str(metadata["path"]),
-        title=str(metadata["title"]),
-        folder=str(metadata["folder"]),
-        chunk_index=metadata.get("chunk_index"),
-        chunk_count=metadata.get("chunk_count"),
-        breadcrumb=metadata.get("breadcrumb"),
-        extension=metadata.get("extension"),
-        source_mtime=(
-            float(metadata["source_mtime"])
-            if metadata.get("source_mtime") is not None
-            else None
-        ),
-        content=content,
-        score=similarity,
-        source="semantic",
-    )
-
-
-def hit_from_bm25(
-    metadata: Mapping[str, Any],
-    content: str,
-    score: float,
-) -> SearchHit:
-    """Build a keyword hit from BM25 corpus metadata."""
-    path = str(metadata["path"])
-    chunk_index = metadata.get("chunk_index")
-    hit_id = chunk_id(path, int(chunk_index)) if chunk_index is not None else path
-    return SearchHit(
-        id=hit_id,
-        path=path,
-        title=str(metadata["title"]),
-        folder=str(metadata["folder"]),
-        chunk_index=chunk_index,
-        chunk_count=metadata.get("chunk_count"),
-        breadcrumb=metadata.get("breadcrumb"),
-        extension=metadata.get("extension"),
-        source_mtime=(
-            float(metadata["source_mtime"])
-            if metadata.get("source_mtime") is not None
-            else None
-        ),
-        content=content,
-        score=score,
-        source="keyword",
-    )
-
-
-def hits_to_dicts(hits: list[SearchHit]) -> list[dict[str, Any]]:
-    """Serialize hits for MCP callers."""
-    return [hit.to_dict() for hit in hits]
+def chunk_hit(
+    chunk: ChunkMetadata, content: str, score: float, source: str
+) -> dict[str, Any]:
+    """Return the hit dict that search modes, fusion, and formatting share."""
+    hit: dict[str, Any] = {
+        "id": chunk_id(chunk["path"], chunk["chunk_index"]),
+        "path": chunk["path"],
+        "title": chunk["title"],
+        "folder": chunk["folder"],
+        "content": content,
+        "score": score,
+        "source": source,
+        "chunk_index": chunk["chunk_index"],
+        "chunk_count": chunk["chunk_count"],
+        "breadcrumb": chunk["breadcrumb"],
+        "extension": chunk["extension"],
+        "source_mtime": chunk["source_mtime"],
+    }
+    for name in _OPTIONAL_FIELDS:
+        if value := chunk.get(name):
+            hit[name] = value
+    return hit

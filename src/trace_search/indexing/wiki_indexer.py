@@ -1,57 +1,53 @@
-"""ChromaDB + BM25 indexing for local knowledge bases."""
+"""Build and serve the BM25 + embedding index for one local knowledge base."""
 
 from __future__ import annotations
 
-import json
 import logging
-import shutil
+import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import TypedDict
 
-import bm25s
-import chromadb
-from chromadb.api.types import Metadata
-from chromadb.errors import NotFoundError
-from chromadb.config import Settings as ChromaSettings
+import numpy as np
 
-from trace_search.retrieval.bm25_tokenize import english_stemmer
+from trace_search.config import settings
 from trace_search.extraction.chunking import (
     chunk_by_headings,
     create_contextual_chunk,
     extract_breadcrumb,
 )
-from trace_search.config import settings
-from trace_search.extraction.corpus import iter_kb_files
-from trace_search.indexing.embeddings import (
-    EmbeddingArray,
-    EmbeddingBackend,
-    build_embedding_backend,
-)
+from trace_search.extraction.frontmatter import Frontmatter, split_frontmatter
 from trace_search.extraction.extractors import (
     SUPPORTED_EXTENSIONS,
     extract_content,
     extract_title,
 )
+from trace_search.indexing.embeddings import (
+    EmbeddingArray,
+    EmbeddingBackend,
+    build_embedding_backend,
+)
 from trace_search.indexing.index_metadata import (
     build_index_metadata,
     categorize_source_changes,
-    collect_source_files,
-    invalidate_index_metadata,
-    metadata_matches_active_model,
-    read_index_metadata,
-    SourceChangeSet,
+    metadata_matches_settings,
     utc_now_iso,
-    write_index_metadata,
 )
-from trace_search.indexing.index_paths import (
-    CHROMA_COLLECTION,
-    bm25_dir,
-    chroma_dir,
-    chunk_id,
+from trace_search.indexing.index_paths import chunk_id
+from trace_search.indexing.index_store import (
+    ChunkMetadata,
+    IndexCorruptError,
+    IndexSnapshot,
+    load_snapshot,
+    read_current,
+    write_snapshot,
+    writer_lock,
 )
 from trace_search.indexing.kb_paths import get_default_index_root, should_exclude_path
 
 logger = logging.getLogger(__name__)
+
+BackendProvider = Callable[[], EmbeddingBackend]
 
 
 class LoadedDocument(TypedDict):
@@ -61,70 +57,102 @@ class LoadedDocument(TypedDict):
     extension: str
     mtime: float
     content: str
+    frontmatter: Frontmatter
+
+
+def _document_card(doc: LoadedDocument) -> tuple[str, str]:
+    """Return (aliases, lead text) for a document's first chunk.
+
+    The lead puts a page's alternate names and summary where both BM25 and the
+    embedding see them, instead of burying them in raw YAML.
+    """
+    meta = doc["frontmatter"]
+    title_key = doc["title"].casefold()
+    names = [
+        name
+        for name in (meta.title, *meta.aliases)
+        if name and name.casefold() != title_key
+    ]
+    aliases = "; ".join(dict.fromkeys(names))
+    lead = ""
+    if aliases:
+        lead += f"Also known as: {aliases}\n"
+    if meta.summary:
+        lead += f"Summary: {meta.summary}\n"
+    return aliases, lead
 
 
 class WikiIndexer:
-    """Index knowledge base documents into ChromaDB and BM25 for search."""
+    """Index one knowledge base and hand out its current in-memory snapshot."""
 
     def __init__(
         self,
         kb_path: str | Path | None = None,
-        chroma_path: str | Path | None = None,
-        bm25_path: str | Path | None = None,
-        backend: EmbeddingBackend | None = None,
+        index_root: str | Path | None = None,
+        backend: EmbeddingBackend | BackendProvider | None = None,
     ):
         """Initialize the indexer.
 
         Args:
             kb_path: Path to knowledge base. Uses KB_PATH env var if None.
-            chroma_path: Path for ChromaDB storage. Auto-generated if None.
-            bm25_path: Path for BM25 index storage. Auto-generated if None.
-            backend: Pre-loaded embedding backend to share across indexers.
+            index_root: Directory holding index generations. Defaults to
+                ``INDEX_PATH`` or ``<kb>/.mcp-search/indexes``.
+            backend: Embedding backend, or a zero-argument provider so the model
+                loads only when a build or semantic query needs it.
         """
         self.kb_path = (
             Path(kb_path) if kb_path else settings.resolved_kb_path
         ).resolve()
-
-        # Model-specific index paths to prevent dimension mismatch
-        model_slug = settings.model_slug
-
-        # Use explicit INDEX_PATH when set; otherwise keep indexes in the
-        # documented per-KB .mcp-search/indexes directory.
-        index_base = get_default_index_root(self.kb_path, settings.index_path)
-
-        if chroma_path:
-            self.chroma_path = Path(chroma_path)
-        elif settings.chroma_path:
-            self.chroma_path = Path(settings.chroma_path)
+        self.index_root = (
+            Path(index_root)
+            if index_root
+            else get_default_index_root(self.kb_path, settings.index_path)
+        )
+        if backend is None:
+            self._backend_provider: BackendProvider = build_embedding_backend
+        elif isinstance(backend, EmbeddingBackend):
+            self._backend_provider = lambda: backend
         else:
-            self.chroma_path = chroma_dir(index_base, model_slug)
-        if bm25_path:
-            self.bm25_path = Path(bm25_path)
-        else:
-            self.bm25_path = bm25_dir(index_base, model_slug)
+            self._backend_provider = backend
+        self._backend: EmbeddingBackend | None = None
+        self._snapshot: IndexSnapshot | None = None
+        self._lock = threading.Lock()
 
-        logger.info(
-            "Embedding model: %s (dims=%d)",
-            settings.embedding_model,
-            settings.embedding_dims,
-        )
-        logger.info("ChromaDB path: %s", self.chroma_path)
-        logger.info("BM25 path: %s", self.bm25_path)
+    @property
+    def backend(self) -> EmbeddingBackend:
+        """The embedding backend, loaded on first use."""
+        if self._backend is None:
+            self._backend = self._backend_provider()
+        return self._backend
 
-        self.client = chromadb.PersistentClient(
-            path=str(self.chroma_path),
-            settings=ChromaSettings(anonymized_telemetry=False),
-        )
+    def has_index(self) -> bool:
+        """Whether a generation has been published for this knowledge base."""
+        return read_current(self.index_root) is not None
 
-        self.backend: EmbeddingBackend = backend or build_embedding_backend()
+    def snapshot(self) -> IndexSnapshot:
+        """Return the current generation, reloading it when a new one was published.
 
-        self.collection = self.client.get_or_create_collection(
-            name=CHROMA_COLLECTION,
-            metadata={"hnsw:space": "cosine"},
-        )
-
-        self._bm25: bm25s.BM25 | None = None
-        self._bm25_corpus: list[Metadata] | None = None
+        Costs one small file read per call. A reindex by any process, including
+        a CLI run beside a long-lived server, is picked up on the next search.
+        """
+        current = read_current(self.index_root)
+        loaded = self._snapshot
+        if loaded is not None and loaded.generation == current:
+            return loaded
+        with self._lock:
+            loaded = self._snapshot
+            if loaded is None or loaded.generation != read_current(self.index_root):
+                fresh = load_snapshot(self.index_root)
+                if fresh is not None:
+                    logger.info(
+                        "Loaded index generation %s for %s (%d chunks)",
+                        fresh.generation,
+                        self.kb_path,
+                        len(fresh),
+                    )
+                loaded = fresh or IndexSnapshot.empty()
+                self._snapshot = loaded
+            return loaded
 
     def _get_relative_path(self, path: Path) -> str:
         return str(path.relative_to(self.kb_path))
@@ -134,15 +162,12 @@ class WikiIndexer:
         parts = rel.parts
         return parts[0] if len(parts) > 1 else ""
 
-    def _should_exclude(self, path: Path) -> bool:
-        return should_exclude_path(path, self.kb_path)
-
     def _load_single_document(self, file_path: Path) -> LoadedDocument | None:
         """Extract one supported file into a doc dict, or return None to skip."""
         ext = file_path.suffix.lower()
         if ext not in SUPPORTED_EXTENSIONS:
             return None
-        if self._should_exclude(file_path):
+        if should_exclude_path(file_path, self.kb_path):
             return None
 
         try:
@@ -154,25 +179,19 @@ class WikiIndexer:
         if not content.strip():
             return None
 
+        frontmatter, body = (
+            split_frontmatter(content) if ext == ".md" else (Frontmatter(), content)
+        )
         stat = file_path.stat()
         return {
             "path": self._get_relative_path(file_path),
-            "title": extract_title(content, file_path),
+            "title": extract_title(body, file_path, fallback=frontmatter.title),
             "folder": self._get_folder(file_path),
             "extension": ext,
             "mtime": stat.st_mtime,
-            "content": content,
+            "content": body,
+            "frontmatter": frontmatter,
         }
-
-    def load_documents(self) -> list[LoadedDocument]:
-        """Load all supported files from knowledge base."""
-        docs: list[LoadedDocument] = []
-        for file_path in iter_kb_files(self.kb_path):
-            doc = self._load_single_document(file_path)
-            if doc is not None:
-                docs.append(doc)
-        docs.sort(key=lambda d: d["path"])
-        return docs
 
     def _load_documents_subset(self, relative_paths: list[str]) -> list[LoadedDocument]:
         """Load only the listed relative paths into doc dicts."""
@@ -187,364 +206,192 @@ class WikiIndexer:
         docs.sort(key=lambda d: d["path"])
         return docs
 
-    def _reconcile_index_state(self, force: bool) -> str:
-        """Decide whether to do a full rebuild or an incremental update.
-
-        Returns "force" when the indexes must be rebuilt from scratch (caller
-        requested it, indexes are missing or empty, or metadata is missing or
-        outdated). Returns "incremental" when the existing indexes are healthy
-        enough to update in place; BM25 may need rebuilding from Chroma but
-        chunks are preserved across the update.
-        """
-        if force:
-            return "force"
-
-        chroma_count = self.collection.count()
-        if chroma_count == 0:
-            return "force"
-
-        metadata = read_index_metadata(self.bm25_path.parent)
-        if metadata is None:
-            logger.info("Index metadata missing or outdated; promoting to full rebuild")
-            return "force"
-
-        if not metadata_matches_active_model(metadata):
-            logger.info(
-                "Index metadata does not match active embedding settings; "
-                "promoting to full rebuild"
-            )
-            return "force"
-
-        if self.bm25_path.exists():
-            try:
-                self._load_bm25()
-            except Exception as e:
-                logger.warning(
-                    "BM25 load failed; will rebuild from Chroma during incremental: %s",
-                    e,
-                )
-                self._bm25 = None
-                self._bm25_corpus = None
-
-        return "incremental"
-
     def _build_chunks(
         self, docs: list[LoadedDocument]
-    ) -> tuple[list[str], list[str], list[Metadata]]:
-        """Convert documents into (chunks, ids, metadatas) ready for indexing."""
-        all_chunks: list[str] = []
-        all_ids: list[str] = []
-        all_metadatas: list[Metadata] = []
+    ) -> tuple[list[str], list[str], list[ChunkMetadata]]:
+        """Convert documents into (ids, texts, chunk metadata) ready for indexing."""
+        ids: list[str] = []
+        texts: list[str] = []
+        chunks: list[ChunkMetadata] = []
 
         for doc in docs:
-            chunks = chunk_by_headings(doc["content"])
-            chunk_count = len(chunks)
-            extension = doc.get("extension") or Path(doc["path"]).suffix.lower()
-            source_mtime = float(doc.get("mtime") or 0.0)
-            for i, chunk in enumerate(chunks):
-                all_chunks.append(
-                    create_contextual_chunk(doc["title"], doc["folder"], chunk)
+            pieces = chunk_by_headings(doc["content"]) if doc["content"].strip() else []
+            aliases, lead = _document_card(doc)
+            if not pieces:
+                pieces = [""]
+            frontmatter = doc["frontmatter"]
+            for i, piece in enumerate(pieces):
+                ids.append(chunk_id(doc["path"], i))
+                texts.append(
+                    create_contextual_chunk(
+                        doc["title"], doc["folder"], piece, lead=lead if i == 0 else ""
+                    )
                 )
-                all_ids.append(chunk_id(doc["path"], i))
-                all_metadatas.append(
-                    {
-                        "path": doc["path"],
-                        "title": doc["title"],
-                        "folder": doc["folder"],
-                        "chunk_index": i,
-                        "chunk_count": chunk_count,
-                        "breadcrumb": extract_breadcrumb(chunk, doc["title"]),
-                        "extension": extension,
-                        "source_mtime": source_mtime,
-                    }
-                )
+                chunk: ChunkMetadata = {
+                    "path": doc["path"],
+                    "title": doc["title"],
+                    "folder": doc["folder"],
+                    "chunk_index": i,
+                    "chunk_count": len(pieces),
+                    "breadcrumb": extract_breadcrumb(piece, doc["title"]),
+                    "extension": doc["extension"],
+                    "source_mtime": float(doc["mtime"]),
+                }
+                if aliases:
+                    chunk["aliases"] = aliases
+                if frontmatter.status:
+                    chunk["status"] = frontmatter.status
+                if frontmatter.as_of:
+                    chunk["as_of"] = frontmatter.as_of
+                chunks.append(chunk)
 
-        return all_chunks, all_ids, all_metadatas
+        return ids, texts, chunks
 
-    def _persist_chroma(
-        self,
-        ids: list[str],
-        chunks: list[str],
-        embeddings: EmbeddingArray,
-        metadatas: list[Metadata],
-    ) -> None:
-        """Write chunks and embeddings to ChromaDB in batches."""
-        batch_size = 500
-        for i in range(0, len(chunks), batch_size):
-            end = min(i + batch_size, len(chunks))
-            self.collection.add(
-                ids=ids[i:end],
-                documents=chunks[i:end],
-                embeddings=embeddings[i:end].tolist(),
-                metadatas=metadatas[i:end],
+    def _reusable_snapshot(self) -> IndexSnapshot | None:
+        """The on-disk generation, when its chunks can be reused incrementally."""
+        try:
+            current = self.snapshot()
+        except IndexCorruptError as exc:
+            logger.warning("%s Rebuilding from scratch.", exc)
+            return None
+        if current.generation is None:
+            return None
+        if current.metadata is None:
+            logger.info("Index metadata missing or outdated; running a full rebuild")
+            return None
+        if not metadata_matches_settings(current.metadata):
+            logger.info(
+                "Index was built with other model or chunk settings; rebuilding"
             )
-            logger.info("Indexed %s/%s chunks (ChromaDB)", end, len(chunks))
+            return None
+        return current
 
-    def _persist_bm25(self, chunks: list[str], metadatas: list[Metadata]) -> None:
-        """Build and save the BM25 index plus metadata to disk."""
-        logger.info("Building BM25 index...")
-        corpus_tokens = bm25s.tokenize(
-            chunks,
-            stopwords="en",
-            stemmer=english_stemmer(),
-        )
-        self._bm25 = bm25s.BM25(k1=settings.bm25_k1, b=settings.bm25_b)
-        self._bm25.index(corpus_tokens)
-        self._bm25.corpus = [
-            {"id": index, "text": chunk} for index, chunk in enumerate(chunks)
-        ]
-        self._bm25_corpus = metadatas
-
-        self.bm25_path.mkdir(parents=True, exist_ok=True)
-        self._bm25.save(str(self.bm25_path), corpus=chunks)
-
-        metadata_path = self.bm25_path / "metadata.json"
-        with open(metadata_path, "w") as f:
-            json.dump(metadatas, f)
+    def _encode(self, texts: list[str], dim: int) -> EmbeddingArray:
+        if not texts:
+            return np.empty((0, dim), dtype=np.float32)
+        logger.info("Embedding %d chunks...", len(texts))
+        return self.backend.encode(texts)
 
     def build_index(self, force: bool = False) -> int:
-        """Build or update the search index. Returns number of chunks indexed.
+        """Build or update the index and return its chunk count.
 
-        Default behavior is incremental: detect added, changed, and removed
-        source files and apply only the necessary work. Pass `force=True` to
-        drop both indexes and rebuild every file from scratch.
+        Incremental by default: unchanged files keep their chunks and
+        embeddings, and only added or changed files are re-extracted and
+        re-embedded. ``force=True`` rebuilds every file. Either way the result
+        is published as a new generation under the writer lock, so a failed
+        build leaves the previous index serving.
         """
-        mode = self._reconcile_index_state(force)
-        build_started_at = utc_now_iso()
-
-        if mode == "force":
-            return self._full_rebuild(build_started_at)
-
-        metadata = read_index_metadata(self.bm25_path.parent)
-        changes = categorize_source_changes(self.kb_path, metadata)
-
-        bm25_healthy = (
-            self.bm25_path.exists()
-            and self._bm25 is not None
-            and self._bm25_corpus is not None
-        )
-        if not changes.has_changes and bm25_healthy:
-            logger.info(
-                "Index up to date: %d unchanged files, %d chunks",
-                len(changes.unchanged),
-                self.collection.count(),
+        with writer_lock(self.index_root):
+            build_started_at = utc_now_iso()
+            current = None if force else self._reusable_snapshot()
+            changes = categorize_source_changes(
+                self.kb_path, current.metadata if current is not None else None
             )
-            return self.collection.count()
+            if current is not None and not changes.has_changes:
+                logger.info(
+                    "Index up to date: %d files, %d chunks",
+                    len(changes.unchanged),
+                    len(current),
+                )
+                return len(current)
 
-        try:
-            self._apply_incremental_changes(changes)
-            self._rebuild_bm25_from_chroma()
-        except Exception:
-            logger.exception(
-                "Incremental reindex failed; invalidating metadata so next "
-                "reindex runs as a full rebuild"
+            if current is not None:
+                unchanged = set(changes.unchanged)
+                kept = [
+                    row
+                    for row, chunk in enumerate(current.chunks)
+                    if chunk["path"] in unchanged
+                ]
+                to_index = changes.added + changes.changed
+            else:
+                kept = []
+                to_index = [record.path for record in changes.inventory]
+
+            new_ids, new_texts, new_chunks = self._build_chunks(
+                self._load_documents_subset(to_index)
             )
-            invalidate_index_metadata(self.bm25_path.parent)
-            raise
+            reused_dim = current.embeddings.shape[1] if current is not None else 0
+            new_embeddings = self._encode(new_texts, reused_dim)
 
-        chunk_count = self.collection.count()
-        new_metadata = build_index_metadata(
-            kb_path=self.kb_path,
-            build_started_at=build_started_at,
-            build_completed_at=utc_now_iso(),
-            document_count=len(changes.inventory),
-            chunk_count=chunk_count,
-            source_files=changes.inventory,
-        )
-        write_index_metadata(self.bm25_path.parent, new_metadata)
+            ids = [current.chunk_ids[row] for row in kept] if current else []
+            texts = [current.texts[row] for row in kept] if current else []
+            chunks = [current.chunks[row] for row in kept] if current else []
+            ids += new_ids
+            texts += new_texts
+            chunks += new_chunks
+            if current is not None and kept and new_texts:
+                embeddings = np.vstack([current.embeddings[kept], new_embeddings])
+            elif current is not None and kept:
+                embeddings = current.embeddings[kept]
+            else:
+                embeddings = new_embeddings
+
+            order = sorted(
+                range(len(ids)),
+                key=lambda row: (chunks[row]["path"], chunks[row]["chunk_index"]),
+            )
+            snapshot = IndexSnapshot.build(
+                chunk_ids=[ids[row] for row in order],
+                texts=[texts[row] for row in order],
+                chunks=[chunks[row] for row in order],
+                embeddings=embeddings[order] if len(order) else embeddings,
+                k1=settings.bm25_k1,
+                b=settings.bm25_b,
+                metadata=build_index_metadata(
+                    kb_path=self.kb_path,
+                    build_started_at=build_started_at,
+                    build_completed_at=utc_now_iso(),
+                    document_count=len({chunk["path"] for chunk in chunks}),
+                    chunk_count=len(ids),
+                    source_files=changes.inventory,
+                ),
+            )
+            published = write_snapshot(self.index_root, snapshot)
+            with self._lock:
+                self._snapshot = published
+
         logger.info(
-            "Incremental reindex: +%d added, ~%d changed, -%d removed, =%d unchanged; %d chunks total",
+            "Reindex (%s): +%d added, ~%d changed, -%d removed, =%d unchanged; "
+            "%d chunks total",
+            "incremental" if current is not None else "full",
             len(changes.added),
             len(changes.changed),
             len(changes.removed),
             len(changes.unchanged),
-            chunk_count,
+            len(published),
         )
-        return chunk_count
-
-    def _full_rebuild(self, build_started_at: str) -> int:
-        """Drop both indexes and reindex every visible file from scratch."""
-        self._clear_chroma_collection()
-        self._clear_bm25_index()
-
-        logger.info("Loading documents...")
-        docs = self.load_documents()
-        logger.info("Found %s documents", len(docs))
-
-        all_chunks, all_ids, all_metadatas = self._build_chunks(docs)
-
-        if not all_chunks:
-            logger.info("No chunks to index")
-            inventory = collect_source_files(self.kb_path)
-            metadata = build_index_metadata(
-                kb_path=self.kb_path,
-                build_started_at=build_started_at,
-                build_completed_at=utc_now_iso(),
-                document_count=len(docs),
-                chunk_count=0,
-                source_files=inventory,
-            )
-            write_index_metadata(self.bm25_path.parent, metadata)
-            return 0
-
-        logger.info("Generating embeddings for %s chunks...", len(all_chunks))
-        embeddings = self.backend.encode(all_chunks)
-
-        self._persist_chroma(all_ids, all_chunks, embeddings, all_metadatas)
-        self._persist_bm25(all_chunks, all_metadatas)
-
-        chunk_count = self.collection.count()
-        logger.info("Index complete: %s chunks (ChromaDB + BM25)", chunk_count)
-
-        inventory = collect_source_files(self.kb_path)
-        metadata = build_index_metadata(
-            kb_path=self.kb_path,
-            build_started_at=build_started_at,
-            build_completed_at=utc_now_iso(),
-            document_count=len(docs),
-            chunk_count=chunk_count,
-            source_files=inventory,
-        )
-        write_index_metadata(self.bm25_path.parent, metadata)
-        return chunk_count
-
-    def _apply_incremental_changes(self, changes: SourceChangeSet) -> None:
-        """Apply categorized file changes to the Chroma collection in place."""
-        for path in changes.changed + changes.removed:
-            self.collection.delete(where={"path": path})
-
-        paths_to_index = changes.added + changes.changed
-        if not paths_to_index:
-            return
-
-        docs = self._load_documents_subset(paths_to_index)
-        chunks, ids, metadatas = self._build_chunks(docs)
-        if not chunks:
-            return
-
-        embeddings = self.backend.encode(chunks)
-        self._persist_chroma(ids, chunks, embeddings, metadatas)
-
-    def _rebuild_bm25_from_chroma(self) -> None:
-        """Rebuild BM25 from the current Chroma chunk inventory."""
-        result = self.collection.get(include=["documents", "metadatas"])
-        documents = list(result.get("documents") or [])
-        metadatas = list(result.get("metadatas") or [])
-
-        self._clear_bm25_index()
-
-        if not documents:
-            return
-
-        self._persist_bm25(documents, metadatas)
-
-    def _clear_chroma_collection(self) -> None:
-        """Drop and recreate the Chroma collection atomically without materializing ids."""
-        try:
-            self.client.delete_collection(CHROMA_COLLECTION)
-        except NotFoundError:
-            logger.debug("Chroma collection did not exist before rebuild")
-        except Exception as exc:
-            logger.warning("Failed to delete Chroma collection before rebuild: %s", exc)
-            raise
-        self.collection = self.client.get_or_create_collection(
-            name=CHROMA_COLLECTION,
-            metadata={"hnsw:space": "cosine"},
-        )
-
-    def _clear_bm25_index(self) -> None:
-        """Delete BM25 files and clear in-memory BM25 state."""
-        self._bm25 = None
-        self._bm25_corpus = None
-        if self.bm25_path.exists():
-            shutil.rmtree(self.bm25_path)
-
-    def _load_bm25(self) -> None:
-        """Load BM25 index from disk."""
-        if self._bm25 is not None:
-            return
-
-        if not self.bm25_path.exists():
-            return
-
-        self._bm25 = bm25s.BM25.load(str(self.bm25_path), load_corpus=True)
-        metadata_path = self.bm25_path / "metadata.json"
-        if metadata_path.exists():
-            with open(metadata_path) as f:
-                self._bm25_corpus = cast(list[Metadata], json.load(f))
-
-    @property
-    def bm25(self) -> bm25s.BM25 | None:
-        """Get BM25 index, loading from disk if needed."""
-        if self._bm25 is None:
-            self._load_bm25()
-        return self._bm25
-
-    @property
-    def bm25_corpus(self) -> list[Metadata] | None:
-        """Get BM25 corpus metadata."""
-        if self._bm25_corpus is None:
-            self._load_bm25()
-        return self._bm25_corpus
-
-    def get_chunks_by_ids(self, ids: list[str]) -> dict[str, str]:
-        """Fetch chunk documents by Chroma ids."""
-        if not ids:
-            return {}
-        results = self.collection.get(ids=ids, include=["documents"])
-        id_to_doc: dict[str, str] = {}
-        for chunk_key, doc in zip(
-            results.get("ids") or [],
-            results.get("documents") or [],
-        ):
-            if doc:
-                id_to_doc[chunk_key] = str(doc)
-        return id_to_doc
+        return len(published)
 
     def neighbor_contents_batch(
         self,
         requests: list[tuple[str, int | None, int | None]],
     ) -> list[str | None]:
-        """Batch-fetch neighbor chunk text for grouped search context."""
-        request_ids: list[list[str]] = []
-        all_ids: set[str] = set()
+        """Return the text of each hit's previous and next chunk, joined."""
+        snapshot = self.snapshot()
+        output: list[str | None] = []
         for path, chunk_index, chunk_count in requests:
             if chunk_index is None or chunk_count is None or chunk_count <= 1:
-                request_ids.append([])
+                output.append(None)
                 continue
-            ids = [
-                chunk_id(path, i)
+            docs = [
+                snapshot.texts[snapshot.row_by_id[cid]]
                 for i in (chunk_index - 1, chunk_index + 1)
                 if 0 <= i < chunk_count
+                and (cid := chunk_id(path, i)) in snapshot.row_by_id
             ]
-            request_ids.append(ids)
-            all_ids.update(ids)
-
-        if not all_ids:
-            return [None] * len(requests)
-
-        id_to_doc = self.get_chunks_by_ids(list(all_ids))
-        output: list[str | None] = []
-        for ids in request_ids:
-            docs = [id_to_doc[cid] for cid in ids if cid in id_to_doc]
             output.append("\n\n".join(docs) if docs else None)
         return output
 
     def get_stats(self) -> dict[str, object]:
         """Get index statistics."""
-        bm25 = self.bm25
-        bm25_corpus = self.bm25_corpus
-        bm25_docs = len(bm25_corpus) if bm25_corpus else 0
+        snapshot = self.snapshot()
         return {
-            "total_chunks": self.collection.count(),
-            "bm25_docs": bm25_docs,
+            "total_chunks": len(snapshot),
+            "documents": len({chunk["path"] for chunk in snapshot.chunks}),
+            "generation": snapshot.generation or "none (run reindex)",
             "kb_path": str(self.kb_path),
-            "chroma_path": str(self.chroma_path),
-            "bm25_path": str(self.bm25_path),
-            "bm25_available": bm25 is not None,
-            # Chunking configuration
+            "index_root": str(self.index_root),
             "chunking": {
-                "enable_overlap": settings.enable_chunk_overlap,
                 "char_chunk_size": settings.char_chunk_size,
                 "char_overlap_size": settings.char_overlap_size,
             },

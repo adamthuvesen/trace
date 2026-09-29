@@ -261,119 +261,43 @@ class TestGetDocumentErrorEnvelope:
 
 
 class TestCollectionRebuild:
-    def test_get_adaptive_can_skip_implicit_index_build(self, tmp_path):
-        """Doctor probes need existing indexes without triggering reindex."""
-        from types import SimpleNamespace
-        from unittest.mock import MagicMock, patch
-
-        from tests.test_runtime_hardening import FakeBackend
-        from trace_search.collections.collection_registry import Collection
-
-        col = Collection(
-            name="test",
-            kb_path=tmp_path,
-            index_path=tmp_path / "idx",
-        )
-        fake_indexer = SimpleNamespace(collection=MagicMock(), backend=FakeBackend())
-
-        with patch.object(col, "ensure_index", return_value=fake_indexer) as ensure:
-            col.get_adaptive(skip_build=True)
-
-        ensure.assert_called_once_with(None, skip_build=True)
-        assert col._adaptive is None
-
-    def test_get_adaptive_after_skip_build_uses_normal_cached_path(self, tmp_path):
-        """A doctor probe must not poison later normal search initialization."""
-        from types import SimpleNamespace
-        from unittest.mock import MagicMock, patch
-
-        from tests.test_runtime_hardening import FakeBackend
-        from trace_search.collections.collection_registry import Collection
-
-        col = Collection(
-            name="test",
-            kb_path=tmp_path,
-            index_path=tmp_path / "idx",
-        )
-        fake_indexer = SimpleNamespace(collection=MagicMock(), backend=FakeBackend())
-
-        with patch.object(col, "ensure_index", return_value=fake_indexer) as ensure:
-            col.get_adaptive(skip_build=True)
-            col.get_adaptive()
-
-        assert ensure.call_args_list[0].kwargs == {"skip_build": True}
-        assert ensure.call_args_list[1].args == (None,)
-        assert ensure.call_args_list[1].kwargs == {}
-        assert col._adaptive is not None
-
-    def test_rebuild_force_clears_caches_and_returns_chunk_count(self, tmp_path):
-        """rebuild(force=True) must clear all four caches and return the new chunk count."""
-        from unittest.mock import MagicMock, patch
-
+    @staticmethod
+    def _collection(tmp_path):
         from trace_search.collections.collection_registry import Collection
 
         kb = tmp_path / "kb"
         kb.mkdir()
         (kb / "doc.md").write_text("# Doc\n\ncontent", encoding="utf-8")
+        return Collection(name="test", kb_path=kb, index_path=tmp_path / "idx")
 
-        col = Collection(
-            name="test",
-            kb_path=kb,
-            index_path=tmp_path / "idx",
-        )
-        col._indexer = MagicMock()
-        col._semantic = MagicMock()
-        col._keyword = MagicMock()
-        col._hybrid = MagicMock()
-
-        fake_indexer = MagicMock()
-        fake_indexer.build_index.return_value = 3
-
-        with patch.object(col, "ensure_index", return_value=fake_indexer):
-            result = col.rebuild(force=True)
-
-        assert col._indexer is None
-        assert col._semantic is None
-        assert col._keyword is None
-        assert col._hybrid is None
-        fake_indexer.build_index.assert_called_once_with(force=True)
-        assert result == 3
-
-    def test_rebuild_incremental_keeps_caches_and_calls_build_without_force(
+    def test_probe_path_skips_implicit_build_without_poisoning_later_search(
         self, tmp_path
     ):
-        """rebuild() defaults to incremental and preserves cached search components."""
-        from unittest.mock import MagicMock, patch
+        """Doctor probes need existing indexes without triggering reindex."""
+        from tests.test_runtime_hardening import FakeBackend
 
-        from trace_search.collections.collection_registry import Collection
+        col = self._collection(tmp_path)
 
-        kb = tmp_path / "kb"
-        kb.mkdir()
-        (kb / "doc.md").write_text("# Doc\n\ncontent", encoding="utf-8")
-
-        col = Collection(
-            name="test",
-            kb_path=kb,
-            index_path=tmp_path / "idx",
+        result = col.search_adaptive(
+            "doc", 5, None, FakeBackend, build_if_missing=False
         )
-        semantic_marker = MagicMock()
-        keyword_marker = MagicMock()
-        hybrid_marker = MagicMock()
-        col._semantic = semantic_marker
-        col._keyword = keyword_marker
-        col._hybrid = hybrid_marker
 
-        fake_indexer = MagicMock()
-        fake_indexer.build_index.return_value = 5
+        assert result.hits == []
+        assert not col.indexer(FakeBackend, build_if_missing=False).has_index()
+        assert col.indexer(FakeBackend).has_index()
 
-        with patch.object(col, "ensure_index", return_value=fake_indexer):
-            result = col.rebuild()
+    def test_rebuild_returns_chunk_count_and_threads_force(self, tmp_path):
+        from trace_search.indexing.index_store import read_current
+        from tests.test_runtime_hardening import FakeBackend
 
-        assert col._semantic is semantic_marker
-        assert col._keyword is keyword_marker
-        assert col._hybrid is hybrid_marker
-        fake_indexer.build_index.assert_called_once_with(force=False)
-        assert result == 5
+        col = self._collection(tmp_path)
+
+        assert col.rebuild(FakeBackend) == 1
+        first = read_current(col.index_path)
+        assert col.rebuild(FakeBackend) == 1
+        assert read_current(col.index_path) == first  # incremental no-op
+        assert col.rebuild(FakeBackend, force=True) == 1
+        assert read_current(col.index_path) != first
 
 
 class TestReindexForceFlag:

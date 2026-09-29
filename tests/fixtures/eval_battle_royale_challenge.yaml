@@ -4,7 +4,6 @@ modes:
   - bm25
   - semantic
   - hybrid
-  - reranked
   - adaptive
 knowledge_bases:
   - id: retrieval

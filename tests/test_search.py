@@ -1,123 +1,97 @@
 """Tests for search module."""
 
+from types import SimpleNamespace
 from typing import get_type_hints
+from unittest.mock import MagicMock
+
+import numpy as np
 
 from trace_search.config import settings
-from trace_search.retrieval.query_profile import (
-    WEIGHT_KEYWORD,
-    WEIGHT_QUESTION,
-    classify_query,
-    is_conceptual_query,
-    is_keywordish_query,
-)
+from trace_search.indexing.index_store import IndexSnapshot
+from trace_search.retrieval.query_profile import is_keywordish_query
 from trace_search.retrieval.search import (
     _BM25_MIN_FILE_FETCH,
     HybridSearch,
     KeywordSearch,
-    SearchFilters,
+    SemanticSearch,
     _clamp_top_k,
+    _fuse_by_document,
     _keyword_fetch_size,
-    _semantic_fetch_size,
+    _extract_rank_terms,
     _semantic_lexical_boost,
 )
 from trace_search.retrieval.search_types import SearchRoute
 
 
-class TestHybridSearchQueryClassification:
-    """Exercises shared query_profile.classify_query."""
+class TestKeywordishQuery:
+    def test_identifier_query_is_keywordish(self):
+        assert is_keywordish_query("HTTP 429 Retry-After burst limit")
 
-    @staticmethod
-    def _classify(query: str) -> tuple[str, float]:
-        return classify_query(query)
+    def test_dense_noun_phrase_is_keywordish(self):
+        assert is_keywordish_query(
+            "term frequency saturation document length normalization"
+        )
 
-    def test_question_classified_as_question(self):
-        query_type, weight = self._classify("How does semantic ranking work?")
-        assert query_type == "question"
-        assert weight == WEIGHT_QUESTION
+    def test_natural_question_is_not_keywordish(self):
+        assert not is_keywordish_query("how does the growth model relate to funnels")
 
-    def test_lazy_reranker_type_hints_resolve_at_runtime(self):
-        assert "_reranker" in get_type_hints(HybridSearch)
-        assert "return" in get_type_hints(HybridSearch._get_reranker)
+    def test_route_type_hints_resolve_at_runtime(self):
         assert "filters" in get_type_hints(SearchRoute)
 
-    def test_short_definition_classified_as_keyword(self):
-        query_type, weight = self._classify("What is BM25?")
-        assert query_type == "keyword"
-        assert weight == WEIGHT_KEYWORD
 
-    def test_short_keyword_query_classified_as_keyword(self):
-        query_type, weight = self._classify("frontmatter")
-        assert query_type == "keyword"
-        assert weight == WEIGHT_KEYWORD
+class TestDocumentFusion:
+    def test_page_found_by_both_retrievers_outranks_single_retriever_tops(self):
+        # Semantic returns chunks (two from kw-top.md); keyword returns files.
+        # both.md is second in each list and should win once fused per document.
+        keyword = [
+            {"id": "kw-top.md::0", "path": "kw-top.md"},
+            {"id": "both.md::0", "path": "both.md"},
+        ]
+        semantic = [
+            {"id": "sem-top.md::3", "path": "sem-top.md"},
+            {"id": "sem-top.md::1", "path": "sem-top.md"},
+            {"id": "both.md::2", "path": "both.md"},
+        ]
 
-        query_type, weight = self._classify("heading chunking")
-        assert query_type == "keyword"
+        fused = _fuse_by_document([(0.5, keyword), (0.5, semantic)], limit=3)
 
-    def test_short_acronym_query_classified_as_keyword(self):
-        """Acronyms should not trigger expansion; routed as plain keyword."""
-        query_type, weight = self._classify("RRF")
-        assert query_type == "keyword"
-        assert weight == WEIGHT_KEYWORD
-
-    def test_long_query_classified_as_default(self):
-        query_type, weight = self._classify(
-            "compare semantic and keyword search behavior"
-        )
-        assert query_type == "default"
-        assert weight == WEIGHT_QUESTION
-
-    def test_weight_constants_defined(self):
-        assert WEIGHT_KEYWORD == 0.4
-        assert WEIGHT_QUESTION == 0.7
-
-    def test_question_weight_favors_semantic(self):
-        assert WEIGHT_QUESTION > 0.5
-
-    def test_keyword_weight_favors_bm25(self):
-        assert WEIGHT_KEYWORD < 0.5
-
-    def test_weights_in_valid_range(self):
-        weights = [WEIGHT_KEYWORD, WEIGHT_QUESTION]
-        for w in weights:
-            assert 0 <= w <= 1, f"Weight {w} should be between 0 and 1"
-
-    def test_identifier_query_classified_as_keywordish(self):
-        assert is_keywordish_query("HTTP 429 Retry-After burst limit")
-        assert not is_conceptual_query("HTTP 429 Retry-After burst limit")
-        assert self._classify("HTTP 429 Retry-After burst limit")[1] == WEIGHT_KEYWORD
-
-    def test_dense_noun_phrase_classified_as_keywordish(self):
-        query = "term frequency saturation document length normalization"
-
-        assert is_keywordish_query(query)
-        assert not is_conceptual_query(query)
-        assert self._classify(query)[1] == WEIGHT_KEYWORD
+        assert [hit["path"] for hit in fused] == ["both.md", "kw-top.md", "sem-top.md"]
+        assert fused[0]["id"] == "both.md::0"  # keyword's chunk represents it
+        assert all(hit["source"] == "hybrid" for hit in fused)
 
 
 class TestEmptyCorpusSearch:
     def test_empty_corpus_returns_empty_list(self):
-        from unittest.mock import MagicMock, PropertyMock
+        indexer = SimpleNamespace(snapshot=IndexSnapshot.empty)
 
-        from trace_search.retrieval.search import KeywordSearch
-
-        mock_indexer = MagicMock()
-        type(mock_indexer).bm25 = PropertyMock(return_value=MagicMock())
-        type(mock_indexer).bm25_corpus = PropertyMock(return_value=[])
-
-        ks = KeywordSearch(mock_indexer)
-        result = ks.search("anything")
-        assert result == []
+        assert KeywordSearch(indexer).search("anything") == []
+        assert SemanticSearch(indexer).search("anything") == []
 
 
 class TestKeywordSearchAggregation:
+    """Fixed per-chunk BM25 scores isolate the file-level aggregation math."""
+
     class FakeBM25:
         def __init__(self, scores):
             self.scores = scores
             self.fetch_size = None
 
-        def retrieve(self, _query_tokens, k):
+        def retrieve(self, _query_tokens, k, **_kwargs):
             self.fetch_size = k
             return [list(range(len(self.scores)))], [self.scores]
+
+    @staticmethod
+    def _indexer(bm25, chunks: list[dict]) -> SimpleNamespace:
+        snapshot = IndexSnapshot(
+            generation=None,
+            metadata=None,
+            chunk_ids=[f"{c['path']}::{c['chunk_index']}" for c in chunks],
+            texts=[c["title"] for c in chunks],
+            chunks=chunks,
+            embeddings=np.zeros((len(chunks), 3), dtype=np.float32),
+            bm25=bm25,
+        )
+        return SimpleNamespace(snapshot=lambda: snapshot)
 
     @staticmethod
     def _metadata(path: str, title: str, chunk_index: int) -> dict:
@@ -143,41 +117,42 @@ class TestKeywordSearchAggregation:
         ]
 
     def test_keyword_search_aggregates_chunks_by_file_before_truncating(self):
-        class FakeIndexer:
-            bm25 = TestKeywordSearchAggregation.FakeBM25([10.0, 9.8, 9.6])
-            bm25_corpus = [
+        bm25 = TestKeywordSearchAggregation.FakeBM25([10.0, 9.8, 9.6])
+        indexer = TestKeywordSearchAggregation._indexer(
+            bm25,
+            [
                 TestKeywordSearchAggregation._metadata("wrong.md", "Wrong", 0),
                 TestKeywordSearchAggregation._metadata("right.md", "Alpha", 0),
                 TestKeywordSearchAggregation._metadata("right.md", "Alpha", 1),
-            ]
+            ],
+        )
 
-        hits = KeywordSearch(FakeIndexer()).search("alpha", max_results=1)
+        hits = KeywordSearch(indexer).search("alpha", max_results=1)
 
         assert [hit["path"] for hit in hits] == ["right.md"]
         assert hits[0]["bm25_file_support"] == 2
-        assert FakeIndexer.bm25.fetch_size == 3
+        assert bm25.fetch_size == 3
 
-    def test_keyword_fetch_size_oversamples_files_even_with_filters(self):
+    def test_keyword_fetch_size_oversamples_files(self):
         # File-level aggregation needs a deep chunk pool to cover enough distinct
-        # files; a path filter must not shrink it below the file-oversample floor.
-        wiki = SearchFilters(path_prefix=("wiki/",))
-        assert _keyword_fetch_size(10, SearchFilters()) >= _BM25_MIN_FILE_FETCH
-        assert _keyword_fetch_size(10, wiki) >= _BM25_MIN_FILE_FETCH
-        assert _keyword_fetch_size(10, wiki) >= _keyword_fetch_size(10, SearchFilters())
+        # files, even for a small result count.
+        assert _keyword_fetch_size(1) >= _BM25_MIN_FILE_FETCH
 
     def test_navigational_hub_demoted_below_content_page(self):
         # index.md and a content page tie on best chunk score; the content page
         # should win because the hub is navigational, not an answer.
-        class FakeIndexer:
-            bm25 = TestKeywordSearchAggregation.FakeBM25([6.0, 6.0])
-            bm25_corpus = [
+        bm25 = TestKeywordSearchAggregation.FakeBM25([6.0, 6.0])
+        indexer = TestKeywordSearchAggregation._indexer(
+            bm25,
+            [
                 TestKeywordSearchAggregation._metadata(
                     "notes/index.md", "Alpha index", 0
                 ),
                 TestKeywordSearchAggregation._metadata("notes/alpha.md", "Alpha", 0),
-            ]
+            ],
+        )
 
-        hits = KeywordSearch(FakeIndexer()).search("alpha", max_results=2)
+        hits = KeywordSearch(indexer).search("alpha", max_results=2)
         assert [hit["path"] for hit in hits] == ["notes/alpha.md", "notes/index.md"]
 
     def test_support_boost_not_inflated_by_raw_chunk_count(self):
@@ -191,22 +166,26 @@ class TestKeywordSearchAggregation:
             for i in range(20)
         ]
 
-        class FakeIndexer:
-            bm25 = TestKeywordSearchAggregation.FakeBM25([7.5] + [6.0] * 20)
-            bm25_corpus = [strong, *weak_chunks]
+        bm25 = TestKeywordSearchAggregation.FakeBM25([7.5] + [6.0] * 20)
+        indexer = TestKeywordSearchAggregation._indexer(
+            bm25,
+            [strong, *weak_chunks],
+        )
 
-        hits = KeywordSearch(FakeIndexer()).search("zeta", max_results=2)
+        hits = KeywordSearch(indexer).search("zeta", max_results=2)
         assert hits[0]["path"] == "strong.md"
         assert hits[0]["score"] > hits[1]["score"]
 
     def test_keyword_search_drops_weak_hits_without_metadata_anchor(self):
-        class FakeIndexer:
-            bm25 = TestKeywordSearchAggregation.FakeBM25([5.0])
-            bm25_corpus = TestKeywordSearchAggregation._large_corpus_with(
+        bm25 = TestKeywordSearchAggregation.FakeBM25([5.0])
+        indexer = TestKeywordSearchAggregation._indexer(
+            bm25,
+            TestKeywordSearchAggregation._large_corpus_with(
                 TestKeywordSearchAggregation._metadata("unrelated.md", "Unrelated", 0)
-            )
+            ),
+        )
 
-        hits = KeywordSearch(FakeIndexer()).search(
+        hits = KeywordSearch(indexer).search(
             "kubernetes pod security policy",
             max_results=5,
         )
@@ -214,17 +193,19 @@ class TestKeywordSearchAggregation:
         assert hits == []
 
     def test_keyword_search_keeps_weak_hits_with_strong_metadata_anchor(self):
-        class FakeIndexer:
-            bm25 = TestKeywordSearchAggregation.FakeBM25([5.0])
-            bm25_corpus = TestKeywordSearchAggregation._large_corpus_with(
+        bm25 = TestKeywordSearchAggregation.FakeBM25([5.0])
+        indexer = TestKeywordSearchAggregation._indexer(
+            bm25,
+            TestKeywordSearchAggregation._large_corpus_with(
                 TestKeywordSearchAggregation._metadata(
                     "ops/kubernetes-pod-policy.md",
                     "Kubernetes pod policy",
                     0,
                 )
-            )
+            ),
+        )
 
-        hits = KeywordSearch(FakeIndexer()).search(
+        hits = KeywordSearch(indexer).search(
             "kubernetes pod security policy",
             max_results=5,
         )
@@ -232,27 +213,24 @@ class TestKeywordSearchAggregation:
         assert [hit["path"] for hit in hits] == ["ops/kubernetes-pod-policy.md"]
 
     def test_keyword_search_drops_weak_hits_with_only_tiny_metadata_overlap(self):
-        class FakeIndexer:
-            bm25 = TestKeywordSearchAggregation.FakeBM25([5.5])
-            bm25_corpus = TestKeywordSearchAggregation._large_corpus_with(
+        bm25 = TestKeywordSearchAggregation.FakeBM25([5.5])
+        indexer = TestKeywordSearchAggregation._indexer(
+            bm25,
+            TestKeywordSearchAggregation._large_corpus_with(
                 TestKeywordSearchAggregation._metadata(
                     "archive/unrelated.md",
                     "Unrelated note",
                     0,
                 )
-            )
+            ),
+        )
 
-        hits = KeywordSearch(FakeIndexer()).search(
+        hits = KeywordSearch(indexer).search(
             "kubernetes pod security policy",
             max_results=5,
         )
 
         assert hits == []
-
-
-class TestSemanticFetchSize:
-    def test_semantic_fetch_size_never_drops_below_top_k(self):
-        assert _semantic_fetch_size(100, SearchFilters()) >= 100
 
 
 class TestBM25Parameters:
@@ -404,8 +382,10 @@ class TestSemanticLexicalBoost:
             "content": "EMBEDDING_BACKEND config chooses onnx or torch.",
         }
 
-        assert _semantic_lexical_boost(query, exact) > _semantic_lexical_boost(
-            query, partial
+        assert _semantic_lexical_boost(
+            query, exact, _extract_rank_terms(exact["content"])
+        ) > _semantic_lexical_boost(
+            query, partial, _extract_rank_terms(partial["content"])
         )
 
     def test_content_overlap_boosts_header_queries(self):
@@ -421,8 +401,10 @@ class TestSemanticLexicalBoost:
             "content": "Retry HTTP 408, 429, and 503 with backoff.",
         }
 
-        assert _semantic_lexical_boost(query, rate_limit) > _semantic_lexical_boost(
-            query, retryable
+        assert _semantic_lexical_boost(
+            query, rate_limit, _extract_rank_terms(rate_limit["content"])
+        ) > _semantic_lexical_boost(
+            query, retryable, _extract_rank_terms(retryable["content"])
         )
 
 
@@ -471,66 +453,36 @@ class TestFormatResultsPreviewTruncation:
 
 
 class TestSemanticSearchCacheIsolation:
+    @staticmethod
+    def _search(model_slug: str, vector: list[float]) -> SemanticSearch:
+        backend = MagicMock()
+        backend.encode_one.return_value = np.asarray(vector, dtype=np.float32)
+        search = SemanticSearch(SimpleNamespace(backend=backend))
+        search._model_slug = model_slug
+        return search
+
     def test_cache_key_includes_model_slug(self):
         """Cache entries must be keyed by (model_slug, query), not just query."""
-        from unittest.mock import MagicMock
-        from trace_search.retrieval.search import SemanticSearch
-
         SemanticSearch._embedding_cache.clear()
 
-        mock_collection = MagicMock()
-        fake_embed_a = tuple([0.1] * 384)
-        fake_embed_b = tuple([0.9] * 768)
+        emb_a = self._search("model_a", [3.0, 4.0])._get_query_embedding("frontmatter")
+        emb_b = self._search("model_b", [0.0, 2.0])._get_query_embedding("frontmatter")
 
-        class FakeVec(list):
-            def tolist(self):
-                return list(self)
-
-        instance_a = SemanticSearch.__new__(SemanticSearch)
-        instance_a.collection = mock_collection
-        instance_a._model_slug = "model_a"
-        instance_a.backend = MagicMock()
-        instance_a.backend.encode_one.return_value = FakeVec(fake_embed_a)
-
-        instance_b = SemanticSearch.__new__(SemanticSearch)
-        instance_b.collection = mock_collection
-        instance_b._model_slug = "model_b"
-        instance_b.backend = MagicMock()
-        instance_b.backend.encode_one.return_value = FakeVec(fake_embed_b)
-
-        emb_a = instance_a._get_query_embedding("frontmatter")
-        emb_b = instance_b._get_query_embedding("frontmatter")
-
-        assert emb_a == list(fake_embed_a)
-        assert emb_b == list(fake_embed_b)
-        assert emb_a != emb_b
+        np.testing.assert_allclose(emb_a, [0.6, 0.8])
+        np.testing.assert_allclose(emb_b, [0.0, 1.0])
         assert ("model_a", "frontmatter") in SemanticSearch._embedding_cache
         assert ("model_b", "frontmatter") in SemanticSearch._embedding_cache
 
     def test_same_model_reuses_cached_embedding(self):
-        from unittest.mock import MagicMock
-        from trace_search.retrieval.search import SemanticSearch
-
         SemanticSearch._embedding_cache.clear()
         initial_hits = SemanticSearch._cache_hits
+        search = self._search("test_model", [0.5] * 4)
 
-        fake_embed = tuple([0.5] * 384)
-
-        class FakeVec(list):
-            def tolist(self):
-                return list(self)
-
-        instance = SemanticSearch.__new__(SemanticSearch)
-        instance.collection = MagicMock()
-        instance._model_slug = "test_model"
-        instance.backend = MagicMock()
-        instance.backend.encode_one.return_value = FakeVec(fake_embed)
-
-        instance._get_query_embedding("bm25 ranking")
-        instance._get_query_embedding("bm25 ranking")
+        search._get_query_embedding("bm25 ranking")
+        search._get_query_embedding("bm25 ranking")
 
         assert SemanticSearch._cache_hits == initial_hits + 1
-        assert instance.backend.encode_one.call_count == 1
+        assert search.indexer.backend.encode_one.call_count == 1
 
 
 class TestTopKBounds:

@@ -4,7 +4,7 @@ import logging
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -66,7 +66,6 @@ class Settings(BaseSettings):
         description="Path to knowledge base (required for indexing and document access)",
     )
     index_path: Path | None = None  # Defaults to kb_path if not set
-    chroma_path: Path | None = None  # Explicit ChromaDB path (optional)
 
     # Multi-collection mode: "name:path,name:path,..."
     kb_collections: str | None = Field(
@@ -82,12 +81,6 @@ class Settings(BaseSettings):
     # Embedding model
     embedding_model: str = "all-MiniLM-L6-v2"
 
-    # Embedding runtime backend
-    embedding_backend: Literal["torch", "onnx"] = Field(
-        default="onnx",
-        description="Embedding runtime: 'onnx' (fastembed int8, default) or 'torch' (SentenceTransformer)",
-    )
-
     # BM25 parameters tuned for short document chunks.
     bm25_k1: float = Field(
         default=1.2, gt=0, description="BM25 k1 (term frequency saturation)"
@@ -96,17 +89,13 @@ class Settings(BaseSettings):
         default=0.5, ge=0, le=1, description="BM25 b (document length normalization)"
     )
 
-    # Reranker settings
-    reranker_enabled: bool = False
-    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-
-    # Chunking settings
-    enable_chunk_overlap: bool = True
+    # Chunking. 1500 chars beat 1000 and 2000 on both measured corpora
+    # (docs/benchmarks/2026-09-29-trace-overhaul.md).
     char_chunk_size: int = Field(
-        default=1000, gt=0, le=10000, description="Max chars per chunk"
+        default=1500, gt=0, le=10000, description="Max chars per chunk"
     )
     char_overlap_size: int = Field(
-        default=100, ge=0, description="Character overlap between chunks"
+        default=100, ge=0, description="Character overlap between chunks; 0 disables"
     )
 
     # Directory exclusions (comma-separated)
@@ -127,7 +116,6 @@ class Settings(BaseSettings):
     @field_validator(
         "kb_path",
         "index_path",
-        "chroma_path",
         "eval_golden_queries",
         mode="before",
     )

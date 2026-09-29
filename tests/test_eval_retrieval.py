@@ -23,8 +23,7 @@ def eval_indexer(tmp_path: Path) -> WikiIndexer:
     SemanticSearch._embedding_cache.clear()
     indexer = WikiIndexer(
         kb_path=FIXTURE_KB,
-        chroma_path=tmp_path / "chroma",
-        bm25_path=tmp_path / "bm25",
+        index_root=tmp_path / "indexes",
     )
     indexer.build_index(force=True)
     SemanticSearch._embedding_cache.clear()

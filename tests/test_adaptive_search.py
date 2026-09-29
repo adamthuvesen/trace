@@ -29,7 +29,10 @@ def test_adaptive_search_keeps_strong_keyword_results():
     adaptive = AdaptiveSearch.__new__(AdaptiveSearch)
     adaptive.keyword = MagicMock()
     adaptive.hybrid = MagicMock()
-    adaptive.keyword.search.return_value = [_hit(score=3.0)]
+    adaptive.keyword.search.return_value = [
+        _hit(score=3.0),
+        _hit(path="other.md", score=1.0),
+    ]
 
     result = adaptive.search("BM25", top_k=3)
 
@@ -183,46 +186,28 @@ def test_adaptive_search_trusts_decisive_conceptual_keyword_hit():
     adaptive.hybrid.search.assert_not_called()
 
 
-def test_adaptive_search_trusts_anchored_conceptual_keyword_hit():
-    """File-level BM25 metadata anchors are strong enough to avoid fallback."""
+def test_adaptive_search_fuses_near_tie_even_when_top_hit_is_anchored():
+    """A title/path anchor on a near-tie is not confidence: broad questions share
+    common words with many page titles, so the top two must be clearly apart."""
     adaptive = AdaptiveSearch.__new__(AdaptiveSearch)
     adaptive.keyword = MagicMock()
     adaptive.hybrid = MagicMock()
-    anchored = _hit(path="right.md", score=1.2)
+    anchored = _hit(path="wrong.md", score=1.2)
     anchored["bm25_metadata_overlap"] = 0.25
     adaptive.keyword.search.return_value = [
         anchored,
-        _hit(path="runner-up.md", score=1.1),
+        _hit(path="right.md", score=1.1),
         _hit(path="tail.md", score=1.0),
     ]
-
-    result = adaptive.search("how does anchored retrieval ranking work")
-
-    assert result.route.strategy == "keyword"
-    assert result.route.reason == "conceptual query had an anchored BM25 file hit"
-    assert not result.route.fallback_used
-    adaptive.hybrid.search.assert_not_called()
-
-
-def test_adaptive_search_falls_back_for_weak_decisive_keyword_hit():
-    """A tiny BM25 score is not trustworthy just because the runner-up is tinier."""
-    adaptive = AdaptiveSearch.__new__(AdaptiveSearch)
-    adaptive.keyword = MagicMock()
-    adaptive.hybrid = MagicMock()
-    adaptive.keyword.search.return_value = [
-        _hit(path="weak.md", score=0.04),
-        _hit(path="weaker.md", score=0.01),
-    ]
     adaptive.hybrid.search.return_value = [
-        _hit(path="semantic.md", score=0.7, source="hybrid")
+        _hit(path="right.md", score=0.7, source="hybrid")
     ]
 
-    result = adaptive.search("how do agents keep sentences across chunk boundaries")
+    result = adaptive.search("what shapes the analytics landscape")
 
     assert result.route.strategy == "hybrid"
-    assert result.route.reason == "BM25 best score was very low"
     assert result.route.fallback_used
-    adaptive.hybrid.search.assert_called_once()
+    assert result.hits[0]["path"] == "right.md"
 
 
 def test_adaptive_search_empty_query_does_not_call_engines():
@@ -332,8 +317,8 @@ def test_default_search_tool_renders_all_top_k_documents(tmp_path):
 
 
 def test_multi_collection_adaptive_search_batches_neighbor_fetches(tmp_path):
-    """Multi-collection adaptive search should issue one ChromaDB get() per collection,
-    not one per hit."""
+    """Multi-collection adaptive search should fetch neighbors once per collection,
+    not once per hit."""
     from trace_search.retrieval.search import AdaptiveSearchResult
     from trace_search.collections.collection_registry import CollectionRegistry
 
@@ -365,7 +350,9 @@ def test_multi_collection_adaptive_search_batches_neighbor_fetches(tmp_path):
 
     hits_by_col = {"kb1": make_hits("kb1"), "kb2": make_hits("kb2")}
 
+    adaptive_by_indexer = {}
     for name, col in registry.collections.items():
+        col._indexer = MagicMock()
         adaptive = MagicMock()
         adaptive.search.return_value = AdaptiveSearchResult(
             hits=hits_by_col[name],
@@ -375,12 +362,13 @@ def test_multi_collection_adaptive_search_batches_neighbor_fetches(tmp_path):
                 fallback_used=False,
             ),
         )
-        col._adaptive = adaptive
+        adaptive_by_indexer[id(col._indexer)] = adaptive
 
-        indexer = MagicMock()
-        col._indexer = indexer
-
-    result = registry.search_adaptive("query", top_k=10, collection=None)
+    with patch(
+        "trace_search.collections.collection_registry.AdaptiveSearch",
+        side_effect=lambda indexer: adaptive_by_indexer[id(indexer)],
+    ):
+        result = registry.search_adaptive("query", top_k=10, collection=None)
 
     assert len(result.hits) == 10
     assert {h["collection"] for h in result.hits} == {"kb1", "kb2"}
@@ -408,3 +396,20 @@ def test_specialist_keyword_tool_bypasses_adaptive_registry_path(tmp_path):
 
     keyword.assert_called_once()
     search_adaptive.assert_not_called()
+
+
+def test_adaptive_search_top_one_still_compares_against_runner_up():
+    """top_k=1 must not hide the runner-up the confidence gate needs."""
+    adaptive = AdaptiveSearch.__new__(AdaptiveSearch)
+    adaptive.keyword = MagicMock()
+    adaptive.hybrid = MagicMock()
+    adaptive.keyword.search.side_effect = lambda query, max_results, filters: [
+        _hit(path="right.md", score=4.0),
+        _hit(path="runner-up.md", score=1.0),
+    ][:max_results]
+
+    result = adaptive.search("BM25", top_k=1)
+
+    assert result.route.strategy == "keyword"
+    assert [hit["path"] for hit in result.hits] == ["right.md"]
+    adaptive.hybrid.search.assert_not_called()

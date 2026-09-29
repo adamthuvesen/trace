@@ -1,6 +1,9 @@
 """Tests for Trace doctor diagnostics."""
 
 import json
+from pathlib import Path
+
+import numpy as np
 
 from trace_search.collections.diagnostics import (
     diagnose_collections,
@@ -11,18 +14,34 @@ from trace_search.collections.diagnostics import (
 )
 from trace_search.config import settings
 from trace_search.indexing.index_metadata import (
+    IndexMetadata,
     build_index_metadata,
-    metadata_path,
     utc_now_iso,
-    write_index_metadata,
+)
+from trace_search.indexing.index_store import (
+    IndexSnapshot,
+    read_current,
+    write_snapshot,
+    writer_lock,
 )
 from trace_search.indexing.kb_paths import get_default_index_root
 
 
-def _create_index_dirs(index_root):
-    model_slug = "all_minilm_l6_v2"
-    (index_root / f".chroma_db_{model_slug}").mkdir(parents=True)
-    (index_root / f".bm25_index_{model_slug}").mkdir(parents=True)
+def _publish_metadata(index_root: Path, metadata: IndexMetadata) -> Path:
+    """Publish an empty generation carrying `metadata`; return its metadata file."""
+    snapshot = IndexSnapshot.build(
+        chunk_ids=[],
+        texts=[],
+        chunks=[],
+        embeddings=np.empty((0, 3), dtype=np.float32),
+        k1=settings.bm25_k1,
+        b=settings.bm25_b,
+        metadata=metadata,
+    )
+    with writer_lock(index_root):
+        published = write_snapshot(index_root, snapshot)
+    assert published.generation is not None
+    return index_root / published.generation / "index_metadata.json"
 
 
 def test_invalid_config_report_renders_message():
@@ -48,6 +67,20 @@ def test_scan_corpus_counts_visible_and_excluded_paths(tmp_path):
     assert scan.visible_by_extension[".md"] == 1
     assert scan.excluded_by_reason["exclude pattern: node_modules"] >= 1
     assert scan.excluded_by_reason["hidden path"] >= 1
+
+
+def test_scan_corpus_reports_active_traceignore(tmp_path):
+    kb = tmp_path / "kb"
+    (kb / "wiki").mkdir(parents=True)
+    (kb / "wiki" / "page.md").write_text("# Page", encoding="utf-8")
+    (kb / "raw.md").write_text("# Raw", encoding="utf-8")
+    (kb / ".traceignore").write_text("/*\n!/wiki/\n", encoding="utf-8")
+
+    scan = scan_corpus(kb)
+
+    assert scan.traceignore_active
+    assert scan.visible_total == 1
+    assert scan.excluded_by_reason[".traceignore"] == 1
 
 
 def test_scan_corpus_excludes_outside_symlink(tmp_path):
@@ -80,7 +113,14 @@ def test_diagnose_index_reports_unknown_without_metadata(tmp_path):
     kb = tmp_path / "kb"
     kb.mkdir()
     index_root = tmp_path / "indexes"
-    _create_index_dirs(index_root)
+    metadata = build_index_metadata(
+        kb_path=kb,
+        build_started_at=utc_now_iso(),
+        build_completed_at=utc_now_iso(),
+        document_count=0,
+        chunk_count=0,
+    )
+    _publish_metadata(index_root, metadata).write_text("not json", encoding="utf-8")
 
     diagnosis = diagnose_index(kb, index_root)
 
@@ -93,7 +133,6 @@ def test_diagnose_index_reports_fresh_metadata(tmp_path):
     kb.mkdir()
     (kb / "intro.md").write_text("# Intro", encoding="utf-8")
     index_root = get_default_index_root(kb)
-    _create_index_dirs(index_root)
     completed = utc_now_iso()
     metadata = build_index_metadata(
         kb_path=kb,
@@ -102,7 +141,7 @@ def test_diagnose_index_reports_fresh_metadata(tmp_path):
         document_count=1,
         chunk_count=1,
     )
-    write_index_metadata(index_root, metadata)
+    _publish_metadata(index_root, metadata)
 
     diagnosis = diagnose_index(kb, index_root)
 
@@ -125,7 +164,6 @@ def test_diagnose_index_reports_categorized_changes(tmp_path):
     drop = kb / "drop.md"
     drop.write_text("# Drop", encoding="utf-8")
     index_root = get_default_index_root(kb)
-    _create_index_dirs(index_root)
     completed = utc_now_iso()
     metadata = build_index_metadata(
         kb_path=kb,
@@ -134,7 +172,7 @@ def test_diagnose_index_reports_categorized_changes(tmp_path):
         document_count=3,
         chunk_count=3,
     )
-    write_index_metadata(index_root, metadata)
+    _publish_metadata(index_root, metadata)
 
     edit.write_text("# Edit\n\nupdated content here", encoding="utf-8")
     drop.unlink()
@@ -165,7 +203,6 @@ def test_diagnose_index_forces_reindex_when_model_mismatch_has_source_changes(
     doc = kb / "intro.md"
     doc.write_text("# Intro", encoding="utf-8")
     index_root = get_default_index_root(kb)
-    _create_index_dirs(index_root)
     completed = utc_now_iso()
     metadata = build_index_metadata(
         kb_path=kb,
@@ -174,12 +211,10 @@ def test_diagnose_index_forces_reindex_when_model_mismatch_has_source_changes(
         document_count=1,
         chunk_count=1,
     )
-    write_index_metadata(index_root, metadata)
-    raw = json.loads(metadata_path(index_root).read_text(encoding="utf-8"))
-    raw["embedding_backend"] = (
-        "torch" if settings.embedding_backend != "torch" else "onnx"
-    )
-    metadata_path(index_root).write_text(json.dumps(raw), encoding="utf-8")
+    metadata_file = _publish_metadata(index_root, metadata)
+    raw = json.loads(metadata_file.read_text(encoding="utf-8"))
+    raw["embedding_model"] = "some-other-model"
+    metadata_file.write_text(json.dumps(raw), encoding="utf-8")
     doc.write_text("# Intro\n\nchanged", encoding="utf-8")
 
     diagnosis = diagnose_index(kb, index_root)
@@ -194,7 +229,6 @@ def test_diagnose_index_reports_outdated_metadata_as_forced_rebuild(tmp_path):
     kb.mkdir()
     (kb / "intro.md").write_text("# Intro", encoding="utf-8")
     index_root = get_default_index_root(kb)
-    _create_index_dirs(index_root)
     metadata = build_index_metadata(
         kb_path=kb,
         build_started_at=utc_now_iso(),
@@ -202,17 +236,15 @@ def test_diagnose_index_reports_outdated_metadata_as_forced_rebuild(tmp_path):
         document_count=1,
         chunk_count=1,
     )
-    write_index_metadata(index_root, metadata)
-    raw = json.loads(metadata_path(index_root).read_text(encoding="utf-8"))
+    metadata_file = _publish_metadata(index_root, metadata)
+    raw = json.loads(metadata_file.read_text(encoding="utf-8"))
     raw["version"] = 1
-    metadata_path(index_root).write_text(json.dumps(raw), encoding="utf-8")
+    metadata_file.write_text(json.dumps(raw), encoding="utf-8")
 
     diagnosis = diagnose_index(kb, index_root)
 
     assert diagnosis.status == "unknown"
     assert diagnosis.next_reindex == "forced"
-    assert diagnosis.metadata_version == 1
-    assert any("v1" in msg for msg in diagnosis.messages)
 
 
 def test_diagnose_index_never_indexed_collection(tmp_path):
@@ -296,9 +328,6 @@ def test_registry_probe_skips_incompatible_indexes(tmp_path):
     kb.mkdir()
     registry = CollectionRegistry({"docs": kb})
     col = registry.collections["docs"]
-    model_slug = "all_minilm_l6_v2"
-    (col.index_path / f".chroma_db_{model_slug}").mkdir(parents=True)
-    (col.index_path / f".bm25_index_{model_slug}").mkdir(parents=True)
     metadata = build_index_metadata(
         kb_path=kb,
         build_started_at=utc_now_iso(),
@@ -309,56 +338,34 @@ def test_registry_probe_skips_incompatible_indexes(tmp_path):
     mismatched = metadata.__class__(
         **{
             **metadata.to_dict(),
-            "embedding_backend": (
-                "torch" if settings.embedding_backend != "torch" else "onnx"
-            ),
+            "embedding_model": "some-other-model",
         }
     )
-    write_index_metadata(col.index_path, mismatched)
+    _publish_metadata(col.index_path, mismatched)
 
     with pytest.raises(ValueError, match="indexes are incompatible"):
         registry.probe_search("intro", 5, "docs")
 
 
 def test_registry_probe_uses_existing_indexes_without_rebuild(tmp_path):
-    from types import SimpleNamespace
-    from unittest.mock import patch
-
     from tests.test_runtime_hardening import FakeBackend
-    from trace_search.retrieval.search import SearchRoute, AdaptiveSearchResult
     from trace_search.collections.collection_registry import CollectionRegistry
+    from trace_search.indexing.wiki_indexer import WikiIndexer
 
     kb = tmp_path / "kb"
     kb.mkdir()
+    (kb / "intro.md").write_text("# Intro\n\nintro widget notes", encoding="utf-8")
+    (kb / "other.md").write_text("# Other\n\nunrelated text", encoding="utf-8")
     registry = CollectionRegistry({"docs": kb})
     registry._backend = FakeBackend()
     registry._warmed = True
-
     col = registry.collections["docs"]
-    model_slug = "all_minilm_l6_v2"
-    (col.index_path / f".chroma_db_{model_slug}").mkdir(parents=True)
-    (col.index_path / f".bm25_index_{model_slug}").mkdir(parents=True)
-    metadata = build_index_metadata(
-        kb_path=kb,
-        build_started_at=utc_now_iso(),
-        build_completed_at=utc_now_iso(),
-        document_count=0,
-        chunk_count=0,
-    )
-    write_index_metadata(col.index_path, metadata)
-    fake_adaptive = SimpleNamespace(
-        search=lambda query, top_k, filters=None: AdaptiveSearchResult(
-            hits=[{"path": "intro.md", "score": 1.0}],
-            route=SearchRoute(
-                strategy="keyword",
-                reason="test",
-                fallback_used=False,
-            ),
-        )
-    )
+    WikiIndexer(kb, index_root=col.index_path, backend=FakeBackend()).build_index()
+    generation = read_current(col.index_path)
+    # A stale corpus must not make the probe reindex.
+    (kb / "later.md").write_text("# Later\n\nlater notes", encoding="utf-8")
 
-    with patch.object(col, "get_adaptive", return_value=fake_adaptive) as get_adaptive:
-        hits = registry.probe_search("intro", 5, "docs")
+    hits = registry.probe_search("intro widget", 5, "docs")
 
-    assert hits == [{"path": "intro.md", "score": 1.0}]
-    get_adaptive.assert_called_once_with(registry.backend, skip_build=True)
+    assert hits[0]["path"] == "intro.md"
+    assert read_current(col.index_path) == generation

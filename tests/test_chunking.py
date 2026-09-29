@@ -52,7 +52,7 @@ And yet another paragraph.
 
 class TestChunkByHeadings:
     def test_basic_chunking(self):
-        chunks = chunk_by_headings(SAMPLE_MARKDOWN, enable_overlap=False)
+        chunks = chunk_by_headings(SAMPLE_MARKDOWN, overlap_chars=0)
         assert len(chunks) > 0
         assert all(chunk.strip() for chunk in chunks)
 
@@ -61,7 +61,7 @@ class TestChunkByHeadings:
         chunks = chunk_by_headings(
             SAMPLE_MARKDOWN,
             max_chunk_chars=max_chars,
-            enable_overlap=False,
+            overlap_chars=0,
         )
         for chunk in chunks:
             assert len(chunk) <= max_chars, (
@@ -69,7 +69,7 @@ class TestChunkByHeadings:
             )
 
     def test_preserves_content(self):
-        chunks = chunk_by_headings(SAMPLE_MARKDOWN, enable_overlap=False)
+        chunks = chunk_by_headings(SAMPLE_MARKDOWN, overlap_chars=0)
         combined = "\n".join(chunks)
         assert "Document Title" in combined
         assert "Section One" in combined
@@ -79,12 +79,12 @@ class TestChunkByHeadings:
         chunks = chunk_by_headings(
             LARGE_SECTION,
             max_chunk_chars=1000,
-            enable_overlap=False,
+            overlap_chars=0,
         )
         assert len(chunks) > 1
 
     def test_empty_content(self):
-        chunks = chunk_by_headings("", enable_overlap=False)
+        chunks = chunk_by_headings("", overlap_chars=0)
         assert len(chunks) == 1
 
 
@@ -99,7 +99,6 @@ class TestChunkByHeadingsWithOverlap:
         chunks = chunk_by_headings(
             content,
             max_chunk_chars=300,
-            enable_overlap=True,
             overlap_chars=overlap_chars,
         )
         assert len(chunks) > 1
@@ -115,12 +114,11 @@ class TestChunkByHeadingsWithOverlap:
         without_overlap = chunk_by_headings(
             SAMPLE_MARKDOWN,
             max_chunk_chars=300,
-            enable_overlap=False,
+            overlap_chars=0,
         )
         with_overlap = chunk_by_headings(
             SAMPLE_MARKDOWN,
             max_chunk_chars=300,
-            enable_overlap=True,
             overlap_chars=50,
         )
         assert len(with_overlap) >= len(without_overlap)
@@ -129,7 +127,7 @@ class TestChunkByHeadingsWithOverlap:
 class TestChunkByParagraphs:
     def test_basic_chunking(self):
         content = "Para 1.\n\nPara 2.\n\nPara 3."
-        chunks = chunk_by_paragraphs(content, enable_overlap=False)
+        chunks = chunk_by_paragraphs(content, overlap_chars=0)
         assert len(chunks) > 0
 
     def test_respects_max_chars(self):
@@ -137,7 +135,7 @@ class TestChunkByParagraphs:
         chunks = chunk_by_paragraphs(
             LONG_PARAGRAPH,
             max_chunk_chars=max_chars,
-            enable_overlap=False,
+            overlap_chars=0,
         )
         for chunk in chunks:
             assert len(chunk) <= max_chars
@@ -148,7 +146,7 @@ class TestChunkByParagraphs:
         chunks = chunk_by_paragraphs(
             content,
             max_chunk_chars=100,
-            enable_overlap=False,
+            overlap_chars=0,
         )
         assert len(chunks) > 1
         assert all(len(chunk) <= 100 for chunk in chunks)
@@ -159,7 +157,7 @@ class TestChunkByParagraphs:
         chunks = chunk_by_paragraphs(
             content,
             max_chunk_chars=1000,
-            enable_overlap=False,
+            overlap_chars=0,
         )
         assert len(chunks) == 1
         assert chunks[0] == content
@@ -171,7 +169,6 @@ class TestChunkByParagraphsWithOverlap:
         chunks = chunk_by_paragraphs(
             content,
             max_chunk_chars=250,
-            enable_overlap=True,
             overlap_chars=30,
         )
         assert len(chunks) >= 2
@@ -179,7 +176,7 @@ class TestChunkByParagraphsWithOverlap:
 
 class TestDefaultConfiguration:
     def test_defaults_loaded(self):
-        assert settings.char_chunk_size == 1000
+        assert settings.char_chunk_size == 1500
         assert settings.char_overlap_size == 100
 
     def test_chunk_by_headings_uses_defaults(self):
@@ -193,22 +190,22 @@ class TestDefaultConfiguration:
 
 class TestEdgeCases:
     def test_only_whitespace(self):
-        chunks = chunk_by_headings("   \n\n   ", enable_overlap=False)
+        chunks = chunk_by_headings("   \n\n   ", overlap_chars=0)
         assert len(chunks) == 1
 
     def test_single_heading_no_content(self):
-        chunks = chunk_by_headings("# Title", enable_overlap=False)
+        chunks = chunk_by_headings("# Title", overlap_chars=0)
         assert len(chunks) == 1
         assert "Title" in chunks[0]
 
     def test_no_headings(self):
         content = "Just plain text.\n\nAnother paragraph.\n\nThird one."
-        chunks = chunk_by_headings(content, enable_overlap=False)
+        chunks = chunk_by_headings(content, overlap_chars=0)
         assert len(chunks) >= 1
 
     def test_unicode_content(self):
         content = "# Titel\n\nHej varlden! This has some Swedish characters."
-        chunks = chunk_by_headings(content, enable_overlap=False)
+        chunks = chunk_by_headings(content, overlap_chars=0)
         assert len(chunks) > 0
         assert "varlden" in chunks[0]
 
@@ -216,7 +213,7 @@ class TestEdgeCases:
         chunks = chunk_by_headings(
             SAMPLE_MARKDOWN,
             max_chunk_chars=50,
-            enable_overlap=False,
+            overlap_chars=0,
         )
         assert len(chunks) > 0
 
@@ -226,7 +223,7 @@ class TestEdgeCases:
         chunks = chunk_by_headings(
             content,
             max_chunk_chars=100,
-            enable_overlap=False,
+            overlap_chars=0,
         )
         assert "TAIL" in "".join(chunks)
 
@@ -235,7 +232,6 @@ class TestEdgeCases:
         chunks = chunk_by_headings(
             content,
             max_chunk_chars=100,
-            enable_overlap=True,
             overlap_chars=30,
         )
         assert "TAIL" in "".join(chunks)

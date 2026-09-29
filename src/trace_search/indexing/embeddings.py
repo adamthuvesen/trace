@@ -1,4 +1,4 @@
-"""Embedding backend abstraction (torch via SentenceTransformer, ONNX via fastembed)."""
+"""Embedding backend: ONNX int8 models via fastembed."""
 
 from __future__ import annotations
 
@@ -57,29 +57,6 @@ class EmbeddingBackend(Protocol):
     def encode_one(self, text: str) -> EmbeddingArray: ...
 
 
-class TorchBackend:
-    """Backend wrapping `sentence_transformers.SentenceTransformer`."""
-
-    def __init__(self, model_name: str):
-        from sentence_transformers import SentenceTransformer
-
-        self.model_name = model_name
-        self._model = SentenceTransformer(model_name)
-        # Resolve dim from a one-shot probe; `get_sentence_embedding_dimension`
-        # is available but probing avoids coupling to that API.
-        probe = self._model.encode(["probe"])
-        self.dim = int(np.asarray(probe).shape[-1])
-
-    def encode(self, texts: list[str]) -> EmbeddingArray:
-        if not texts:
-            return np.empty((0, self.dim), dtype=np.float32)
-        vectors = self._model.encode(texts)
-        return np.asarray(vectors, dtype=np.float32)
-
-    def encode_one(self, text: str) -> EmbeddingArray:
-        return np.asarray(self.encode([text])[0], dtype=np.float32)
-
-
 # fastembed uses HF-prefixed names; map our canonical keys to its identifiers.
 _FASTEMBED_MODEL_MAP: dict[str, str] = {
     "all-MiniLM-L6-v2": "sentence-transformers/all-MiniLM-L6-v2",
@@ -87,17 +64,26 @@ _FASTEMBED_MODEL_MAP: dict[str, str] = {
 }
 
 
+# ONNX Runtime keeps the arena it grows for the largest batch, so a big batch
+# during a full rebuild pins memory in a long-lived server: embedding a 3,200-chunk wiki
+# peaked at 2.4 GB with fastembed's default of 256 and 0.4 GB with 16, at the
+# same speed.
+_EMBED_BATCH_SIZE = 16
+
+
 class OnnxBackend:
     """Backend wrapping `fastembed.TextEmbedding` (pre-quantized ONNX int8)."""
 
     def __init__(self, model_name: str):
+        # The HF tokenizer warns and disables itself when the process forks
+        # after first use; say up front that it runs single-threaded.
+        os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
         from fastembed import TextEmbedding
 
         if model_name not in _FASTEMBED_MODEL_MAP:
             raise ValueError(
-                f"Model '{model_name}' not supported by the ONNX backend. "
-                f"Supported: {list(_FASTEMBED_MODEL_MAP)}. "
-                "Set EMBEDDING_BACKEND=torch to use this model."
+                f"Model '{model_name}' is not supported. "
+                f"Supported: {list(_FASTEMBED_MODEL_MAP)}."
             )
         self.model_name = model_name
         self._model = TextEmbedding(
@@ -110,7 +96,7 @@ class OnnxBackend:
     def encode(self, texts: list[str]) -> EmbeddingArray:
         if not texts:
             return np.empty((0, self.dim), dtype=np.float32)
-        vectors = list(self._model.embed(list(texts)))
+        vectors = list(self._model.embed(list(texts), batch_size=_EMBED_BATCH_SIZE))
         return np.asarray(np.stack(vectors), dtype=np.float32)
 
     def encode_one(self, text: str) -> EmbeddingArray:
@@ -118,19 +104,7 @@ class OnnxBackend:
 
 
 def build_embedding_backend() -> EmbeddingBackend:
-    """Construct the embedding backend named by `settings.embedding_backend`."""
-    backend = settings.embedding_backend
-    model = settings.embedding_model
-    if backend == "torch":
-        impl: EmbeddingBackend = TorchBackend(model)
-    elif backend == "onnx":
-        impl = OnnxBackend(model)
-    else:
-        # Settings validator should catch this; guard defensively.
-        raise ValueError(
-            f"Unknown embedding backend '{backend}'. Expected 'torch' or 'onnx'."
-        )
-    logger.info(
-        "Embedding backend: %s (model=%s, dim=%d)", backend, impl.model_name, impl.dim
-    )
+    """Construct the ONNX embedding backend for `settings.embedding_model`."""
+    impl = OnnxBackend(settings.embedding_model)
+    logger.info("Embedding backend: onnx (model=%s, dim=%d)", impl.model_name, impl.dim)
     return impl

@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 EVAL_DIR = Path(__file__).parent
 DEFAULT_GOLDEN_QUERIES_PATH = EVAL_DIR / "golden_queries.yaml"
 EXAMPLE_GOLDEN_QUERIES_PATH = EVAL_DIR / "golden_queries.example.yaml"
-SEARCH_MODES = ("semantic", "bm25", "hybrid", "reranked", "adaptive")
+SEARCH_MODES = ("semantic", "bm25", "hybrid", "adaptive")
 
 
 def get_golden_queries_path() -> Path:
@@ -138,15 +138,13 @@ def create_searcher(
     )
 
     if search_mode == "semantic":
-        return SemanticSearch(indexer.collection, indexer.backend)
+        return SemanticSearch(indexer)
     if search_mode == "bm25":
         return KeywordSearch(indexer)
     if search_mode == "hybrid":
-        return HybridSearch(indexer, indexer.backend)
-    if search_mode == "reranked":
-        return HybridSearch(indexer, indexer.backend)
+        return HybridSearch(indexer)
     if search_mode == "adaptive":
-        return AdaptiveSearch(indexer, indexer.backend)
+        return AdaptiveSearch(indexer)
     raise ValueError(f"Unknown search mode: {search_mode}")
 
 
@@ -205,7 +203,7 @@ def evaluate_query(
     Args:
         query: The golden query to evaluate.
         searcher: The search engine to use.
-        search_mode: The search mode (semantic, bm25, hybrid, reranked, adaptive).
+        search_mode: The search mode (semantic, bm25, hybrid, adaptive).
         top_k: Number of results to retrieve.
         min_keywords: Minimum keywords to count as a hit (unless overridden per query
             or by ``strict_keywords``).
@@ -230,8 +228,6 @@ def evaluate_query(
         adaptive_fallback_used = adaptive_result.route.fallback_used
     elif search_mode == "bm25":
         hits = searcher.search(query.query, max_results=top_k)
-    elif search_mode == "reranked":
-        hits = searcher.search(query.query, top_k=top_k, rerank=True)
     else:
         hits = searcher.search(query.query, top_k=top_k)
     latency_ms = (time.perf_counter() - start) * 1000

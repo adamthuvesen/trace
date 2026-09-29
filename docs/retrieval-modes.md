@@ -1,87 +1,42 @@
 # Retrieval Modes
 
-Trace has five evaluated retrieval modes:
+Trace has four retrieval modes. `adaptive` is what `search` runs.
 
 | Mode | Best use | Avoid when |
 | --- | --- | --- |
-| `bm25` | Exact identifiers, config keys, headers, error codes, filenames, and known terms. It is the fastest path by a wide margin. | The user is paraphrasing or does not know the vocabulary in the document. |
-| `semantic` | Natural-language paraphrases and conceptual lookups when exact terms are missing. Semantic search now applies a small lexical tie-break across its vector candidates so exact titles and headers are not buried by near-topic matches. | You need deterministic exact-token behavior for API headers, status codes, env vars, or highly confusable adjacent concepts. |
-| `hybrid` | Mixed lexical and semantic queries, especially technical noun phrases and queries with identifiers plus prose. | Ultra-low latency matters more than first-rank quality. |
-| `reranked` | Final-quality shortlist ranking when a cross-encoder is acceptable. It uses the hybrid candidate set, then reranks candidates. | Default interactive search. The battle suite showed the same Hit@1 as hybrid with higher latency. |
-| `adaptive` | Default MCP/CLI search. It starts with BM25, trusts strong lexical hits, and falls back to hybrid for conceptual or weak keyword results. | You are debugging one retrieval method in isolation. Use the specialist modes instead. |
+| `bm25` | Exact identifiers, config keys, error codes, filenames, and known terms. Fastest by a wide margin. | The user paraphrases or doesn't know the document's vocabulary. |
+| `semantic` | Paraphrases and conceptual lookups when exact terms are missing. A lexical boost re-ranks the top 50 vector candidates so exact titles, aliases, and terms surface. | You need deterministic exact-token behavior. |
+| `hybrid` | BM25 and semantic ranking fused per document with reciprocal-rank fusion (semantic weight 0.4). | Latency matters more than the last few MRR points on keyword-dense queries. |
+| `adaptive` | Default. BM25 alone when its top document scores at least 1.3x the runner-up, otherwise `hybrid`. One BM25 match also fuses, since it is often a paraphrase sharing one word with some page. | You are debugging one method in isolation. |
 
-## Battle Results
+## How BM25 ranks a file
 
-The multi-KB battle suite covers the committed retrieval fixture plus two
-additional no-secret fixtures:
+BM25 scores chunks, then rolls them up per file:
 
-- `tests/fixtures/eval_kb`
-- `tests/fixtures/battle_kbs/support_kb`
-- `tests/fixtures/battle_kbs/api_kb`
+- best chunk score, plus a saturating bonus for several strong chunks;
+- a metadata boost when query terms appear in the title, aliases, path, or heading breadcrumb;
+- a larger boost when the query is essentially the page's title or one alias (every query term in that name, covering at least 60% of it). This also lifts the `index.md`/`log.md` hub demotion for that page;
+- 0.7x for frontmatter `status: superseded` or `deprecated`, so a replaced page ranks just below its replacement.
 
-Run it with:
+Frontmatter never reaches the ranking text as YAML. `title`, `aliases`, and `summary` become a card at the top of the first chunk.
 
-```bash
-TOKENIZERS_PARALLELISM=false uv run python -m tools.eval.battle_royale --label after_tuning
-```
+## Battle suites
 
-Final after-tuning aggregate:
-
-| Mode | Queries | Hit@1 | Hit@5 | MRR | p95 |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `bm25` | 35 | 94.3% | 97.1% | 0.957 | 0.4ms |
-| `semantic` | 35 | 94.3% | 100.0% | 0.971 | 30.7ms |
-| `hybrid` | 35 | 100.0% | 100.0% | 1.000 | 31.6ms |
-| `reranked` | 35 | 100.0% | 100.0% | 1.000 | 44.3ms |
-| `adaptive` | 35 | 100.0% | 100.0% | 1.000 | 26.2ms |
-
-Full reports:
-
-- Baseline: `docs/benchmarks/retrieval_battle_royale/baseline/summary.md`
-- After tuning: `docs/benchmarks/retrieval_battle_royale/after_tuning/summary.md`
-
-No LLM judge is used. The suite uses deterministic expected-path metrics:
-Hit@1, Hit@5, MRR, latency, and top-1 failure buckets.
-
-## Challenge Suite
-
-The default battle suite is small enough for smoke testing and is now saturated
-for `adaptive` retrieval quality. Use the larger contrast-heavy suite when
-tuning retrieval ranking:
+The committed no-secret fixtures (`tests/fixtures/eval_kb`, `tests/fixtures/battle_kbs/*`) are small and paraphrase-heavy, so semantic search does well on them. Treat them as regression signals, not corpus-scale claims.
 
 ```bash
-TOKENIZERS_PARALLELISM=false uv run python -m tools.eval.battle_royale \
-  --suite tests/fixtures/eval_battle_royale_challenge.yaml \
-  --label challenge_current
+uv run python -m tools.eval.battle_royale --label <label>
+uv run python -m tools.eval.battle_royale \
+  --suite tests/fixtures/eval_battle_royale_challenge.yaml --label <label>
 ```
 
-Current challenge aggregate:
+Challenge suite (61 queries), 2026-09-29. "Before" is commit `e979fc5` re-run the same day. The committed `challenge_current` summary predates it and is stale.
 
-| Mode | Queries | Hit@1 | Hit@5 | MRR | p95 |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `bm25` | 61 | 80.3% | 98.4% | 0.876 | 0.5ms |
-| `semantic` | 61 | 82.0% | 100.0% | 0.903 | 20.3ms |
-| `hybrid` | 61 | 86.9% | 100.0% | 0.929 | 39.2ms |
-| `reranked` | 61 | 86.9% | 100.0% | 0.929 | 20.4ms |
-| `adaptive` | 61 | 86.9% | 100.0% | 0.928 | 15.8ms |
+| Mode | MRR before | MRR after | p50 after |
+| --- | ---: | ---: | ---: |
+| `bm25` | 0.833 | 0.833 | 0.1 ms |
+| `semantic` | 0.919 | 0.919 | 4.5 ms |
+| `hybrid` | 0.910 | 0.883 | 3.6 ms |
+| `adaptive` | 0.870 | 0.878 | 3.5 ms |
 
-Full challenge summary:
-
-- Current: `docs/benchmarks/retrieval_battle_royale/challenge_current/summary.md`
-
-The challenge suite adds stress queries for contrast and negation-heavy asks,
-such as policy-versus-template, auth-versus-rate-limit, and RRF-versus-linear
-combination. It is still a no-secret fixture suite, so treat numbers as relative
-local signals rather than broad corpus claims.
-
-## Defaults
-
-No environment-variable default changed. `adaptive` remains the default user-facing
-search path.
-
-Two default heuristics changed because the battle suite showed repeatable misses:
-
-- Identifier-heavy and dense technical noun-phrase queries now favor lexical
-  weighting in hybrid/adaptive routing.
-- Semantic search over-fetches a small vector candidate pool and applies a
-  bounded lexical tie-break for exact titles, paths, and content overlap.
+Hybrid lost ground here while it gained 0.11 and 0.17 MRR on two private knowledge bases. Document-level fusion and the 0.4 weight favor BM25, and this suite rewards semantic search. See [benchmarks/2026-09-29-trace-overhaul.md](benchmarks/2026-09-29-trace-overhaul.md).
