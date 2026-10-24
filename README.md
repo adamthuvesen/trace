@@ -1,6 +1,6 @@
 # Trace
 
-![License](https://img.shields.io/github/license/adamthuvesen/trace) ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![License](https://img.shields.io/github/license/adamthuvesen/trace) ![Python](https://img.shields.io/badge/python-3.13%2B-blue)
 
 Local retrieval over a folder of files, for an agent or for you. Trace indexes
 documents on disk and serves search, document fetch, and diagnostics over a CLI
@@ -21,7 +21,7 @@ Jupyter notebooks.
 
 ## Install
 
-Trace needs Python 3.11+ and `uv`.
+Trace needs Python 3.13+ and `uv`.
 
 ```bash
 uv sync
