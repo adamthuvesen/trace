@@ -23,9 +23,7 @@ class FakeBackend:
         self.dim = 3
 
     def encode(self, texts: list[str]):
-        arr = np.asarray(
-            [[float(i), 0.0, 0.0] for i, _ in enumerate(texts)], dtype=np.float32
-        )
+        arr = np.asarray([[float(i), 0.0, 0.0] for i, _ in enumerate(texts)], dtype=np.float32)
         return arr
 
     def encode_one(self, text: str):
@@ -260,9 +258,7 @@ class TestExcludePatternMatching:
 
         assert should_exclude_path(link, kb)
 
-    def test_indexing_skips_outside_symlink_but_keeps_inside_symlink(
-        self, tmp_path, monkeypatch
-    ):
+    def test_indexing_skips_outside_symlink_but_keeps_inside_symlink(self, tmp_path, monkeypatch):
         from trace_search.config import get_settings
 
         kb = tmp_path / "kb"

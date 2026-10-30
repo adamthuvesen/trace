@@ -47,7 +47,7 @@ class TestSupportedExtensions:
             ".tsx",
             ".ipynb",
         }
-        assert SUPPORTED_EXTENSIONS == expected
+        assert expected == SUPPORTED_EXTENSIONS
 
 
 class TestToolDefinitions:
@@ -82,11 +82,7 @@ class TestToolDocstrings:
         assert "alias" not in desc
 
     def test_hybrid_search_has_description(self, multi_mcp):
-        desc = (
-            (tools["search_hybrid"].__doc__ or "").lower()
-            if (tools := multi_mcp[1])
-            else ""
-        )
+        desc = (tools["search_hybrid"].__doc__ or "").lower() if (tools := multi_mcp[1]) else ""
         assert "hybrid" in desc or "combined" in desc
 
 
@@ -222,9 +218,7 @@ class TestCollectionRebuild:
         (kb / "doc.md").write_text("# Doc\n\ncontent", encoding="utf-8")
         return Collection(name="test", kb_path=kb, index_path=tmp_path / "idx")
 
-    def test_probe_path_skips_implicit_build_without_poisoning_later_search(
-        self, tmp_path
-    ):
+    def test_probe_path_skips_implicit_build_without_poisoning_later_search(self, tmp_path):
         """Doctor probes need existing indexes without triggering reindex."""
         from tests.test_runtime_hardening import FakeBackend
 
@@ -234,8 +228,8 @@ class TestCollectionRebuild:
         assert col.indexer(FakeBackend).has_index()
 
     def test_rebuild_returns_chunk_count_and_threads_force(self, tmp_path):
-        from trace_search.indexing.index_store import read_current
         from tests.test_runtime_hardening import FakeBackend
+        from trace_search.indexing.index_store import read_current
 
         col = self._collection(tmp_path)
 
@@ -344,9 +338,7 @@ class TestListDocumentsDeterminism:
     def test_list_documents_uses_indexer_exclusions(self, tmp_path):
         (tmp_path / "docs").mkdir()
         (tmp_path / "node_modules").mkdir()
-        (tmp_path / "docs" / "intro.md").write_text(
-            "# Intro\n\nContent", encoding="utf-8"
-        )
+        (tmp_path / "docs" / "intro.md").write_text("# Intro\n\nContent", encoding="utf-8")
         (tmp_path / "node_modules" / "package.md").write_text(
             "# Package\n\nShould not list",
             encoding="utf-8",

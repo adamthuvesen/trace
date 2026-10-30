@@ -126,11 +126,7 @@ class Context:
             out, err = process.communicate(timeout=timeout)
         finally:
             self.stop_processes()
-        label = (
-            args[1]
-            if len(args) > 1 and not args[1].startswith("-")
-            else Path(args[0]).name
-        )
+        label = args[1] if len(args) > 1 and not args[1].startswith("-") else Path(args[0]).name
         self.log(
             label,
             f"$ {' '.join(args)}\nexit {process.returncode}\n--- stdout\n{out}\n--- stderr\n{err}",
@@ -180,9 +176,7 @@ def expect_top(output: str, what: str, path: str, collection: str = "docs") -> N
     )
 
 
-async def drive_search(
-    ctx: Context, keyword_expected: str = "config/reranker.md"
-) -> str:
+async def drive_search(ctx: Context, keyword_expected: str = "config/reranker.md") -> str:
     built = ctx.trace("reindex")
     expect(
         "**docs**: " in built and "**notes**: " in built,
@@ -193,9 +187,7 @@ async def drive_search(
         "keyword-search RERANKER_ENABLED",
         keyword_expected,
     )
-    expect_top(
-        ctx.trace("search", "INDEX_PATH"), "search INDEX_PATH", "config/index-path.md"
-    )
+    expect_top(ctx.trace("search", "INDEX_PATH"), "search INDEX_PATH", "config/index-path.md")
     expect_top(
         ctx.trace(
             "semantic-search",
@@ -205,9 +197,7 @@ async def drive_search(
         "glossary/mrr.md",
     )
     expect_top(
-        ctx.trace(
-            "hybrid-search", "combine keyword and semantic signals into one ranking"
-        ),
+        ctx.trace("hybrid-search", "combine keyword and semantic signals into one ranking"),
         "hybrid-search",
         "search/hybrid-search.md",
     )
@@ -303,8 +293,7 @@ async def drive_mcp(ctx: Context) -> str:
         ctx.log(f"{transport}-search", str(found.content))
         expect(
             not found.is_error
-            and top_path(str(found.content[0].text))
-            == ("config/index-path.md", "docs"),
+            and top_path(str(found.content[0].text)) == ("config/index-path.md", "docs"),
             f"{transport} search: expected docs/config/index-path.md first, got {str(found.content)[:300]}",
         )
         document = await client.call_tool_mcp(
@@ -358,9 +347,7 @@ async def drive_mcp(ctx: Context) -> str:
 
 
 async def drive_package(ctx: Context) -> str:
-    result = ctx.run(
-        [sys.executable, "-m", "tools.verify_package"], cwd=ctx.root, timeout=600
-    )
+    result = ctx.run([sys.executable, "-m", "tools.verify_package"], cwd=ctx.root, timeout=600)
     expect(
         result.returncode == 0 and "Package verification passed" in result.stdout,
         f"package: expected the wheel check to pass, got exit {result.returncode}: {(result.stderr or result.stdout)[-400:]}",

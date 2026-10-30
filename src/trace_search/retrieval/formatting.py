@@ -6,14 +6,12 @@ import re
 from collections import defaultdict
 from collections.abc import Sequence
 
-from trace_search.retrieval.search_types import SearchHit, SearchRoute, SearchResponse
+from trace_search.retrieval.search_types import SearchHit, SearchResponse, SearchRoute
 
 
-def _query_terms(query: str) -> list[str]:
+def query_terms(query: str) -> list[str]:
     """Extract meaningful lowercase terms for hints and snippets."""
-    return [
-        term for term in re.findall(r"[A-Za-z0-9_/-]+", query.lower()) if len(term) > 1
-    ]
+    return [term for term in re.findall(r"[A-Za-z0-9_/-]+", query.lower()) if len(term) > 1]
 
 
 def _trim_at_boundary(text: str, limit: int) -> str:
@@ -31,7 +29,7 @@ def _best_quote(content: str, query: str, limit: int = 360) -> str | None:
     if not compact:
         return None
 
-    terms = _query_terms(query)
+    terms = query_terms(query)
     lowered = compact.lower()
     positions = [lowered.find(term) for term in terms if lowered.find(term) >= 0]
     if positions:
@@ -66,9 +64,7 @@ def _format_followups(hits: Sequence[SearchHit], limit: int = 3) -> list[str]:
             continue
         seen.add(key)
         if collection:
-            followups.append(
-                f'- `get_document(path="{path}", collection="{collection}")`'
-            )
+            followups.append(f'- `get_document(path="{path}", collection="{collection}")`')
         else:
             followups.append(f'- `get_document(path="{path}")`')
         if len(followups) >= limit:
@@ -120,7 +116,7 @@ def _group_hits_by_document(
 
 def _matched_query_terms(query: str, quote: str) -> list[str]:
     quote_lower = quote.lower()
-    return [term for term in _query_terms(query) if term in quote_lower]
+    return [term for term in query_terms(query) if term in quote_lower]
 
 
 def _append_snippet(
@@ -147,9 +143,7 @@ def _append_snippet(
     lines.append(f"- **Best quote:** {quote}")
 
     if hit.neighbor_content:
-        lines.append(
-            f"- **Nearby context:** {_trim_at_boundary(hit.neighbor_content, 220)}"
-        )
+        lines.append(f"- **Nearby context:** {_trim_at_boundary(hit.neighbor_content, 220)}")
 
 
 def _append_document_group(

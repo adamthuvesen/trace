@@ -126,9 +126,7 @@ def test_edited_output_is_unverified(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("row", ["3,4,5", "3"])
-def test_malformed_csv_fails_without_replacing_good_output(
-    tmp_path: Path, row: str
-) -> None:
+def test_malformed_csv_fails_without_replacing_good_output(tmp_path: Path, row: str) -> None:
     source = tmp_path / "source"
     source.mkdir()
     document = source / "rows.csv"

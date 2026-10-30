@@ -50,9 +50,7 @@ class TestKBCollectionsParsing:
         kb = tmp_path / "docs"
         kb.mkdir()
         s = Settings(kb_path=kb, kb_collections=f"docs:{kb}")
-        with pytest.raises(
-            ValueError, match="KB_COLLECTIONS.*KB_PATH|KB_PATH.*KB_COLLECTIONS"
-        ):
+        with pytest.raises(ValueError, match=r"KB_COLLECTIONS.*KB_PATH|KB_PATH.*KB_COLLECTIONS"):
             _ = s.parsed_collections
 
     def test_only_kb_collections_works(self, tmp_path, monkeypatch):
@@ -171,7 +169,7 @@ class TestCollectionRegistry:
         kb.mkdir()
 
         reg = CollectionRegistry({"docs": kb})
-        cols = reg._resolve("docs")
+        cols = reg.resolve("docs")
         assert len(cols) == 1
         assert cols[0].name == "docs"
 
@@ -183,7 +181,7 @@ class TestCollectionRegistry:
 
         reg = CollectionRegistry({"docs": kb})
         with pytest.raises(ValueError, match="Unknown collection 'nope'"):
-            reg._resolve("nope")
+            reg.resolve("nope")
 
     def test_resolve_all(self, tmp_path):
         from trace_search.collections.collection_registry import CollectionRegistry
@@ -194,8 +192,8 @@ class TestCollectionRegistry:
         kb2.mkdir()
 
         reg = CollectionRegistry({"a": kb1, "b": kb2})
-        assert len(reg._resolve(None)) == 2
-        assert len(reg._resolve("all")) == 2
+        assert len(reg.resolve(None)) == 2
+        assert len(reg.resolve("all")) == 2
 
 
 class TestListDocumentsLimit:
@@ -251,11 +249,11 @@ class TestGetDocumentWarning:
         kb.mkdir()
 
         reg = CollectionRegistry({"docs": kb})
-        with caplog.at_level(
-            logging.WARNING, logger="trace_search.collections.operations"
+        with (
+            caplog.at_level(logging.WARNING, logger="trace_search.collections.operations"),
+            pytest.raises(RuntimeError, match="Document not found"),
         ):
-            with pytest.raises(RuntimeError, match="Document not found"):
-                TraceOperations(reg).get_document("../../etc/passwd", "docs")
+            TraceOperations(reg).get_document("../../etc/passwd", "docs")
 
         assert "rejected traversal" in caplog.text
 
@@ -271,15 +269,15 @@ class TestGetDocumentWarning:
         doc.write_text("# Broken")
 
         reg = CollectionRegistry({"docs": kb})
-        with caplog.at_level(
-            logging.WARNING, logger="trace_search.collections.operations"
-        ):
-            with patch(
+        with (
+            caplog.at_level(logging.WARNING, logger="trace_search.collections.operations"),
+            patch(
                 "trace_search.collections.operations.extract_content",
                 side_effect=RuntimeError("disk read failed"),
-            ):
-                with pytest.raises(RuntimeError, match="disk read failed"):
-                    TraceOperations(reg).get_document("broken.md", "docs")
+            ),
+            pytest.raises(RuntimeError, match="disk read failed"),
+        ):
+            TraceOperations(reg).get_document("broken.md", "docs")
 
         assert "extraction failed" in caplog.text
         assert "broken.md" in caplog.text
@@ -325,9 +323,7 @@ class TestMultiCollectionFilters:
         (docs / "architecture" / "intro.md").write_text(
             "# docs arch\n\nrouter design", encoding="utf-8"
         )
-        (docs / "rfcs" / "001.md").write_text(
-            "# RFC 001\n\nrouter behavior", encoding="utf-8"
-        )
+        (docs / "rfcs" / "001.md").write_text("# RFC 001\n\nrouter behavior", encoding="utf-8")
         (brain / "architecture" / "notes.md").write_text(
             "# brain arch\n\nrouter scaling", encoding="utf-8"
         )
@@ -396,10 +392,11 @@ class TestMultiCollectionFilters:
 
 def _operation_rankings(tmp_path, rankings, top_k, collection_names):
     from unittest.mock import patch
+
+    from tests.search_hits import make_hit
     from tests.test_runtime_hardening import FakeBackend
     from trace_search.collections.collection_registry import CollectionRegistry
     from trace_search.collections.operations import TraceOperations
-    from tests.search_hits import make_hit
     from trace_search.retrieval.search_types import SearchResponse, SearchRoute
 
     paths = {name: tmp_path / name for name in collection_names}
@@ -419,9 +416,7 @@ def _operation_rankings(tmp_path, rankings, top_k, collection_names):
         "trace_search.collections.operations.AdaptiveSearch.search",
         side_effect=responses,
     ):
-        return (
-            TraceOperations(registry).search_response("adaptive", "query", top_k).hits
-        )
+        return TraceOperations(registry).search_response("adaptive", "query", top_k).hits
 
 
 class TestMergeResults:
@@ -539,9 +534,7 @@ class TestMergeResults:
         )
         rendered = format_search_context(SearchResponse(merged), query="alpha")
         assert (
-            rendered.index("### 1. K1")
-            < rendered.index("### 2. H1")
-            < rendered.index("### 3. K2")
+            rendered.index("### 1. K1") < rendered.index("### 2. H1") < rendered.index("### 3. K2")
         )
 
 
@@ -609,9 +602,9 @@ class TestCrossCollectionFairness:
         filters = SearchFilters()
 
         large_hits, small_hits = (
-            KeywordSearch(
-                registry.collections[name].indexer(registry.shared_backend)
-            ).search(self.QUERY, 5, filters=filters)
+            KeywordSearch(registry.collections[name].indexer(registry.shared_backend)).search(
+                self.QUERY, 5, filters=filters
+            )
             for name in ("large", "small")
         )
         assert small_hits and small_hits[0].path == "kubernetes-deployment-guide.md"
@@ -625,9 +618,7 @@ class TestCrossCollectionFairness:
         assert len(outscoring) >= 2
 
         merged = (
-            TraceOperations(registry)
-            .search_response("keyword", self.QUERY, 5, None, filters)
-            .hits
+            TraceOperations(registry).search_response("keyword", self.QUERY, 5, None, filters).hits
         )
         top2 = [(h.collection, h.path) for h in merged[:2]]
         assert ("small", "kubernetes-deployment-guide.md") in top2
@@ -640,24 +631,15 @@ class TestCrossCollectionFairness:
         from trace_search.retrieval.formatting import format_search_context
 
         registry = self._make_registry(tmp_path)
-        response = TraceOperations(registry).search_response(
-            "adaptive", self.QUERY, 5, None
-        )
+        response = TraceOperations(registry).search_response("adaptive", self.QUERY, 5, None)
         rendered = format_search_context(response, query=self.QUERY, max_documents=5)
         assert "### 3." in rendered
-        assert rendered.index("kubernetes-deployment-guide.md") < rendered.index(
-            "### 3."
-        )
+        assert rendered.index("kubernetes-deployment-guide.md") < rendered.index("### 3.")
 
     def test_merge_respects_top_k(self, tmp_path):
 
-        results = [
-            {"path": f"{i}.md", "score": float(i), "source": "keyword"}
-            for i in range(10)
-        ]
-        merged = _operation_rankings(
-            tmp_path, [results], top_k=3, collection_names=["x"]
-        )
+        results = [{"path": f"{i}.md", "score": float(i), "source": "keyword"} for i in range(10)]
+        merged = _operation_rankings(tmp_path, [results], top_k=3, collection_names=["x"])
         assert len(merged) == 3
 
 
@@ -673,32 +655,32 @@ class TestResolveAllCaseInsensitive:
 
     def test_resolve_all_lowercase(self, tmp_path):
         reg = self._make_registry(tmp_path)
-        result = reg._resolve("all")
+        result = reg.resolve("all")
         assert len(result) == 2
 
     def test_resolve_all_uppercase(self, tmp_path):
         reg = self._make_registry(tmp_path)
-        result = reg._resolve("ALL")
+        result = reg.resolve("ALL")
         assert len(result) == 2
 
     def test_resolve_all_mixed_case(self, tmp_path):
         reg = self._make_registry(tmp_path)
-        result = reg._resolve("All")
+        result = reg.resolve("All")
         assert len(result) == 2
 
     def test_resolve_none_returns_all(self, tmp_path):
         reg = self._make_registry(tmp_path)
-        result = reg._resolve(None)
+        result = reg.resolve(None)
         assert len(result) == 2
 
     def test_resolve_unknown_raises(self, tmp_path):
         reg = self._make_registry(tmp_path)
         with pytest.raises(ValueError, match="docs"):
-            reg._resolve("Docs")
+            reg.resolve("Docs")
 
     def test_resolve_known_collection_case_sensitive(self, tmp_path):
         reg = self._make_registry(tmp_path)
-        result = reg._resolve("docs")
+        result = reg.resolve("docs")
         assert len(result) == 1
         assert result[0].name == "docs"
 

@@ -4,19 +4,20 @@ from __future__ import annotations
 
 import bm25s
 import Stemmer
+from bm25s.tokenization import Tokenized
 
-_STEMMER: Stemmer.Stemmer | None = None
+_stemmer: Stemmer.Stemmer | None = None
 
 
 def english_stemmer() -> Stemmer.Stemmer:
     """Return a process-wide English stemmer for BM25 queries."""
-    global _STEMMER
-    if _STEMMER is None:
-        _STEMMER = Stemmer.Stemmer("english")
-    return _STEMMER
+    global _stemmer
+    if _stemmer is None:
+        _stemmer = Stemmer.Stemmer("english")
+    return _stemmer
 
 
-def tokenize_keywords(text: str) -> object:
+def tokenize_keywords(text: str) -> list[list[str]] | Tokenized:
     """Tokenize a keyword query for BM25 retrieval."""
     return bm25s.tokenize(
         [text],

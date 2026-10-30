@@ -7,9 +7,7 @@ from trace_search.indexing import index_store
 from trace_search.indexing.wiki_indexer import WikiIndexer
 
 
-def test_generation_directories_are_synced_before_current_changes(
-    tmp_path, monkeypatch
-):
+def test_generation_directories_are_synced_before_current_changes(tmp_path, monkeypatch):
     kb = tmp_path / "documents"
     kb.mkdir()
     (kb / "intro.md").write_text("# Intro\n\nDurable publication fixture.")

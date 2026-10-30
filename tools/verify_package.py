@@ -87,9 +87,7 @@ def verify_package() -> None:
             temporary,
             environment,
         )
-        python = isolated_environment / (
-            "Scripts/python.exe" if os.name == "nt" else "bin/python"
-        )
+        python = isolated_environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
         executable = isolated_environment / (
             "Scripts/trace.exe" if os.name == "nt" else "bin/trace"
         )
@@ -140,9 +138,7 @@ assert "fastembed" not in sys.modules, "Public import loaded the embedding runti
             temporary,
             environment,
         )
-        run_command(
-            "installed CLI help", [str(executable), "--help"], temporary, environment
-        )
+        run_command("installed CLI help", [str(executable), "--help"], temporary, environment)
         knowledge_base = temporary / "documents"
         knowledge_base.mkdir()
         (knowledge_base / "hello.md").write_text("# Hello\n\nInstalled wheel fixture")
@@ -214,21 +210,17 @@ filters = SearchFilters(path_prefix=("guides/",), extensions=(".md",))
 response = SearchResponse(hits=())
 path: str = chunk.document.path
 """)
-        mypy = [
+        (temporary / "pyrightconfig.json").write_text('{"typeCheckingMode": "strict"}')
+        basedpyright = [
             sys.executable,
             "-m",
-            "mypy",
-            "--config-file",
-            os.devnull,
-            "--python-executable",
+            "basedpyright",
+            "--pythonpath",
             str(python),
-            "--no-incremental",
-            "--strict",
-            "--follow-imports=silent",
         ]
         run_command(
             "installed typed public API consumer",
-            [*mypy, str(good_consumer)],
+            [*basedpyright, str(good_consumer)],
             temporary,
             environment,
         )
@@ -240,13 +232,13 @@ document = DocumentRef(collection=123, path="hello.md")
 """)
         rejected = run_command(
             "installed public API rejects incorrect argument types",
-            [*mypy, str(bad_consumer)],
+            [*basedpyright, str(bad_consumer)],
             temporary,
             environment,
             expected_failure=True,
         )
         require(
-            "[arg-type]" in rejected.stdout and '"collection"' in rejected.stdout,
+            "reportArgumentType" in rejected.stdout and '"collection"' in rejected.stdout,
             "The incorrect type check failed for an unrelated reason",
         )
     print("Package verification passed. Temporary build and environments removed.")

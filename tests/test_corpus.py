@@ -61,9 +61,7 @@ def test_traceignore_allowlist_with_negation_keeps_kb_relative_paths(
             "wiki/concepts/log.md",
         ],
     )
-    (kb / ".traceignore").write_text(
-        "/*\n!/wiki/\n/wiki/log.md\n/wiki/log/\n", encoding="utf-8"
-    )
+    (kb / ".traceignore").write_text("/*\n!/wiki/\n/wiki/log.md\n/wiki/log/\n", encoding="utf-8")
 
     paths = sorted(p.relative_to(kb).as_posix() for p in iter_kb_files(kb))
     assert paths == [

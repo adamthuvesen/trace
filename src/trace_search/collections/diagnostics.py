@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Literal
 
 from trace_search.config import Settings, get_settings
-from trace_search.retrieval.search_types import SearchHit
+from trace_search.extraction.corpus import iter_kb_files
 from trace_search.indexing.index_metadata import (
     INDEX_METADATA_VERSION,
     IndexMetadata,
@@ -19,11 +19,10 @@ from trace_search.indexing.index_metadata import (
     metadata_matches_settings,
     metadata_query_compatible,
 )
-from trace_search.extraction.corpus import iter_kb_files
 from trace_search.indexing.index_store import (
-    read_current,
-    load_snapshot,
     IndexCorruptError,
+    load_snapshot,
+    read_current,
     read_current_metadata,
 )
 from trace_search.indexing.kb_paths import (
@@ -33,6 +32,7 @@ from trace_search.indexing.kb_paths import (
     load_traceignore,
     should_exclude_path,
 )
+from trace_search.retrieval.search_types import SearchHit
 
 SampleQueryRunner = Callable[[str, str | None], Sequence[SearchHit]]
 
@@ -136,9 +136,7 @@ def scan_corpus(kb_path: Path, config: Settings | None = None) -> CorpusScan:
     """Scan a collection for visible supported files and excluded paths."""
     config = config or get_settings()
     scan = CorpusScan(traceignore_active=load_traceignore(kb_path) is not None)
-    visible_paths = {
-        p for p in iter_kb_files(kb_path, exclude_patterns=config.exclude_patterns_list)
-    }
+    visible_paths = set(iter_kb_files(kb_path, exclude_patterns=config.exclude_patterns_list))
     for path in kb_path.rglob("*"):
         if not path.is_file():
             continue
@@ -183,7 +181,8 @@ def _freshness_diagnosis(
     if not metadata_matches_settings(metadata, config):
         status = "incompatible"
         messages.append(
-            "Index build recipe differs from the requested model, runtime, chunking, or BM25 settings."
+            "Index build recipe differs from the requested model, runtime, chunking, "
+            "or BM25 settings."
         )
 
     changes = categorize_source_changes(kb_path, metadata, config=config)
@@ -194,17 +193,13 @@ def _freshness_diagnosis(
             f"{len(changes.removed)} removed since last index."
         )
         if status == "incompatible":
-            messages.append(
-                "Next `reindex` will be forced because the build recipe changed."
-            )
+            messages.append("Next `reindex` will be forced because the build recipe changed.")
             next_reindex = "forced"
         else:
             messages.append("Next `reindex` will run incrementally on changed files.")
             next_reindex = "incremental"
     elif status == "incompatible":
-        messages.append(
-            "Next `reindex` will run, but a build recipe mismatch forces a rebuild."
-        )
+        messages.append("Next `reindex` will run, but a build recipe mismatch forces a rebuild.")
         next_reindex = "forced"
     else:
         messages.append("Indexes are present, compatible, and fresh.")
@@ -339,9 +334,7 @@ def _append_collection_report(
     lines.append(f"- **Index root:** `{collection.index_path}`")
     lines.append(f"- **Visible supported docs:** {collection.corpus.visible_total}")
     if collection.corpus.traceignore_active:
-        lines.append(
-            f"- **Ignore file:** `{TRACEIGNORE_FILENAME}` active at the KB root"
-        )
+        lines.append(f"- **Ignore file:** `{TRACEIGNORE_FILENAME}` active at the KB root")
 
     if collection.corpus.visible_by_extension:
         ext_counts = ", ".join(
@@ -366,13 +359,13 @@ def _append_collection_report(
     lines.append(f"- **Index status:** {collection.index.status}")
     for message in collection.index.messages:
         lines.append(f"  - {message}")
-    lines.append(
-        f"- **Last index time:** {collection.index.last_index_time or 'unknown'}"
-    )
+    lines.append(f"- **Last index time:** {collection.index.last_index_time or 'unknown'}")
     lines.append(f"- **Metadata schema:** {_metadata_version_label(collection.index)}")
     lines.append(f"- **Next reindex:** {collection.index.next_reindex}")
     lines.append(
-        f"- **Compatibility:** readable={collection.index.readable}, query-compatible={collection.index.query_compatible}, reusable={collection.index.reusable}"
+        f"- **Compatibility:** readable={collection.index.readable}, "
+        f"query-compatible={collection.index.query_compatible}, "
+        f"reusable={collection.index.reusable}"
     )
 
     changes = collection.index.changes

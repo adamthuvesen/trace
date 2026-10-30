@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
+from trace_search.indexing.index_store import ChunkMetadata
 from trace_search.retrieval.search_types import (
-    SearchHit,
     ScoreEvidence,
+    SearchHit,
     SearchSource,
 )
-
-from trace_search.indexing.index_store import ChunkMetadata
 
 
 def typed_chunk_hit(

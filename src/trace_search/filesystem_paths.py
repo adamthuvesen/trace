@@ -16,9 +16,7 @@ def validate_distinct_targets(targets: Sequence[tuple[str, Path]]) -> None:
         while not ancestor.exists():
             ancestor = ancestor.parent
         identity = ancestor.stat()
-        groups[(identity.st_dev, identity.st_ino)].append(
-            (label, destination, ancestor)
-        )
+        groups[(identity.st_dev, identity.st_ino)].append((label, destination, ancestor))
 
     for group in groups.values():
         if len(group) < 2:
@@ -28,7 +26,8 @@ def validate_distinct_targets(targets: Sequence[tuple[str, Path]]) -> None:
             relative = destination.relative_to(ancestor)
             if relative in lexical:
                 raise ValueError(
-                    f"Destination collision: {lexical[relative]} and {label} both map to {destination}"
+                    f"Destination collision: {lexical[relative]} and {label} "
+                    f"both map to {destination}"
                 )
             lexical[relative] = label
         # A scratch mirror detects case and Unicode aliases without creating targets.
@@ -51,7 +50,8 @@ def validate_distinct_targets(targets: Sequence[tuple[str, Path]]) -> None:
                     identity = probe.stat()
                     previous = claimed[(identity.st_dev, identity.st_ino)]
                     raise ValueError(
-                        f"Destination collision: {previous} and {label} both map to {destination} on this filesystem"
+                        f"Destination collision: {previous} and {label} "
+                        f"both map to {destination} on this filesystem"
                     )
                 with probe.open("xb"):
                     pass

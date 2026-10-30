@@ -33,7 +33,9 @@ def _chunk_paths(indexer: WikiIndexer) -> list[str]:
 
 def _texts_by_path(indexer: WikiIndexer) -> dict[str, str]:
     snapshot = indexer.snapshot()
-    return {chunk["path"]: text for chunk, text in zip(snapshot.chunks, snapshot.texts)}
+    return {
+        chunk["path"]: text for chunk, text in zip(snapshot.chunks, snapshot.texts, strict=False)
+    }
 
 
 def _current_metadata_file(index_root: Path) -> Path:

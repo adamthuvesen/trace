@@ -20,14 +20,11 @@ def _fingerprint(tmp_path: Path) -> str:
     config = Settings(char_chunk_size=300, char_overlap_size=60)
     builder = WikiIndexer(FIXTURE_KB, tmp_path, FakeBackend(), config=config).builder
     paths = sorted(
-        str(path.relative_to(FIXTURE_KB))
-        for path in FIXTURE_KB.rglob("*")
-        if path.is_file()
+        str(path.relative_to(FIXTURE_KB)) for path in FIXTURE_KB.rglob("*") if path.is_file()
     )
     ids, texts, chunks = builder._build_chunks(builder._load_documents_subset(paths))
     stable = [
-        {key: value for key, value in chunk.items() if key != "source_mtime"}
-        for chunk in chunks
+        {key: value for key, value in chunk.items() if key != "source_mtime"} for chunk in chunks
     ]
     payload = json.dumps([ids, texts, stable], sort_keys=True)
     return hashlib.sha256(payload.encode()).hexdigest()
@@ -42,9 +39,7 @@ def test_chunk_transform_changes_bump_index_metadata_version(tmp_path):
         "Otherwise incremental builds reuse chunks made by the old transform."
     )
     if actual != GOLDEN_FINGERPRINT:
-        assert INDEX_METADATA_VERSION != GOLDEN_VERSION, (
-            f"Chunk text or metadata changed. {fix}"
-        )
+        assert INDEX_METADATA_VERSION != GOLDEN_VERSION, f"Chunk text or metadata changed. {fix}"
     assert (INDEX_METADATA_VERSION, actual) == (GOLDEN_VERSION, GOLDEN_FINGERPRINT), (
         f"INDEX_METADATA_VERSION and the chunk golden must change together. {fix}"
     )

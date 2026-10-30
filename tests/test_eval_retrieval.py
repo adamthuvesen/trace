@@ -7,11 +7,11 @@ from unittest.mock import patch
 
 import pytest
 
+from tools.eval.evaluator import run_evaluation
+from tools.eval.models import GoldenQuery
 from trace_search.config import get_settings
 from trace_search.indexing.wiki_indexer import WikiIndexer
 from trace_search.retrieval.search import SemanticSearch
-from tools.eval.evaluator import run_evaluation
-from tools.eval.models import GoldenQuery
 
 FIXTURE_KB = Path(__file__).parent / "fixtures" / "eval_kb"
 FIXTURE_GOLDEN = Path(__file__).parent / "fixtures" / "eval_golden_queries.yaml"
@@ -68,9 +68,7 @@ def test_run_evaluation_reports_reciprocal_rank(
 
 @pytest.mark.slow
 @patch("tools.eval.evaluator.load_golden_queries")
-def test_strict_keywords_requires_all_terms(
-    mock_load, eval_indexer: WikiIndexer
-) -> None:
+def test_strict_keywords_requires_all_terms(mock_load, eval_indexer: WikiIndexer) -> None:
     mock_load.return_value = [
         GoldenQuery(
             id="kw-test",

@@ -5,13 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from types import MappingProxyType
-from typing import Literal, TypeAlias, cast
+from typing import Literal, cast
 
 from trace_search.indexing.index_store import (
     ChunkMetadata,
 )
 
-SearchSource: TypeAlias = Literal["keyword", "semantic", "hybrid", "unknown"]
+type SearchSource = Literal["keyword", "semantic", "hybrid", "unknown"]
 
 
 @dataclass(frozen=True)
@@ -52,9 +52,7 @@ class SearchFilters:
         """Return whether a file or hit record satisfies all active filters."""
         if self.is_empty:
             return True
-        if self.path_prefix and not any(
-            rel_path.startswith(prefix) for prefix in self.path_prefix
-        ):
+        if self.path_prefix and not any(rel_path.startswith(prefix) for prefix in self.path_prefix):
             return False
         if self.extensions and extension not in self.extensions:
             return False

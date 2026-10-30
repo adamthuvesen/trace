@@ -9,20 +9,36 @@ from trace_search.config import settings as settings
 from trace_search.indexing.wiki_indexer import WikiIndexer as WikiIndexer
 from trace_search.retrieval.formatting import (
     format_results as format_results,
+)
+from trace_search.retrieval.formatting import (
     format_search_context as format_search_context,
 )
 from trace_search.retrieval.search import (
     AdaptiveSearch as AdaptiveSearch,
+)
+from trace_search.retrieval.search import (
     HybridSearch as HybridSearch,
+)
+from trace_search.retrieval.search import (
     KeywordSearch as KeywordSearch,
+)
+from trace_search.retrieval.search import (
     SemanticSearch as SemanticSearch,
 )
 from trace_search.retrieval.search_types import (
     ChunkRef as ChunkRef,
+)
+from trace_search.retrieval.search_types import (
     DocumentRef as DocumentRef,
-    SearchHit as SearchHit,
-    SearchResponse as SearchResponse,
+)
+from trace_search.retrieval.search_types import (
     SearchFilters as SearchFilters,
+)
+from trace_search.retrieval.search_types import (
+    SearchHit as SearchHit,
+)
+from trace_search.retrieval.search_types import (
+    SearchResponse as SearchResponse,
 )
 
 try:
@@ -31,18 +47,18 @@ except PackageNotFoundError:
     __version__ = "0+unknown"
 
 __all__ = [
-    "settings",
-    "WikiIndexer",
-    "SemanticSearch",
-    "KeywordSearch",
-    "HybridSearch",
     "AdaptiveSearch",
-    "format_results",
-    "format_search_context",
+    "ChunkRef",
     "CollectionRegistry",
     "DocumentRef",
-    "ChunkRef",
+    "HybridSearch",
+    "KeywordSearch",
+    "SearchFilters",
     "SearchHit",
     "SearchResponse",
-    "SearchFilters",
+    "SemanticSearch",
+    "WikiIndexer",
+    "format_results",
+    "format_search_context",
+    "settings",
 ]

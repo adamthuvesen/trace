@@ -40,13 +40,7 @@ class ConversionStats:
 
     @property
     def total(self) -> int:
-        return (
-            self.converted
-            + self.copied
-            + self.unchanged
-            + self.unverified
-            + self.failed
-        )
+        return self.converted + self.copied + self.unchanged + self.unverified + self.failed
 
 
 @dataclass(frozen=True)
@@ -191,17 +185,13 @@ def validate_destination(destination: Path, output_root: Path) -> None:
     if not destination.is_relative_to(output_root):
         raise ValueError(f"Destination is outside the output directory: {destination}")
     if not destination.resolve().is_relative_to(output_root):
-        raise ValueError(
-            f"Destination symlink escapes the output directory: {destination}"
-        )
+        raise ValueError(f"Destination symlink escapes the output directory: {destination}")
     for path in (destination, *destination.parents):
         if path == output_root:
             break
         if path.is_symlink():
             raise ValueError(f"Destination contains a symlink: {path}")
-        if path.exists() and (
-            path.is_dir() if path == destination else not path.is_dir()
-        ):
+        if path.exists() and (path.is_dir() if path == destination else not path.is_dir()):
             raise ValueError(f"Destination has an incompatible existing path: {path}")
 
 
@@ -216,8 +206,7 @@ def build_conversion_plan(
         path.samefile(output_root) for path in (source_root, *source_root.parents)
     )
     output_inside_source = any(
-        path.exists() and path.samefile(source_root)
-        for path in (output_root, *output_root.parents)
+        path.exists() and path.samefile(source_root) for path in (output_root, *output_root.parents)
     )
     if source_inside_output or output_inside_source:
         raise ValueError("Source and output directories must not overlap")
@@ -230,9 +219,7 @@ def build_conversion_plan(
         lexical_source = input_path.absolute()
         resolved_source = input_path.resolve(strict=True)
         if not resolved_source.is_relative_to(source_root):
-            raise ValueError(
-                f"Source symlink escapes the source directory: {input_path}"
-            )
+            raise ValueError(f"Source symlink escapes the source directory: {input_path}")
         destination = get_output_path(lexical_source, source_root, output_root)
         validate_destination(destination, output_root)
         validate_destination(provenance_path(destination), output_root)
@@ -246,15 +233,11 @@ def build_conversion_plan(
         if extension not in CONVERTERS:
             raise ValueError(f"No converter for {input_path}")
         planned.append(
-            PlannedConversion(
-                resolved_source, destination, fingerprint(resolved_source), extension
-            )
+            PlannedConversion(resolved_source, destination, fingerprint(resolved_source), extension)
         )
     for destination in destinations:
         if any(parent in destinations for parent in destination.parents):
-            raise ValueError(
-                f"Destination file conflicts with a directory: {destination}"
-            )
+            raise ValueError(f"Destination file conflicts with a directory: {destination}")
     validate_filesystem_destinations(planned)
     return ConversionPlan(source_root, output_root, tuple(planned))
 
@@ -279,16 +262,13 @@ def existing_status(entry: PlannedConversion, force: bool) -> ConversionStatus |
         provenance = ConversionProvenance.model_validate_json(
             provenance_path(entry.destination_path).read_text(encoding="utf-8")
         )
-    except (OSError, UnicodeError, ValidationError):
+    except OSError, UnicodeError, ValidationError:
         return "unverified"
-    if provenance.source_path != str(
-        entry.source_path
-    ) or provenance.output_sha256 != fingerprint(entry.destination_path):
-        return "unverified"
-    if (
-        provenance.version == CONVERTER_VERSION
-        and provenance.source_sha256 == entry.source_sha256
+    if provenance.source_path != str(entry.source_path) or provenance.output_sha256 != fingerprint(
+        entry.destination_path
     ):
+        return "unverified"
+    if provenance.version == CONVERTER_VERSION and provenance.source_sha256 == entry.source_sha256:
         return "unchanged"
     return None
 
@@ -311,21 +291,15 @@ def convert_file(
             )
         if status == "unchanged":
             return status, None
-        success: ConversionStatus = (
-            "copied" if entry.extension == ".md" else "converted"
-        )
+        success: ConversionStatus = "copied" if entry.extension == ".md" else "converted"
         if dry_run:
             return success, None
         if not entry.source_path.resolve(strict=True).is_relative_to(plan.source_root):
-            raise ValueError(
-                f"Source escapes the source directory: {entry.source_path}"
-            )
+            raise ValueError(f"Source escapes the source directory: {entry.source_path}")
         if fingerprint(entry.source_path) != entry.source_sha256:
             raise ValueError("Source changed after planning. Run the conversion again.")
         destination.parent.mkdir(parents=True, exist_ok=True)
-        with TemporaryDirectory(
-            prefix=".trace-convert-", dir=destination.parent
-        ) as name:
+        with TemporaryDirectory(prefix=".trace-convert-", dir=destination.parent) as name:
             staging = Path(name)
             temporary_output = staging / destination.name
             CONVERTERS[entry.extension](entry.source_path, temporary_output)
@@ -338,21 +312,19 @@ def convert_file(
                 output_sha256=fingerprint(temporary_output),
             )
             temporary_provenance = staging / "provenance.json"
-            temporary_provenance.write_text(
-                provenance.model_dump_json(), encoding="utf-8"
-            )
+            temporary_provenance.write_text(provenance.model_dump_json(), encoding="utf-8")
             validate_destination(destination, plan.output_root)
             validate_destination(provenance_path(destination), plan.output_root)
             backup = staging / "previous-output"
             had_output = destination.exists()
             if had_output:
                 shutil.copy2(destination, backup)
-            os.replace(temporary_output, destination)
+            Path(temporary_output).replace(destination)
             try:
-                os.replace(temporary_provenance, provenance_path(destination))
+                Path(temporary_provenance).replace(provenance_path(destination))
             except OSError:
                 if had_output:
-                    os.replace(backup, destination)
+                    Path(backup).replace(destination)
                 else:
                     destination.unlink()
                 raise
@@ -401,12 +373,8 @@ def process_files(
     help="Output directory (default: CONVERT_MARKDOWN_OUT or ./markdown-out)",
 )
 @click.option("--dry-run", is_flag=True, help="Preview without converting")
-@click.option(
-    "--force", is_flag=True, help="Regenerate outputs, including unverified files"
-)
-@click.option(
-    "--types", type=str, default=None, help="Comma-separated types (e.g., pdf,docx)"
-)
+@click.option("--force", is_flag=True, help="Regenerate outputs, including unverified files")
+@click.option("--types", type=str, default=None, help="Comma-separated types (e.g., pdf,docx)")
 def main(
     source_path: Path | None,
     output_dir: Path | None,
@@ -430,13 +398,9 @@ def main(
     types_filter = None
     if types:
         types_filter = {item.strip().lower().lstrip(".") for item in types.split(",")}
-        invalid = types_filter - {
-            extension.lstrip(".") for extension in SUPPORTED_EXTENSIONS
-        }
+        invalid = types_filter - {extension.lstrip(".") for extension in SUPPORTED_EXTENSIONS}
         if invalid:
-            raise click.UsageError(
-                f"Unsupported file types: {', '.join(sorted(invalid))}"
-            )
+            raise click.UsageError(f"Unsupported file types: {', '.join(sorted(invalid))}")
     console.print(f"Source path: {source_path}", markup=False)
     console.print(f"Output dir: {output_dir}", markup=False)
     if dry_run:

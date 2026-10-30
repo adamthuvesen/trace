@@ -10,11 +10,11 @@ import pytest
 from tests.test_runtime_hardening import FakeBackend
 from trace_search.indexing.wiki_indexer import WikiIndexer
 from trace_search.retrieval.search import (
+    AdaptiveSearch,
     HybridSearch,
     KeywordSearch,
     SearchFilters,
     SemanticSearch,
-    AdaptiveSearch,
     parse_filters,
 )
 
@@ -127,9 +127,7 @@ def filter_kb(tmp_path: Path) -> tuple[WikiIndexer, Path]:
     (kb / "architecture" / "notes.md").write_text(
         "# Architecture notes\n\nrouter scales horizontally", encoding="utf-8"
     )
-    (kb / "rfcs" / "001.md").write_text(
-        "# RFC 001\n\nrouter behavior change", encoding="utf-8"
-    )
+    (kb / "rfcs" / "001.md").write_text("# RFC 001\n\nrouter behavior change", encoding="utf-8")
     (kb / "rfcs" / "002.py").write_text(
         '"""router config."""\n\ndef build():\n    pass\n', encoding="utf-8"
     )

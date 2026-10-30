@@ -13,8 +13,8 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator
 
 from trace_search.config import Settings, get_settings
-from trace_search.indexing.embeddings import EmbeddingBackend, OnnxBackend
 from trace_search.extraction.corpus import iter_kb_files
+from trace_search.indexing.embeddings import EmbeddingBackend, OnnxBackend
 
 # v4: generation store (no Chroma). v5: frontmatter-aware chunks. v6: records
 # chunk settings.
@@ -196,9 +196,7 @@ def build_index_metadata(
         version=INDEX_METADATA_VERSION,
         build_started_at=build_started_at,
         build_completed_at=build_completed_at,
-        embedding_model=backend.model_name
-        if backend is not None
-        else config.embedding_model,
+        embedding_model=backend.model_name if backend is not None else config.embedding_model,
         model_slug=(
             backend.model_name.replace("/", "_").replace("-", "_").lower()
             if backend is not None
@@ -269,16 +267,12 @@ def index_metadata_from_dict(raw: dict[str, Any]) -> IndexMetadata | None:
             "transformation_version": "legacy-v6",
         }
     decoded = _StoredMetadata.model_validate(raw)
-    if len({record.path for record in decoded.source_files}) != len(
-        decoded.source_files
-    ):
+    if len({record.path for record in decoded.source_files}) != len(decoded.source_files):
         raise ValueError("Index source paths must be unique")
     fields = decoded.model_dump(exclude={"source_files"})
     return IndexMetadata(
         **fields,
-        source_files=[
-            SourceFileRecord(**record.model_dump()) for record in decoded.source_files
-        ],
+        source_files=[SourceFileRecord(**record.model_dump()) for record in decoded.source_files],
     )
 
 

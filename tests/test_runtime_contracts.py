@@ -52,7 +52,7 @@ def indexed(tmp_path: Path):
 
 @pytest.mark.parametrize("name", ["all", "ALL"])
 def test_all_is_a_reserved_collection_name(tmp_path, name):
-    with pytest.raises(ValueError, match="reserved.*Choose another collection name"):
+    with pytest.raises(ValueError, match=r"reserved.*Choose another collection name"):
         parse_kb_collections(f"{name}:{tmp_path}")
 
 
@@ -65,9 +65,7 @@ def test_empty_collection_path_cannot_select_current_directory():
     "filename,body",
     [("broken.md", b"\xff"), ("broken.ipynb", b"not-json"), ("broken.py", b"\xff")],
 )
-def test_failed_extraction_preserves_generation_and_retry_reextracts(
-    indexed, filename, body
-):
+def test_failed_extraction_preserves_generation_and_retry_reextracts(indexed, filename, body):
     generation = read_current(indexed.index_root)
     source = indexed.kb_path / filename
     source.write_bytes(body)
@@ -79,9 +77,7 @@ def test_failed_extraction_preserves_generation_and_retry_reextracts(
     )
     indexed.build_index()
     assert read_current(indexed.index_root) != generation
-    assert any(
-        record.path == filename for record in indexed.snapshot().metadata.source_files
-    )
+    assert any(record.path == filename for record in indexed.snapshot().metadata.source_files)
 
 
 def test_source_mutation_during_extraction_aborts_publication(indexed):
@@ -97,9 +93,11 @@ def test_source_mutation_during_extraction_aborts_publication(indexed):
         source.write_text("# Intro\n\nChanged during extraction.")
         return text
 
-    with patch.object(index_builder, "extract_content", side_effect=mutate):
-        with pytest.raises(RuntimeError, match="Source changed during extraction"):
-            indexed.build_index()
+    with (
+        patch.object(index_builder, "extract_content", side_effect=mutate),
+        pytest.raises(RuntimeError, match="Source changed during extraction"),
+    ):
+        indexed.build_index()
     assert read_current(indexed.index_root) == generation
 
 
@@ -108,21 +106,14 @@ def test_touch_refreshes_since_filter_without_reembedding(indexed):
     source = indexed.kb_path / "intro.md"
     future = source.stat().st_mtime + 10
     os.utime(source, (future, future))
-    with patch.object(
-        indexed.backend, "encode", side_effect=AssertionError("must reuse vectors")
-    ):
+    with patch.object(indexed.backend, "encode", side_effect=AssertionError("must reuse vectors")):
         indexed.build_index()
     after = indexed.snapshot()
     assert after.generation != before.generation
     assert after.chunks[0]["source_mtime"] == future
     assert np.array_equal(after.embeddings, before.embeddings)
     assert after.metadata.source_files[0].mtime == future
-    assert (
-        KeywordSearch(indexed).search(
-            "Intro", filters=parse_filters(since="2100-01-01")
-        )
-        == []
-    )
+    assert KeywordSearch(indexed).search("Intro", filters=parse_filters(since="2100-01-01")) == []
 
 
 def test_snapshot_payloads_are_read_only(indexed):
@@ -149,9 +140,7 @@ def test_recipe_records_injected_backend_and_bm25_change_forces_rebuild(indexed)
     assert before.embedding_dims == 3
     assert before.embedding_backend.endswith("FakeBackend")
     config = indexed.config.model_copy(update={"bm25_k1": 2.0, "bm25_b": 0.8})
-    fresh = WikiIndexer(
-        indexed.kb_path, indexed.index_root, FakeBackend(), config=config
-    )
+    fresh = WikiIndexer(indexed.kb_path, indexed.index_root, FakeBackend(), config=config)
     with patch.object(fresh.backend, "encode", wraps=fresh.backend.encode) as encode:
         fresh.build_index()
     encode.assert_called_once()
@@ -375,9 +364,7 @@ def test_implicit_all_directory_has_an_unambiguous_default_selector(tmp_path):
     config = Settings(_env_file=None, kb_path=kb, kb_collections=None)
     assert config.parsed_collections == {"default": kb}
     assert (
-        CollectionRegistry(config.parsed_collections, config=config)
-        ._resolve("default")[0]
-        .kb_path
+        CollectionRegistry(config.parsed_collections, config=config).resolve("default")[0].kb_path
         == kb
     )
 
@@ -389,9 +376,7 @@ def test_implicit_all_directory_has_an_unambiguous_default_selector(tmp_path):
         ("source_files", [], "source inventory"),
     ],
 )
-def test_v7_metadata_cannot_contradict_document_identity(
-    indexed, field, value, message
-):
+def test_v7_metadata_cannot_contradict_document_identity(indexed, field, value, message):
     path = indexed.index_root / read_current(indexed.index_root) / "index_metadata.json"
     raw = json.loads(path.read_text())
     raw[field] = value
@@ -418,10 +403,7 @@ def test_supported_next_schema_retains_artifact_invariants(
     monkeypatch.setattr(index_metadata, "INDEX_METADATA_VERSION", next_version)
     snapshot = indexed.snapshot()
     metadata = replace(snapshot.metadata, version=next_version)
-    assert (
-        index_metadata.index_metadata_from_dict(metadata.to_dict()).version
-        == next_version
-    )
+    assert index_metadata.index_metadata_from_dict(metadata.to_dict()).version == next_version
     with pytest.raises(ValueError, match=message):
         replace(snapshot, metadata=replace(metadata, **{field: value}))
 

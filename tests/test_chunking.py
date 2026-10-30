@@ -8,7 +8,6 @@ from trace_search.extraction.chunking import (
     chunk_by_paragraphs,
 )
 
-
 # Sample markdown content for testing
 SAMPLE_MARKDOWN = """# Document Title
 
@@ -64,9 +63,7 @@ class TestChunkByHeadings:
             overlap_chars=0,
         )
         for chunk in chunks:
-            assert len(chunk) <= max_chars, (
-                f"Chunk exceeds {max_chars} chars: {len(chunk)}"
-            )
+            assert len(chunk) <= max_chars, f"Chunk exceeds {max_chars} chars: {len(chunk)}"
 
     def test_preserves_content(self):
         chunks = chunk_by_headings(SAMPLE_MARKDOWN, overlap_chars=0)
@@ -93,8 +90,7 @@ class TestChunkByHeadingsWithOverlap:
         """Forces size-based splits within one heading to verify overlap is applied."""
         overlap_chars = 50
         content = "# Big Section\n\n" + "\n\n".join(
-            f"Paragraph {i} with enough text to take up space in the chunk."
-            for i in range(20)
+            f"Paragraph {i} with enough text to take up space in the chunk." for i in range(20)
         )
         chunks = chunk_by_headings(
             content,

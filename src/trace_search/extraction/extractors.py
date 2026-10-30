@@ -7,6 +7,7 @@ import logging
 import re
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,7 @@ def extract_pdf_content(path: Path) -> str:
     with fitz.open(path) as doc:
         pages = []
         for page in doc:
-            text = page.get_text("text")
+            text = cast(str, page.get_text("text"))
             if text.strip():
                 pages.append(text)
     return "\n\n".join(pages)
@@ -86,9 +87,7 @@ def extract_docx_content(path: Path) -> str:
 
     for table in doc.tables:
         for row in table.rows:
-            row_text = " | ".join(
-                cell.text.strip() for cell in row.cells if cell.text.strip()
-            )
+            row_text = " | ".join(cell.text.strip() for cell in row.cells if cell.text.strip())
             if row_text:
                 texts.append(row_text)
 
@@ -132,7 +131,7 @@ def extract_csv_content(path: Path) -> str:
     """Extract and flatten CSV data into readable text."""
     import csv
 
-    with open(path, encoding="utf-8") as f:
+    with path.open(encoding="utf-8") as f:
         reader = csv.DictReader(f)
         rows = []
         for row_num, row in enumerate(reader, 1):
@@ -171,9 +170,7 @@ def extract_notebook_content(path: Path) -> str:
         if not isinstance(source, str):
             raise ValueError(f"Malformed notebook source in cell {i + 1}: {path.name}")
         if source.strip():
-            content_parts.append(
-                f"[{cell['cell_type'].upper()} CELL {i + 1}]\n{source}"
-            )
+            content_parts.append(f"[{cell['cell_type'].upper()} CELL {i + 1}]\n{source}")
     return "\n\n".join(content_parts)
 
 

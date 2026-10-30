@@ -7,8 +7,8 @@ import stat
 from collections.abc import Iterator
 from pathlib import Path
 
-from trace_search.extraction.extractors import SUPPORTED_EXTENSIONS
 from trace_search.config import get_settings
+from trace_search.extraction.extractors import SUPPORTED_EXTENSIONS
 from trace_search.indexing.kb_paths import (
     is_traceignored_directory,
     should_exclude_path,
@@ -35,9 +35,7 @@ def iter_kb_files(
     if not stat.S_ISDIR(search_root.stat().st_mode):
         return
     exclusions = (
-        exclude_patterns
-        if exclude_patterns is not None
-        else get_settings().exclude_patterns_list
+        exclude_patterns if exclude_patterns is not None else get_settings().exclude_patterns_list
     )
 
     def walk(directory: Path) -> Iterator[Path]:
@@ -50,9 +48,12 @@ def iter_kb_files(
             if entry.is_dir(follow_symlinks=False):
                 if not is_traceignored_directory(file_path, kb_resolved):
                     yield from walk(file_path)
-            elif file_path.suffix.lower() in SUPPORTED_EXTENSIONS and entry.is_file():
-                if not should_exclude_path(file_path, kb_resolved, exclusions):
-                    yield file_path
+            elif (
+                file_path.suffix.lower() in SUPPORTED_EXTENSIONS
+                and entry.is_file()
+                and not should_exclude_path(file_path, kb_resolved, exclusions)
+            ):
+                yield file_path
 
     if search_root != kb_resolved and (
         should_exclude_path(search_root, kb_resolved, exclusions)

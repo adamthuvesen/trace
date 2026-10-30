@@ -178,9 +178,7 @@ class TestExtractPDFContent:
 
         assert "Format fixture PDF content" in content
         assert "Second PDF page" in content
-        assert content.index("Format fixture PDF content") < content.index(
-            "Second PDF page"
-        )
+        assert content.index("Format fixture PDF content") < content.index("Second PDF page")
 
 
 class TestExtractDocxContent:
@@ -229,9 +227,7 @@ class TestExtractCodeContent:
 
     def test_typescript_file(self, tmp_path: Path):
         ts_file = tmp_path / "test.ts"
-        ts_file.write_text(
-            "export const greet = (name: string): string => `Hello, ${name}`;"
-        )
+        ts_file.write_text("export const greet = (name: string): string => `Hello, ${name}`;")
 
         content = extract_code_content(ts_file)
 
@@ -249,9 +245,7 @@ class TestExtractCodeContent:
 
     def test_unicode_content(self, tmp_path: Path):
         py_file = tmp_path / "test.py"
-        py_file.write_text(
-            "# Kommentar pa svenska: aoa\nprint('Hej varlden!')\n", encoding="utf-8"
-        )
+        py_file.write_text("# Kommentar pa svenska: aoa\nprint('Hej varlden!')\n", encoding="utf-8")
 
         content = extract_code_content(py_file)
 

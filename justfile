@@ -11,9 +11,27 @@ bootstrap:
 check:
     uv run --locked --extra convert ruff check .
     uv run --locked --extra convert ruff format --check .
-    uv run --locked --extra convert mypy
+    uv run --locked --extra convert basedpyright
+    just ratchet
     uv run --locked --extra convert lint-imports --no-logo
     uv run --locked --extra convert python -m pytest -m "not slow and not transport" -q -n auto
+
+# Apply every auto-fixer.
+fix:
+    uv run --locked --extra convert ruff check --fix .
+    uv run --locked --extra convert ruff format .
+
+# Fail when the basedpyright baseline holds more errors than origin/main. The first baseline is allowed.
+ratchet:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    count() { python3 -c 'import json,sys; print(sum(len(v) for v in json.load(sys.stdin)["files"].values()))'; }
+    now=$(count < .basedpyright/baseline.json)
+    if ! base=$(git show origin/main:.basedpyright/baseline.json 2>/dev/null | count 2>/dev/null); then
+        echo "ratchet: no baseline on origin/main, allowing $now"; exit 0
+    fi
+    if [ "$now" -gt "$base" ]; then echo "ratchet: baseline grew from $base to $now" >&2; exit 1; fi
+    echo "ratchet: baseline $now (origin/main $base)"
 
 # Run one test file or pytest node.
 test-file path:
@@ -49,7 +67,7 @@ integration:
     just battle-challenge
 
 # Run all locally reproducible checks, using the same recipes as CI.
-full: check
+slow: check
     just integration
 
 # Drive the real CLI, MCP server, and wheel (verify-trace skill). Pass all, list, control, or drive names.

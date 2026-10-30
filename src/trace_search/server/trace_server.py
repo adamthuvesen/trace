@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from trace_search.config import configure_logging, get_settings
 from trace_search.server.cli import (
     DEFAULT_HTTP_HOST,
     DEFAULT_HTTP_PORT,
@@ -11,7 +12,6 @@ from trace_search.server.cli import (
     run_cli,
     validate_http_endpoint,
 )
-from trace_search.config import configure_logging, get_settings
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP

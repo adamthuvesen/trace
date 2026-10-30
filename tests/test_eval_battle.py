@@ -83,8 +83,7 @@ def test_collapsed_battle_fails_and_retains_reports(tmp_path):
 
 def test_matching_battle_passes_existing_comparison_thresholds(tmp_path):
     references = [
-        load_baseline(BASELINES / f"{name}_bm25.json")
-        for name in ("retrieval", "support", "api")
+        load_baseline(BASELINES / f"{name}_bm25.json") for name in ("retrieval", "support", "api")
     ]
     with (
         patch("trace_search.indexing.embeddings.build_embedding_backend"),
@@ -197,11 +196,7 @@ def test_top5_only_regression_identifies_the_query(tmp_path):
         for name in ("retrieval", "support", "api")
     }
     reference = references["retrieval"]
-    result = next(
-        row
-        for row in reference.results
-        if not row.top_1_path_hit and row.top_5_path_hit
-    )
+    result = next(row for row in reference.results if not row.top_1_path_hit and row.top_5_path_hit)
     changed = result.model_copy(
         update={
             "top_5_path_hit": False,
@@ -213,10 +208,7 @@ def test_top5_only_regression_identifies_the_query(tmp_path):
     current = EvaluationReport.from_results(
         timestamp=reference.timestamp,
         manifest=reference.manifest,
-        results=[
-            changed if row.query_id == changed.query_id else row
-            for row in reference.results
-        ],
+        results=[changed if row.query_id == changed.query_id else row for row in reference.results],
     )
     with (
         patch("trace_search.indexing.embeddings.build_embedding_backend"),

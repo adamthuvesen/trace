@@ -36,9 +36,7 @@ def document_kb(tmp_path: Path) -> Path:
     slide = slides.slides.add_slide(slides.slide_layouts[6])
     box = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(5), Inches(1))
     box.text_frame.text = "Format fixture PowerPoint content"
-    table = slide.shapes.add_table(
-        2, 2, Inches(1), Inches(3), Inches(5), Inches(1)
-    ).table
+    table = slide.shapes.add_table(2, 2, Inches(1), Inches(3), Inches(5), Inches(1)).table
     table.cell(0, 0).text = "Metric"
     table.cell(0, 1).text = "Value"
     table.cell(1, 0).text = "Active"

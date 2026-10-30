@@ -5,25 +5,24 @@ from __future__ import annotations
 import logging
 import os
 import time
-from datetime import datetime, timezone
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 import yaml
 
-from trace_search.retrieval.search_types import SearchHit
-
 from tools.eval.metrics import percentile as percentile
 from tools.eval.models import (
     DEFAULT_MIN_KEYWORDS,
     EvaluationReport,
-    GoldenQuery,
-    GoldenQueries,
     EvaluationScope,
-    SearchMode,
+    GoldenQueries,
+    GoldenQuery,
     QueryResult,
+    SearchMode,
 )
+from trace_search.retrieval.search_types import SearchHit
 
 if TYPE_CHECKING:
     from trace_search.indexing.wiki_indexer import WikiIndexer
@@ -91,7 +90,7 @@ def load_golden_queries(
     if not path.is_file():
         raise ValueError(_missing_golden_queries_message(path))
     try:
-        with open(path) as f:
+        with path.open() as f:
             data = yaml.safe_load(f)
     except yaml.YAMLError as e:
         raise ValueError(f"Invalid YAML in {path}: {e}") from e
@@ -202,9 +201,7 @@ def evaluate_query(
     elif search_mode == "bm25":
         hits = cast("KeywordSearch", searcher).search(query.query, max_results=top_k)
     else:
-        hits = cast("SemanticSearch | HybridSearch", searcher).search(
-            query.query, top_k=top_k
-        )
+        hits = cast("SemanticSearch | HybridSearch", searcher).search(query.query, top_k=top_k)
     latency_ms = (time.perf_counter() - start) * 1000
 
     if not hits:
@@ -237,9 +234,7 @@ def evaluate_query(
 
     reciprocal = 1.0 / path_first_hit_rank if path_first_hit_rank else 0.0
     max_rank = query.max_rank if query.max_rank is not None else top_k
-    path_hit_within_max_rank = (
-        path_first_hit_rank is not None and path_first_hit_rank <= max_rank
-    )
+    path_hit_within_max_rank = path_first_hit_rank is not None and path_first_hit_rank <= max_rank
 
     top_1_path = hits[0].path
     top_1_path_hit = query.matches_path(top_1_path)
@@ -266,9 +261,7 @@ def evaluate_query(
         retrieved_score=hits[0].evidence.score,
         latency_ms=latency_ms,
         keywords_found=top_5_keywords,
-        keywords_missing=[
-            k for k in query.expected_keywords if k.lower() not in scope_content
-        ],
+        keywords_missing=[k for k in query.expected_keywords if k.lower() not in scope_content],
         path_first_hit_rank=path_first_hit_rank,
         path_reciprocal_rank=reciprocal,
         path_hit_within_max_rank=path_hit_within_max_rank,
@@ -293,10 +286,9 @@ def run_evaluation(
     golden_queries_path: Path | None = None,
 ) -> EvaluationReport:
     """Run the full evaluation and return a report."""
-    from trace_search.retrieval.search import SemanticSearch
-    from trace_search.indexing.embedding_warmup import warm_embedding_model
-
     from tools.eval.provenance import build_manifest
+    from trace_search.indexing.embedding_warmup import warm_embedding_model
+    from trace_search.retrieval.search import SemanticSearch
 
     min_keywords = DEFAULT_MIN_KEYWORDS
     if search_mode not in SEARCH_MODES:
@@ -318,9 +310,7 @@ def run_evaluation(
     if not queries:
         raise ValueError("No queries match the specified filters")
 
-    logger.info(
-        "Running evaluation with %d queries (mode: %s)", len(queries), search_mode
-    )
+    logger.info("Running evaluation with %d queries (mode: %s)", len(queries), search_mode)
 
     manifest = build_manifest(
         indexer,
@@ -342,7 +332,7 @@ def run_evaluation(
     warm_embedding_model(indexer.backend)
 
     # Clear embedding cache for consistent per-query timing
-    SemanticSearch._embedding_cache.clear()
+    SemanticSearch.clear_embedding_cache()
 
     results: list[QueryResult] = []
     for i, query in enumerate(queries, 1):
@@ -358,9 +348,7 @@ def run_evaluation(
         results.append(result)
 
         status = (
-            "HIT"
-            if result.top_1_path_hit
-            else ("PARTIAL" if result.top_5_path_hit else "MISS")
+            "HIT" if result.top_1_path_hit else ("PARTIAL" if result.top_5_path_hit else "MISS")
         )
         logger.debug(
             "[%d/%d] %s: %s - %s",
@@ -372,7 +360,7 @@ def run_evaluation(
         )
 
     return EvaluationReport.from_results(
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
         manifest=manifest,
         results=results,
     )

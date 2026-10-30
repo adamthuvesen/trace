@@ -22,9 +22,7 @@ if TYPE_CHECKING:
 
 def fingerprint(value: object) -> str:
     return hashlib.sha256(
-        json.dumps(
-            value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-        ).encode()
+        json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
     ).hexdigest()
 
 
@@ -68,12 +66,8 @@ def build_manifest(
 ) -> EvaluationManifest:
     metadata = indexer.snapshot().metadata
     if metadata is None:
-        raise ValueError(
-            "Evaluation requires index provenance. Rebuild the scratch index."
-        )
-    corpus = sorted(
-        (record.path, record.content_sha) for record in metadata.source_files
-    )
+        raise ValueError("Evaluation requires index provenance. Rebuild the scratch index.")
+    corpus = sorted((record.path, record.content_sha) for record in metadata.source_files)
     revision, source = source_identity()
     return EvaluationManifest(
         corpus_fingerprint=fingerprint(corpus),
@@ -119,19 +113,12 @@ def comparison_differences(
         "strict_keywords_top1",
         "latency_protocol",
     )
-    changed = [
-        name
-        for name in input_fields
-        if getattr(current, name) != getattr(baseline, name)
-    ]
+    changed = [name for name in input_fields if getattr(current, name) != getattr(baseline, name)]
     if compare_latency and current.latency_environment != baseline.latency_environment:
-        changed.append(
-            "latency_environment (use --quality-only for cross-host quality comparison)"
-        )
+        changed.append("latency_environment (use --quality-only for cross-host quality comparison)")
     if changed:
         raise ValueError(
-            "Incompatible evaluation inputs or measurement semantics: "
-            + ", ".join(changed)
+            "Incompatible evaluation inputs or measurement semantics: " + ", ".join(changed)
         )
     return [
         name

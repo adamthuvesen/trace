@@ -50,9 +50,8 @@ def _generation_dirs(index_root: Path) -> set[str]:
 def test_second_writer_is_refused_while_lock_is_held(kb, tmp_path):
     index_root = tmp_path / "idx"
 
-    with writer_lock(index_root):
-        with pytest.raises(IndexBusyError, match=f"pid {os.getpid()}"):
-            _indexer(kb, index_root).build_index()
+    with writer_lock(index_root), pytest.raises(IndexBusyError, match=f"pid {os.getpid()}"):
+        _indexer(kb, index_root).build_index()
 
     assert read_current(index_root) is None
     assert _indexer(kb, index_root).build_index() == 3
@@ -176,9 +175,7 @@ def _prefix_snapshot_indexer() -> SimpleNamespace:
         }
         for path in paths
     ]
-    embeddings = np.asarray(
-        [[1.0, 0.0, 0.0]] * outside + [[0.6, 0.8, 0.0]], dtype=np.float32
-    )
+    embeddings = np.asarray([[1.0, 0.0, 0.0]] * outside + [[0.6, 0.8, 0.0]], dtype=np.float32)
     snapshot = IndexSnapshot.build(
         chunk_ids=[f"{path}::0" for path in paths],
         texts=texts,

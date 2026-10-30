@@ -10,9 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 def _definition(path: Path, name: str) -> re.Pattern[str]:
     if path.suffix == ".py":
-        return re.compile(
-            rf"^\s*(?:(?:async\s+)?def {name}\(|class {name}\b|{name} =)", re.M
-        )
+        return re.compile(rf"^\s*(?:(?:async\s+)?def {name}\(|class {name}\b|{name} =)", re.M)
     if path.name == "justfile":
         return re.compile(rf"^{re.escape(name)}\b[^\n]*:", re.M)
     if path.suffix == ".toml":
@@ -23,9 +21,7 @@ def _definition(path: Path, name: str) -> re.Pattern[str]:
 
 def test_enforced_rules_cite_real_files():
     agents = (REPO_ROOT / "AGENTS.md").read_text()
-    assert "\n## Enforced Rules\n" in agents, (
-        "AGENTS.md must keep its ## Enforced Rules section."
-    )
+    assert "\n## Enforced Rules\n" in agents, "AGENTS.md must keep its ## Enforced Rules section."
     section = agents.split("\n## Enforced Rules\n", 1)[1].split("\n## ", 1)[0]
     rows = [line for line in section.splitlines() if line.startswith("| ")][2:]
     assert rows, "AGENTS.md needs an ## Enforced Rules table with at least one row."
@@ -37,9 +33,7 @@ def test_enforced_rules_cite_real_files():
         for citation in cited:
             relative, _, name = citation.partition("::")
             path = REPO_ROOT / relative
-            if not path.exists() or (
-                name and not _definition(path, name).search(path.read_text())
-            ):
+            if not path.exists() or (name and not _definition(path, name).search(path.read_text())):
                 missing.append(citation)
     assert not missing, (
         "AGENTS.md Enforced Rules cites paths or names that do not exist. "

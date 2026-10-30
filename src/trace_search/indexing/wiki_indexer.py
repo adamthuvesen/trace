@@ -12,7 +12,7 @@ from trace_search.indexing.index_reader import IndexReader
 from trace_search.indexing.index_store import IndexSnapshot
 from trace_search.indexing.kb_paths import get_default_index_root
 
-__all__ = ["WikiIndexer", "BackendProvider"]
+__all__ = ["BackendProvider", "WikiIndexer"]
 
 
 class WikiIndexer:
@@ -38,9 +38,7 @@ class WikiIndexer:
             else get_default_index_root(self.kb_path, self.config.index_path)
         )
         if backend is None:
-            self._backend_provider: BackendProvider = lambda: build_embedding_backend(
-                self.config
-            )
+            self._backend_provider: BackendProvider = lambda: build_embedding_backend(self.config)
         elif isinstance(backend, EmbeddingBackend):
             self._backend_provider = lambda: backend
         else:

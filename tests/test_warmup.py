@@ -9,8 +9,8 @@ import pytest
 
 from tests.test_runtime_hardening import FakeBackend
 from trace_search.collections.collection_registry import CollectionRegistry
-from trace_search.retrieval.search import SemanticSearch
 from trace_search.indexing.embedding_warmup import warm_embedding_model
+from trace_search.retrieval.search import SemanticSearch
 
 
 class RecordingBackend(FakeBackend):
@@ -25,11 +25,11 @@ class RecordingBackend(FakeBackend):
 
 @pytest.fixture(autouse=True)
 def _reset_semantic_cache():
-    SemanticSearch._embedding_cache.clear()
+    SemanticSearch.clear_embedding_cache()
     SemanticSearch._cache_hits = 0
     SemanticSearch._cache_misses = 0
     yield
-    SemanticSearch._embedding_cache.clear()
+    SemanticSearch.clear_embedding_cache()
     SemanticSearch._cache_hits = 0
     SemanticSearch._cache_misses = 0
 

@@ -8,9 +8,9 @@ from pathlib import Path
 
 from trace_search.config import Settings, get_settings
 from trace_search.filesystem_paths import validate_distinct_targets
+from trace_search.indexing.embedding_warmup import warm_embedding_model
 from trace_search.indexing.embeddings import EmbeddingBackend, build_embedding_backend
 from trace_search.indexing.kb_paths import get_default_index_root
-from trace_search.indexing.embedding_warmup import warm_embedding_model
 from trace_search.indexing.wiki_indexer import BackendProvider, WikiIndexer
 
 
@@ -26,13 +26,9 @@ class Collection:
     # Keeps two first queries from both opening the indexer or both building a
     # missing index. Searches themselves need no lock: each one reads one
     # immutable snapshot, and a reindex publishes a new snapshot atomically.
-    _lock: threading.Lock = field(
-        default_factory=threading.Lock, repr=False, compare=False
-    )
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
-    def indexer(
-        self, backend: BackendProvider, *, build_if_missing: bool = True
-    ) -> WikiIndexer:
+    def indexer(self, backend: BackendProvider, *, build_if_missing: bool = True) -> WikiIndexer:
         """Open the indexer; build the index first when none exists yet."""
         with self._lock:
             if self._indexer is None:
@@ -70,7 +66,7 @@ class CollectionRegistry:
         self._warmed: bool = False
         self._backend_lock = threading.Lock()
         idx_root = index_root if index_root is not None else self.config.index_path
-        self._index_root = idx_root
+        self.index_root = idx_root
 
         self.collections: dict[str, Collection] = {}
         if not collections:
@@ -85,12 +81,8 @@ class CollectionRegistry:
                 raise ValueError(f"Invalid collection name: {name!r}")
             kb_path = Path(kb_path).expanduser().resolve()
             if not kb_path.is_dir():
-                raise ValueError(
-                    f"Collection '{name}' path is not a directory: {kb_path}"
-                )
-            col_index = get_default_index_root(
-                kb_path, idx_root, name if idx_root else None
-            )
+                raise ValueError(f"Collection '{name}' path is not a directory: {kb_path}")
+            col_index = get_default_index_root(kb_path, idx_root, name if idx_root else None)
             self.collections[name] = Collection(
                 name=name,
                 kb_path=kb_path,
@@ -126,7 +118,7 @@ class CollectionRegistry:
         warm_embedding_model(self._backend)
         self._warmed = True
 
-    def _resolve(self, collection: str | None) -> list[Collection]:
+    def resolve(self, collection: str | None) -> list[Collection]:
         """Resolve collection name to list of Collection objects."""
         if collection and collection.lower() != "all":
             col = self.collections.get(collection)

@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-
 if TYPE_CHECKING:
     from tools.eval.models import EvaluationReport
 
@@ -41,16 +40,13 @@ def _append_markdown_run_flags(lines: list[str], report: EvaluationReport) -> No
         run_flags.append("includes stress queries")
     if report.strict_keywords:
         run_flags.append(
-            "strict keywords"
-            + (" (top-1 scope)" if report.strict_keywords_top1 else "")
+            "strict keywords" + (" (top-1 scope)" if report.strict_keywords_top1 else "")
         )
     if run_flags:
         lines.extend(["**Eval mode:** " + ", ".join(run_flags), ""])
 
 
-def _append_markdown_overall_metrics(
-    lines: list[str], report: EvaluationReport
-) -> None:
+def _append_markdown_overall_metrics(lines: list[str], report: EvaluationReport) -> None:
     lines.extend(
         [
             "## Overall Metrics",
@@ -191,9 +187,7 @@ def _append_markdown_failures(lines: list[str], report: EvaluationReport) -> Non
         for r in failed[:20]:
             query_short = r.query[:40] + "..." if len(r.query) > 40 else r.query
             path_short = (
-                r.retrieved_path[:50] + "..."
-                if len(r.retrieved_path) > 50
-                else r.retrieved_path
+                r.retrieved_path[:50] + "..." if len(r.retrieved_path) > 50 else r.retrieved_path
             )
             lines.append(f"| {r.query_id} | {query_short} | {path_short} |")
 

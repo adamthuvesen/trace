@@ -37,9 +37,7 @@ def validate_http_endpoint(host: str, port: int) -> None:
     try:
         address = ipaddress.ip_address(host)
     except ValueError as error:
-        raise ValueError(
-            "HTTP host must be localhost or a loopback IP address"
-        ) from error
+        raise ValueError("HTTP host must be localhost or a loopback IP address") from error
     if not address.is_loopback:
         raise ValueError("Unauthenticated HTTP serving requires a loopback host")
 
@@ -80,9 +78,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Local search for file-backed knowledge bases.",
     )
     # Bare `trace` has no serve flags; these defaults keep it on stdio.
-    parser.set_defaults(
-        transport="stdio", host=DEFAULT_HTTP_HOST, port=DEFAULT_HTTP_PORT
-    )
+    parser.set_defaults(transport="stdio", host=DEFAULT_HTTP_HOST, port=DEFAULT_HTTP_PORT)
     subparsers = parser.add_subparsers(dest="command")
 
     serve = subparsers.add_parser("serve", help="start the Trace MCP server")

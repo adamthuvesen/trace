@@ -68,8 +68,7 @@ class IndexReader:
             docs = [
                 snapshot.texts[snapshot.row_by_id[cid]]
                 for i in (chunk_index - 1, chunk_index + 1)
-                if 0 <= i < chunk_count
-                and (cid := chunk_id(path, i)) in snapshot.row_by_id
+                if 0 <= i < chunk_count and (cid := chunk_id(path, i)) in snapshot.row_by_id
             ]
             output.append("\n\n".join(docs) if docs else None)
         return output
@@ -86,9 +85,7 @@ class IndexReader:
             "embedding_model": snapshot.metadata.embedding_model
             if snapshot.metadata
             else "none (run reindex)",
-            "embedding_dims": snapshot.metadata.embedding_dims
-            if snapshot.metadata
-            else 0,
+            "embedding_dims": snapshot.metadata.embedding_dims if snapshot.metadata else 0,
             "embedding_backend": snapshot.metadata.embedding_backend
             if snapshot.metadata
             else "none",

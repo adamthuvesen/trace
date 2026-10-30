@@ -24,8 +24,6 @@ class ReindexError(OperationError):
         self.completed = completed
         self.failed = failed
         lines = ["Reindex failed."]
-        lines.extend(
-            f"Completed {name}: {count} chunks indexed" for name, count in completed
-        )
+        lines.extend(f"Completed {name}: {count} chunks indexed" for name, count in completed)
         lines.extend(f"Failed {name}: {reason}" for name, reason in failed)
         super().__init__("\n".join(lines))

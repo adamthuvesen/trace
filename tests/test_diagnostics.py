@@ -1,13 +1,12 @@
 """Tests for Trace doctor diagnostics."""
 
-from dataclasses import replace
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 
 from tests.search_hits import make_hit
-
 from trace_search.collections.diagnostics import (
     diagnose_collections,
     diagnose_index,
@@ -283,9 +282,7 @@ def test_diagnose_collections_runs_sample_query_probe(tmp_path):
     report = diagnose_collections(
         {"docs": kb},
         sample_query="intro",
-        sample_query_runner=lambda query, collection: [
-            make_hit("intro.md", title="Intro")
-        ],
+        sample_query_runner=lambda query, collection: [make_hit("intro.md", title="Intro")],
     )
     rendered = render_doctor_report(report)
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Protocol, TypeAlias, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -39,7 +39,7 @@ def model_cache_dir() -> Path:
     return path
 
 
-EmbeddingArray: TypeAlias = NDArray[np.float32]
+type EmbeddingArray = NDArray[np.float32]
 
 
 @runtime_checkable
@@ -75,8 +75,7 @@ class OnnxBackend:
 
         if model_name not in MODEL_SPECS:
             raise ValueError(
-                f"Model '{model_name}' is not supported. "
-                f"Supported: {list(MODEL_SPECS)}."
+                f"Model '{model_name}' is not supported. Supported: {list(MODEL_SPECS)}."
             )
         self.model_name = model_name
         self._model = TextEmbedding(

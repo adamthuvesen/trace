@@ -20,7 +20,7 @@ MIN_REGRESSED_QUERIES = 2
 
 def load_baseline(baseline_path: Path) -> EvaluationReport:
     """Load a baseline report from JSON."""
-    with open(baseline_path) as f:
+    with baseline_path.open() as f:
         data = json.load(f)
     return EvaluationReport.from_dict(data)
 
@@ -144,9 +144,7 @@ def regression_failures(report: EvaluationReport) -> list[str]:
     ]
 
 
-def promote_to_baseline(
-    report: EvaluationReport, output_path: Path | None = None
-) -> Path:
+def promote_to_baseline(report: EvaluationReport, output_path: Path | None = None) -> Path:
     """Promote an evaluation report to be the new baseline."""
     EvaluationReport.from_dict(report.to_dict())
     if report.manifest is None:
@@ -160,7 +158,7 @@ def promote_to_baseline(
         ts = report.timestamp.replace(":", "-").replace("+", "_")
         output_path = BASELINES_DIR / f"baseline_{report.search_mode}_{ts}.json"
 
-    with open(output_path, "w") as f:
+    with output_path.open("w") as f:
         json.dump(report.to_dict(), f, indent=2)
 
     return output_path

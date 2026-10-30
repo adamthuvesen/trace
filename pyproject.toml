@@ -38,8 +38,8 @@ dev = [
     "pytest>=8.0.0",
     "click>=8.0.0",
     "PyYAML>=6.0.0",
-    "ruff>=0.15.13",
-    "mypy>=2.2.0",
+    "ruff==0.17.4",
+    "basedpyright==1.40.2",
     "types-pyyaml>=6.0.12.20260906",
     "import-linter>=2.15",
     "pandas-stubs>=3.1.0.261029",
@@ -62,17 +62,40 @@ markers = [
     "transport: starts real stdio or HTTP server processes; runs in `just integration`",
 ]
 
-[tool.mypy]
-python_version = "3.14"
-files = ["src/trace_search", "tools"]
-mypy_path = "src"
-explicit_package_bases = true
-strict = true
-warn_unused_configs = true
+[tool.ruff]
+line-length = 100
+target-version = "py314"
 
-[[tool.mypy.overrides]]
-module = ["bm25s", "Stemmer", "fitz"]
-ignore_missing_imports = true
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PTH", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# Long lines are product text (MCP tool descriptions, markdown report templates,
+# CLI help, fixture documents) where wrapping changes the output.
+".agents/skills/verify-trace/drives.py" = ["E501"]
+"src/trace_search/collections/index_stats.py" = ["E501"]
+"src/trace_search/server/mcp_tools.py" = ["E501"]
+"tools/eval/**" = ["E501"]
+"tests/**" = ["E501"]
+
+[tool.basedpyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.14"
+include = ["src/trace_search", "tools"]
+exclude = ["**/__pycache__"]
+extraPaths = ["src"]
+venvPath = "."
+venv = ".venv"
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+reportUnknownParameterType = false
+reportUnknownLambdaType = false
+
+[[tool.basedpyright.executionEnvironments]]
+root = "tests"
+extraPaths = ["src"]
+reportMissingParameterType = false
 
 [tool.importlinter]
 root_package = "trace_search"

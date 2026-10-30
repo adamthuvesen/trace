@@ -228,7 +228,7 @@ def main(argv: list[str]) -> int:
                 "detail": detail,
             }
 
-        # The wheel check is mostly mypy and installs; it shares nothing with the other drives.
+        # The wheel check is mostly type checks and installs; it shares nothing with the other drives.
         with ThreadPoolExecutor(max_workers=1) as background:
             package = (
                 background.submit(drive, "package") if "package" in names else None

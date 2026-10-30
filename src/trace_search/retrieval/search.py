@@ -16,22 +16,28 @@ import numpy as np
 from numpy.typing import NDArray
 
 from trace_search.indexing.bm25_tokenize import tokenize_keywords
-from trace_search.indexing.index_store import ChunkMetadata, IndexSnapshot
-from trace_search.indexing.index_metadata import metadata_query_compatible
 from trace_search.indexing.embeddings import EmbeddingBackend
+from trace_search.indexing.index_metadata import metadata_query_compatible
+from trace_search.indexing.index_store import ChunkMetadata, IndexSnapshot
+from trace_search.retrieval.formatting import query_terms
 from trace_search.retrieval.hit_builders import typed_chunk_hit
-from trace_search.retrieval.formatting import _query_terms
 from trace_search.retrieval.query_profile import (
     BM25_DOMINANCE_MARGIN,
     LEXICAL_STOPWORDS,
     is_keywordish_query,
 )
 from trace_search.retrieval.search_types import (
-    SearchRoute as SearchRoute,
-    SearchFilters as SearchFilters,
+    DocumentRef,
     SearchHit,
     SearchResponse,
-    DocumentRef,
+)
+from trace_search.retrieval.search_types import (
+    SearchFilters as SearchFilters,
+)
+from trace_search.retrieval.search_types import (
+    SearchRoute as SearchRoute,
+)
+from trace_search.retrieval.search_types import (
     parse_filters as parse_filters,
 )
 
@@ -112,9 +118,7 @@ def _rank_terms(text: str, *, remove_stopwords: bool = False) -> frozenset[str]:
     return _extract_rank_terms(text, remove_stopwords)
 
 
-def _semantic_lexical_boost(
-    query: str, hit: SearchHit, content_terms: frozenset[str]
-) -> float:
+def _semantic_lexical_boost(query: str, hit: SearchHit, content_terms: frozenset[str]) -> float:
     """Small deterministic boost for exact lexical anchors in semantic results."""
     query_terms = _rank_terms(query, remove_stopwords=True)
     if not query_terms:
@@ -166,9 +170,7 @@ def _metadata_overlap(query_terms: frozenset[str], hit: SearchHit) -> float:
 def _page_names(hit: SearchHit) -> list[frozenset[str]]:
     """Term sets of a page's title and each of its aliases."""
     names = [hit.metadata["title"], *hit.metadata.get("aliases", "").split(";")]
-    return [
-        terms for name in names if (terms := _rank_terms(name, remove_stopwords=True))
-    ]
+    return [terms for name in names if (terms := _rank_terms(name, remove_stopwords=True))]
 
 
 def _query_names_page(query_terms: frozenset[str], hit: SearchHit) -> bool:
@@ -188,9 +190,7 @@ def _query_names_page(query_terms: frozenset[str], hit: SearchHit) -> bool:
 
 def _status_factor(hit: SearchHit) -> float:
     """Demotion factor for pages marked as replaced by a newer page."""
-    return (
-        _REPLACED_DEMOTION if hit.metadata.get("status") in _REPLACED_STATUSES else 1.0
-    )
+    return _REPLACED_DEMOTION if hit.metadata.get("status") in _REPLACED_STATUSES else 1.0
 
 
 def _keyword_fetch_size(max_results: int) -> int:
@@ -200,17 +200,13 @@ def _keyword_fetch_size(max_results: int) -> int:
     )
 
 
-def _filter_mask(
-    snapshot: IndexSnapshot, filters: SearchFilters
-) -> NDArray[np.bool_] | None:
+def _filter_mask(snapshot: IndexSnapshot, filters: SearchFilters) -> NDArray[np.bool_] | None:
     """Rows that satisfy the filters, or None when no filter is active."""
     if filters.is_empty:
         return None
 
     def keep(chunk: ChunkMetadata) -> bool:
-        return filters.matches_record(
-            chunk["path"], chunk["extension"], chunk["source_mtime"]
-        )
+        return filters.matches_record(chunk["path"], chunk["extension"], chunk["source_mtime"])
 
     return snapshot.row_mask(filters, keep)
 
@@ -375,6 +371,11 @@ class SemanticSearch:
         return embedding
 
     @classmethod
+    def clear_embedding_cache(cls) -> None:
+        with cls._cache_lock:
+            cls._embedding_cache.clear()
+
+    @classmethod
     def get_cache_stats(cls) -> dict[str, int | str]:
         """Get cache statistics."""
         total = cls._cache_hits + cls._cache_misses
@@ -412,9 +413,7 @@ class SemanticSearch:
             )
         query_vector = self._get_query_embedding(query)
         if query_vector.shape != (snapshot.embeddings.shape[1],):
-            raise ValueError(
-                "Query embedding dimensions differ from index. Run `reindex`."
-            )
+            raise ValueError("Query embedding dimensions differ from index. Run `reindex`.")
         scores = snapshot.embeddings @ query_vector
         mask = _filter_mask(snapshot, filters)
         pool = min(max(top_k, _SEMANTIC_CANDIDATE_POOL), len(snapshot))
@@ -428,14 +427,15 @@ class SemanticSearch:
 
         ranked_hits: list[tuple[float, SearchHit]] = []
         for row in rows:
+            row_index = int(row)
             hit = typed_chunk_hit(
-                snapshot.chunks[row],
-                snapshot.texts[row],
-                float(scores[row]),
+                snapshot.chunks[row_index],
+                snapshot.texts[row_index],
+                float(scores[row_index]),
                 "semantic",
                 snapshot.generation,
             )
-            content_terms = snapshot.row_terms(int(row), _extract_rank_terms)
+            content_terms = snapshot.row_terms(row_index, _extract_rank_terms)
             boost = _semantic_lexical_boost(query, hit, content_terms)
             if boost:
                 hit = replace(
@@ -446,9 +446,7 @@ class SemanticSearch:
                         lexical_boost=boost,
                     ),
                 )
-            ranked_hits.append(
-                ((hit.evidence.score + boost) * _status_factor(hit), hit)
-            )
+            ranked_hits.append(((hit.evidence.score + boost) * _status_factor(hit), hit))
         ranked_hits.sort(key=lambda item: item[0], reverse=True)
         return [hit for _, hit in ranked_hits[:top_k]]
 
@@ -524,9 +522,7 @@ _RRF_K = 60
 _SEMANTIC_FUSION_WEIGHT = 0.4
 
 
-def _fuse_typed(
-    weighted_lists: list[tuple[float, list[SearchHit]]], limit: int
-) -> list[SearchHit]:
+def _fuse_typed(weighted_lists: list[tuple[float, list[SearchHit]]], limit: int) -> list[SearchHit]:
     """Reciprocal-rank fusion at document level.
 
     Each list contributes its best-ranked chunk per document, so a page that
@@ -610,7 +606,7 @@ class HybridSearch:
 
 
 def _typed_match_hints(query: str, hits: list[SearchHit]) -> tuple[SearchHit, ...]:
-    terms = _query_terms(query)
+    terms = query_terms(query)
     output: list[SearchHit] = []
     for hit in hits:
         hints: list[str] = []
@@ -625,9 +621,7 @@ def _typed_match_hints(query: str, hits: list[SearchHit]) -> tuple[SearchHit, ..
                 hints.append(f"{label} matches: {', '.join(matched[:5])}")
         if not hints and hit.source in {"semantic", "hybrid"}:
             score = (
-                hit.evidence.rrf_score
-                if hit.evidence.rrf_score is not None
-                else hit.evidence.score
+                hit.evidence.rrf_score if hit.evidence.rrf_score is not None else hit.evidence.score
             )
             hints.append(f"{hit.source} retrieval score: {score:.3f}")
         output.append(replace(hit, match_hints=tuple(hints)))
@@ -721,14 +715,8 @@ class AdaptiveSearch:
                 ),
             )
 
-        hybrid_hits = self.hybrid.search(
-            query, top_k=top_k, filters=filters, snapshot=snapshot
-        )
-        if (
-            not keyword_hits
-            and filters.is_empty
-            and not self._fallback_confident(hybrid_hits)
-        ):
+        hybrid_hits = self.hybrid.search(query, top_k=top_k, filters=filters, snapshot=snapshot)
+        if not keyword_hits and filters.is_empty and not self._fallback_confident(hybrid_hits):
             return SearchResponse(
                 hits=(),
                 route=SearchRoute(

@@ -10,7 +10,6 @@ import pytest
 from trace_search.collections.diagnostics import DoctorReport
 from trace_search.server.cli import run_cli
 
-
 _FILTER_KEYS = ("path_prefix", "extensions", "since")
 
 
@@ -29,9 +28,7 @@ class FakeOperations:
         collection: str | None = None,
         **filter_kwargs: Any,
     ) -> str:
-        self.calls.append(
-            ("search", (query, top_k, collection, *_filter_tuple(filter_kwargs)))
-        )
+        self.calls.append(("search", (query, top_k, collection, *_filter_tuple(filter_kwargs))))
         return "# Search"
 
     def semantic_search(
@@ -112,9 +109,7 @@ class FakeOperations:
         collection: str | None = None,
     ) -> DoctorReport:
         self.calls.append(("doctor", (sample_query, collection)))
-        return DoctorReport(
-            config_valid=True, config_message="Configured", collections=[]
-        )
+        return DoctorReport(config_valid=True, config_message="Configured", collections=[])
 
 
 @pytest.fixture()
@@ -303,9 +298,7 @@ def test_doctor_config_errors_keep_doctor_report(capsys):
     def failing_factory() -> FakeOperations:
         raise ValueError("Set KB_COLLECTIONS or KB_PATH")
 
-    code = run_cli(
-        ["doctor"], operations_factory=failing_factory, serve=lambda *_: None
-    )
+    code = run_cli(["doctor"], operations_factory=failing_factory, serve=lambda *_: None)
 
     captured = capsys.readouterr()
     assert code == 1
@@ -374,9 +367,7 @@ def test_real_operation_failure_has_no_success_stdout(tmp_path, capsys, argv):
     from trace_search.config import Settings
 
     config = Settings(_env_file=None, kb_path=tmp_path)
-    operations = TraceOperations(
-        CollectionRegistry({"documents": tmp_path}, config=config)
-    )
+    operations = TraceOperations(CollectionRegistry({"documents": tmp_path}, config=config))
 
     code = run_cli(argv, operations_factory=lambda: operations)
 
@@ -394,9 +385,7 @@ def test_doctor_unbuilt_index_returns_nonzero_with_report(tmp_path, capsys):
 
     (tmp_path / "hello.md").write_text("# Hello\n\nFixture")
     config = Settings(_env_file=None, kb_path=tmp_path)
-    operations = TraceOperations(
-        CollectionRegistry({"documents": tmp_path}, config=config)
-    )
+    operations = TraceOperations(CollectionRegistry({"documents": tmp_path}, config=config))
 
     code = run_cli(["doctor"], operations_factory=lambda: operations)
 

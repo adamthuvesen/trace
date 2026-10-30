@@ -13,7 +13,6 @@ from click.testing import CliRunner
 from pydantic import ValidationError
 
 from tests.search_hits import make_hit
-from trace_search.config import get_settings
 from tools.eval.battle_royale import load_suite
 from tools.eval.cli import main
 from tools.eval.evaluator import (
@@ -35,6 +34,7 @@ from tools.eval.regression import (
     promote_to_baseline,
     regression_failures,
 )
+from trace_search.config import get_settings
 
 FIXTURE_GOLDEN = Path("tests/fixtures/eval_golden_queries.yaml")
 
@@ -103,9 +103,7 @@ def test_invalid_query_fields_fail(invalid):
 def test_duplicate_ids_rejected_before_filtering(tmp_path):
     path = tmp_path / "queries.yaml"
     path.write_text(
-        yaml.safe_dump(
-            {"queries": [query_data(), {**query_data(), "stress_set": True}]}
-        )
+        yaml.safe_dump({"queries": [query_data(), {**query_data(), "stress_set": True}]})
     )
     with pytest.raises(ValueError, match="unique"):
         load_golden_queries(golden_queries_path=path)
@@ -114,9 +112,7 @@ def test_duplicate_ids_rejected_before_filtering(tmp_path):
 def test_empty_scope_fails_before_index_or_model_access():
     indexer = Mock()
     with pytest.raises(ValueError, match="No queries"):
-        run_evaluation(
-            indexer, golden_queries_path=FIXTURE_GOLDEN, categories=["absent"]
-        )
+        run_evaluation(indexer, golden_queries_path=FIXTURE_GOLDEN, categories=["absent"])
     assert indexer.mock_calls == []
 
 
@@ -129,11 +125,11 @@ def test_invalid_top_k_fails_before_index_access():
 
 def test_invalid_settings_do_not_fall_back_to_query_file(monkeypatch):
     monkeypatch.delenv("EVAL_GOLDEN_QUERIES", raising=False)
-    with patch(
-        "trace_search.config.get_settings", side_effect=ValueError("bad settings")
+    with (
+        patch("trace_search.config.get_settings", side_effect=ValueError("bad settings")),
+        pytest.raises(ValueError, match="bad settings"),
     ):
-        with pytest.raises(ValueError, match="bad settings"):
-            get_golden_queries_path()
+        get_golden_queries_path()
 
 
 @pytest.mark.parametrize(
@@ -250,9 +246,7 @@ def test_ci_gate_fails_on_regression_and_passes_a_match():
 def test_report_roundtrip_preserves_regression_and_manifest():
     current = report()
     current.regression = compare_results(current, report())
-    assert (
-        EvaluationReport.from_dict(json.loads(json.dumps(current.to_dict()))) == current
-    )
+    assert EvaluationReport.from_dict(json.loads(json.dumps(current.to_dict()))) == current
 
 
 def test_suite_rejects_duplicate_ids(tmp_path):
@@ -270,9 +264,7 @@ def test_ci_missing_comparison_baseline_fails_before_index(monkeypatch, tmp_path
         patch("tools.eval.cli.get_latest_baseline", return_value=None),
         patch("trace_search.indexing.wiki_indexer.WikiIndexer") as indexer,
     ):
-        result = CliRunner().invoke(
-            main, ["--ci", "--full", "--output-dir", str(tmp_path)]
-        )
+        result = CliRunner().invoke(main, ["--ci", "--full", "--output-dir", str(tmp_path)])
     assert result.exit_code == 1
     assert "requires a comparative baseline" in result.output
     indexer.assert_not_called()
@@ -289,9 +281,7 @@ def test_cli_always_uses_scratch_index(monkeypatch, tmp_path):
         patch("trace_search.indexing.wiki_indexer.WikiIndexer") as indexer,
         patch("tools.eval.cli.run_evaluation", return_value=report()),
     ):
-        result = CliRunner().invoke(
-            main, ["--full", "--output-dir", str(tmp_path / "reports")]
-        )
+        result = CliRunner().invoke(main, ["--full", "--output-dir", str(tmp_path / "reports")])
     assert result.exit_code == 0, result.output
     scratch = indexer.call_args.kwargs["index_root"]
     assert scratch != configured_index
@@ -319,9 +309,7 @@ def test_queryset_fingerprint_contains_no_absolute_path_or_mtime():
     assert fingerprint([query.to_dict() for query in queries]) == fingerprint(
         [
             query.to_dict()
-            for query in load_golden_queries(
-                golden_queries_path=FIXTURE_GOLDEN.resolve()
-            )
+            for query in load_golden_queries(golden_queries_path=FIXTURE_GOLDEN.resolve())
         ]
     )
 
@@ -367,9 +355,7 @@ def test_shipped_historical_reports_remain_readable():
         ("embedding_model", "invented"),
     ],
 )
-def test_current_report_rejects_conflicting_aggregates_and_flags(
-    field, value, tmp_path
-):
+def test_current_report_rejects_conflicting_aggregates_and_flags(field, value, tmp_path):
     current = report()
     setattr(current, field, value)
     with pytest.raises(ValueError, match=field):
@@ -398,9 +384,7 @@ def test_false_green_result_rows_cannot_pass_gate_or_promotion(tmp_path):
 
 def test_current_group_metrics_require_counts_and_reject_conflicting_accuracy():
     current = report().to_dict()
-    current["by_category"] = {
-        "": {"category": "", "query_count": 1, "avg_latency_ms": 1.0}
-    }
+    current["by_category"] = {"": {"category": "", "query_count": 1, "avg_latency_ms": 1.0}}
     with pytest.raises(ValueError, match="top_1_path_hits"):
         EvaluationReport.from_dict(current)
     current = report().to_dict()

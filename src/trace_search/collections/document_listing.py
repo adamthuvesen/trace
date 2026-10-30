@@ -6,9 +6,9 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
+from trace_search.config import Settings, get_settings
 from trace_search.extraction.corpus import iter_kb_files
 from trace_search.extraction.extractors import extract_title
-from trace_search.config import Settings, get_settings
 from trace_search.retrieval.search_types import SearchFilters
 
 
@@ -108,16 +108,10 @@ def render_document_list(
     if not documents:
         return "No documents found."
 
-    lines = [
-        f"Found {len(documents)} documents"
-        + (f" in {folder}" if folder else "")
-        + ":\n"
-    ]
+    lines = [f"Found {len(documents)} documents" + (f" in {folder}" if folder else "") + ":\n"]
     by_folder: dict[str, list[ListedDocument]] = defaultdict(list)
     for document in documents:
-        by_folder[document.group_key(include_collection=include_collection)].append(
-            document
-        )
+        by_folder[document.group_key(include_collection=include_collection)].append(document)
 
     for folder_name, folder_documents in sorted(by_folder.items()):
         lines.append(f"\n## {folder_name}")

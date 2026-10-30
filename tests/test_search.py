@@ -6,8 +6,10 @@ from unittest.mock import MagicMock
 
 import numpy as np
 
+from tests.search_hits import make_hit
 from trace_search.config import settings
 from trace_search.indexing.index_store import IndexSnapshot
+from trace_search.retrieval.formatting import format_results
 from trace_search.retrieval.query_profile import is_keywordish_query
 from trace_search.retrieval.search import (
     _BM25_MIN_FILE_FETCH,
@@ -15,13 +17,11 @@ from trace_search.retrieval.search import (
     KeywordSearch,
     SemanticSearch,
     _clamp_top_k,
+    _extract_rank_terms,
     _fuse_typed,
     _keyword_fetch_size,
-    _extract_rank_terms,
     _semantic_lexical_boost,
 )
-from tests.search_hits import make_hit
-from trace_search.retrieval.formatting import format_results
 from trace_search.retrieval.search_types import SearchRoute
 
 
@@ -30,9 +30,7 @@ class TestKeywordishQuery:
         assert is_keywordish_query("HTTP 429 Retry-After burst limit")
 
     def test_dense_noun_phrase_is_keywordish(self):
-        assert is_keywordish_query(
-            "term frequency saturation document length normalization"
-        )
+        assert is_keywordish_query("term frequency saturation document length normalization")
 
     def test_natural_question_is_not_keywordish(self):
         assert not is_keywordish_query("how does the growth model relate to funnels")
@@ -109,10 +107,7 @@ class TestKeywordSearchAggregation:
     def _large_corpus_with(cls, first: dict) -> list[dict]:
         return [
             first,
-            *[
-                cls._metadata(f"filler/{index}.md", f"Filler {index}", 0)
-                for index in range(4000)
-            ],
+            *[cls._metadata(f"filler/{index}.md", f"Filler {index}", 0) for index in range(4000)],
         ]
 
     def test_keyword_search_aggregates_chunks_by_file_before_truncating(self):
@@ -144,9 +139,7 @@ class TestKeywordSearchAggregation:
         indexer = TestKeywordSearchAggregation._indexer(
             bm25,
             [
-                TestKeywordSearchAggregation._metadata(
-                    "notes/index.md", "Alpha index", 0
-                ),
+                TestKeywordSearchAggregation._metadata("notes/index.md", "Alpha index", 0),
                 TestKeywordSearchAggregation._metadata("notes/alpha.md", "Alpha", 0),
             ],
         )
@@ -161,8 +154,7 @@ class TestKeywordSearchAggregation:
         # reshaped scale-free support does not.
         strong = TestKeywordSearchAggregation._metadata("strong.md", "Strong", 0)
         weak_chunks = [
-            TestKeywordSearchAggregation._metadata("weak.md", "Weak", i)
-            for i in range(20)
+            TestKeywordSearchAggregation._metadata("weak.md", "Weak", i) for i in range(20)
         ]
 
         bm25 = TestKeywordSearchAggregation.FakeBM25([7.5] + [6.0] * 20)
@@ -339,21 +331,13 @@ class TestFormatResults:
 
     def test_format_results_truncates_long_content(self):
         long_content = "x" * 600
-        hits = [
-            make_hit(
-                **{"title": "T", "path": "t.md", "folder": "", "content": long_content}
-            )
-        ]
+        hits = [make_hit(**{"title": "T", "path": "t.md", "folder": "", "content": long_content})]
         result = format_results(hits)
         assert "..." in result
         assert long_content not in result
 
     def test_format_results_without_content(self):
-        hits = [
-            make_hit(
-                **{"title": "T", "path": "t.md", "folder": "", "content": "secret"}
-            )
-        ]
+        hits = [make_hit(**{"title": "T", "path": "t.md", "folder": "", "content": "secret"})]
         result = format_results(hits, include_content=False)
         assert "secret" not in result
 
@@ -400,9 +384,7 @@ class TestSemanticLexicalBoost:
 
         assert _semantic_lexical_boost(
             query, exact, _extract_rank_terms(exact.content)
-        ) > _semantic_lexical_boost(
-            query, partial, _extract_rank_terms(partial.content)
-        )
+        ) > _semantic_lexical_boost(query, partial, _extract_rank_terms(partial.content))
 
     def test_content_overlap_boosts_header_queries(self):
         query = "HTTP 429 Retry-After burst limit"
@@ -423,9 +405,7 @@ class TestSemanticLexicalBoost:
 
         assert _semantic_lexical_boost(
             query, rate_limit, _extract_rank_terms(rate_limit.content)
-        ) > _semantic_lexical_boost(
-            query, retryable, _extract_rank_terms(retryable.content)
-        )
+        ) > _semantic_lexical_boost(query, retryable, _extract_rank_terms(retryable.content))
 
 
 class TestFormatResultsPreviewTruncation:
@@ -450,9 +430,7 @@ class TestFormatResultsPreviewTruncation:
         preview = result[preview_start:].strip().rstrip("\n")
         assert preview.endswith("...")
         body = preview[:-3]
-        assert not body.endswith(" "), (
-            "Should not end with a trailing space before ellipsis"
-        )
+        assert not body.endswith(" "), "Should not end with a trailing space before ellipsis"
         assert " " not in body[-5:] or body[-1] != " "
 
     def test_content_under_500_not_truncated(self):

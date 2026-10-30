@@ -41,9 +41,7 @@ def indexed(tmp_path):
     return indexer
 
 
-def test_unreadable_visible_subtree_aborts_build_and_retry_retains_documents(
-    indexed, monkeypatch
-):
+def test_unreadable_visible_subtree_aborts_build_and_retry_retains_documents(indexed, monkeypatch):
     private = indexed.kb_path / "private"
     private.mkdir()
     (private / "important.md").write_text("# Important\n\nImportant document.")
@@ -122,12 +120,8 @@ def test_collection_index_aliases_rejected_before_resource_open(tmp_path, existi
             CollectionRegistry({"Docs": paths["a"], "docs": paths["b"]}, index_root)
         assert not list(index_root.rglob("CURRENT")) if index_root.exists() else True
     else:
-        registry = CollectionRegistry(
-            {"Docs": paths["a"], "docs": paths["b"]}, index_root
-        )
-        assert all(
-            collection._indexer is None for collection in registry.collections.values()
-        )
+        registry = CollectionRegistry({"Docs": paths["a"], "docs": paths["b"]}, index_root)
+        assert all(collection._indexer is None for collection in registry.collections.values())
     assert not list(tmp_path.rglob(".trace-plan-*"))
 
 
@@ -142,23 +136,19 @@ def test_default_index_aliases_are_rejected(tmp_path):
 
 
 @pytest.mark.parametrize("relative", [".", ".."])
-def test_relative_kb_path_derives_resolved_collection_name(
-    tmp_path, monkeypatch, relative
-):
+def test_relative_kb_path_derives_resolved_collection_name(tmp_path, monkeypatch, relative):
     child = tmp_path / "child"
     child.mkdir()
     monkeypatch.chdir(child)
     config = Settings(_env_file=None, kb_path=relative, kb_collections=None)
     expected = Path(relative).resolve().name
     assert list(config.parsed_collections) == [expected]
-    assert CollectionRegistry(
-        config.parsed_collections, config=config
-    ).collection_names == [expected]
+    assert CollectionRegistry(config.parsed_collections, config=config).collection_names == [
+        expected
+    ]
 
 
-@pytest.mark.parametrize(
-    "alias", ["ignored-alias.md", "node_modules/alias.md", ".hidden/alias.md"]
-)
+@pytest.mark.parametrize("alias", ["ignored-alias.md", "node_modules/alias.md", ".hidden/alias.md"])
 def test_fetch_and_scan_apply_lexical_alias_exclusions(tmp_path, alias):
     kb = tmp_path / "kb"
     kb.mkdir()
@@ -194,9 +184,7 @@ def test_plugin_class_name_cannot_claim_builtin_backend_identity(indexed):
     writer = WikiIndexer(indexed.kb_path, indexed.index_root, first)
     writer.build_index(force=True)
     reader = WikiIndexer(indexed.kb_path, indexed.index_root, second)
-    assert not metadata_query_compatible(
-        reader.snapshot().metadata, reader.config, second
-    )
+    assert not metadata_query_compatible(reader.snapshot().metadata, reader.config, second)
     with pytest.raises(ValueError, match="incompatible"):
         SemanticSearch(reader).search("Visible")
 
@@ -290,9 +278,7 @@ print('fork publication blocked; parent lock and publication remain valid')
 
 
 @pytest.mark.parametrize("stage", ["embedding", "pointer"])
-def test_synthetic_enospc_cleans_only_failed_attempt_artifacts(
-    indexed, monkeypatch, stage
-):
+def test_synthetic_enospc_cleans_only_failed_attempt_artifacts(indexed, monkeypatch, stage):
     snapshot = indexed.snapshot()
     before = {path.name for path in indexed.index_root.glob("gen-*")}
     if stage == "embedding":
@@ -324,9 +310,7 @@ def test_synthetic_enospc_cleans_only_failed_attempt_artifacts(
         ("node_modules/global.md", "NODE_MODULES/global.md"),
     ],
 )
-def test_fetch_alias_uses_actual_filesystem_spelling_for_visibility(
-    tmp_path, actual, requested
-):
+def test_fetch_alias_uses_actual_filesystem_spelling_for_visibility(tmp_path, actual, requested):
     kb = tmp_path / "kb"
     kb.mkdir()
     protected = kb / actual
@@ -364,9 +348,7 @@ def test_exact_hard_link_names_retain_distinct_visibility(tmp_path):
     assert list(iter_kb_files(kb)) == [public]
 
 
-def test_rejected_symlink_escape_does_not_enumerate_outside_directory(
-    tmp_path, monkeypatch
-):
+def test_rejected_symlink_escape_does_not_enumerate_outside_directory(tmp_path, monkeypatch):
     kb = tmp_path / "kb"
     kb.mkdir()
     outside = tmp_path / "outside"

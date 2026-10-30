@@ -10,22 +10,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal, NotRequired, Self, TypedDict
 
-from pydantic import Field, TypeAdapter, model_validator
-
-from tools.eval.models import (
-    DEFAULT_MIN_KEYWORDS,
-    EvalModel,
-    EvaluationManifest,
-    EvaluationReport,
-    EvaluationScope,
-    RegressionReport,
-    METRIC_VERSION,
-    LATENCY_PROTOCOL,
-    SearchMode,
-)
-
 import click
 import yaml
+from pydantic import Field, TypeAdapter, model_validator
 
 from tools.eval.evaluator import (
     SEARCH_MODES,
@@ -33,13 +20,24 @@ from tools.eval.evaluator import (
     percentile,
     run_evaluation,
 )
-from tools.eval.reporter import generate_json_report, generate_markdown_report
+from tools.eval.models import (
+    DEFAULT_MIN_KEYWORDS,
+    LATENCY_PROTOCOL,
+    METRIC_VERSION,
+    EvalModel,
+    EvaluationManifest,
+    EvaluationReport,
+    EvaluationScope,
+    RegressionReport,
+    SearchMode,
+)
 from tools.eval.provenance import (
     comparison_differences,
     current_latency_environment,
     fingerprint,
 )
 from tools.eval.regression import compare_results, load_baseline
+from tools.eval.reporter import generate_json_report, generate_markdown_report
 
 DEFAULT_SUITE = Path("tests/fixtures/eval_battle_royale.yaml")
 DEFAULT_OUTPUT_DIR = Path("docs/benchmarks/retrieval_battle_royale")
@@ -132,18 +130,14 @@ class BattleSummary(TypedDict):
 def load_suite(path: Path) -> tuple[str, list[BattleKnowledgeBase], tuple[str, ...]]:
     """Validate the whole suite before loading any index or model."""
     try:
-        suite = BattleSuite.model_validate(
-            yaml.safe_load(path.read_text(encoding="utf-8"))
-        )
+        suite = BattleSuite.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
         kbs: list[BattleKnowledgeBase] = []
         for item in suite.knowledge_bases:
             kb_path = (path.parent / item.kb_path).resolve()
             golden_path = (path.parent / item.golden_queries).resolve()
             if not kb_path.is_dir():
                 raise ValueError(f"KB path does not exist: {kb_path}")
-            load_golden_queries(
-                golden_queries_path=golden_path, include_stress=item.include_stress
-            )
+            load_golden_queries(golden_queries_path=golden_path, include_stress=item.include_stress)
             kbs.append(
                 BattleKnowledgeBase(
                     kb_id=item.id,
@@ -170,11 +164,7 @@ def load_battle_baselines(
     from trace_search.config import get_settings
     from trace_search.indexing.index_metadata import collect_source_files
 
-    names = {
-        f"{kb.kb_id}_{mode}.json": (kb.kb_id, mode)
-        for kb in kbs
-        for mode in SEARCH_MODES
-    }
+    names = {f"{kb.kb_id}_{mode}.json": (kb.kb_id, mode) for kb in kbs for mode in SEARCH_MODES}
     inventory: dict[tuple[str, str], EvaluationReport] = {}
     for path in sorted(baseline_dir.glob("*.json")):
         if path.name not in names:
@@ -190,11 +180,7 @@ def load_battle_baselines(
             raise ValueError(f"Invalid battle baseline {path.name}: {error}") from error
         inventory[key] = report
     required = [(kb.kb_id, mode) for kb in kbs for mode in modes]
-    missing = [
-        f"{kb_id}_{mode}.json"
-        for kb_id, mode in required
-        if (kb_id, mode) not in inventory
-    ]
+    missing = [f"{kb_id}_{mode}.json" for kb_id, mode in required if (kb_id, mode) not in inventory]
     if missing:
         raise ValueError("Missing battle baselines: " + ", ".join(missing))
 
@@ -217,14 +203,10 @@ def load_battle_baselines(
             known_inputs = report.manifest.model_copy(
                 update={
                     "corpus_fingerprint": fingerprint(corpus),
-                    "queryset_fingerprint": fingerprint(
-                        [query.to_dict() for query in queries]
-                    ),
+                    "queryset_fingerprint": fingerprint([query.to_dict() for query in queries]),
                     "selected_query_ids": [query.id for query in queries],
                     "scope": EvaluationScope(include_stress=kb.include_stress),
-                    "includes_stress_queries": any(
-                        query.stress_set for query in queries
-                    ),
+                    "includes_stress_queries": any(query.stress_set for query in queries),
                     "metric_version": METRIC_VERSION,
                     "latency_protocol": LATENCY_PROTOCOL,
                     "latency_environment": current_latency_environment(),
@@ -291,19 +273,13 @@ def _aggregate_mode(mode: str, reports: list[EvaluationReport]) -> ModeSummary:
         "knowledge_bases": len(reports),
         "queries": total,
         "hit_at_1": (
-            sum(1 for result in results if result.top_1_path_hit) / total
-            if total
-            else 0.0
+            sum(1 for result in results if result.top_1_path_hit) / total if total else 0.0
         ),
         "hit_at_5": (
-            sum(1 for result in results if result.top_5_path_hit) / total
-            if total
-            else 0.0
+            sum(1 for result in results if result.top_5_path_hit) / total if total else 0.0
         ),
         "mrr": (
-            statistics.mean(result.path_reciprocal_rank for result in results)
-            if results
-            else 0.0
+            statistics.mean(result.path_reciprocal_rank for result in results) if results else 0.0
         ),
         "p50_ms": percentile(latencies, 50),
         "p95_ms": percentile(latencies, 95),
@@ -386,8 +362,7 @@ def _summary_json(
             kb.kb_id: {
                 mode: regression
                 for mode in modes
-                if (regression := reports_by_kb_mode[kb.kb_id, mode].regression)
-                is not None
+                if (regression := reports_by_kb_mode[kb.kb_id, mode].regression) is not None
             }
             for kb in kbs
         }
@@ -466,14 +441,10 @@ def _summary_markdown(summary: BattleSummary) -> str:
         "",
     ]
     for kb in summary["knowledge_bases"]:
-        lines.append(
-            f"- **{kb['id']}**: `{kb['kb_path']}` with `{kb['golden_queries']}`"
-        )
+        lines.append(f"- **{kb['id']}**: `{kb['kb_path']}` with `{kb['golden_queries']}`")
     if "comparison_failures" in summary:
         gate_failures = summary["comparison_failures"]
-        lines.extend(
-            ["", "## Comparative gate", "", "FAIL" if gate_failures else "PASS"]
-        )
+        lines.extend(["", "## Comparative gate", "", "FAIL" if gate_failures else "PASS"])
         lines.extend(f"- {failure}" for failure in gate_failures)
     lines.append("")
     return "\n".join(lines)
@@ -566,9 +537,7 @@ def _run(
     quality_only: bool,
 ) -> None:
     if Path(label).name != label or label in (".", ".."):
-        raise click.BadParameter(
-            "label must be a single directory name", param_hint="--label"
-        )
+        raise click.BadParameter("label must be a single directory name", param_hint="--label")
     if quality_only and baseline_dir is None:
         raise click.UsageError("--quality-only requires --baseline-dir")
     if len(requested_modes) != len(set(requested_modes)):
@@ -589,10 +558,10 @@ def _run(
     )
     comparison_failures: list[str] = []
 
+    from trace_search.indexing.embedding_warmup import warm_embedding_model
     from trace_search.indexing.embeddings import build_embedding_backend
     from trace_search.indexing.wiki_indexer import WikiIndexer
     from trace_search.retrieval.search import SemanticSearch
-    from trace_search.indexing.embedding_warmup import warm_embedding_model
 
     reports_by_kb_mode = {}
     saved_reports: dict[str, dict[str, dict[str, str]]] = {}
@@ -612,7 +581,7 @@ def _run(
             indexer.build_index(force=True)
 
             for mode in modes:
-                SemanticSearch._embedding_cache.clear()
+                SemanticSearch.clear_embedding_cache()
                 click.echo(f"Evaluating {kb.kb_id} / {mode}")
                 report = run_evaluation(
                     indexer=indexer,
@@ -631,9 +600,7 @@ def _run(
                             report, baseline, compare_latency=not quality_only
                         )
                     except ValueError as error:
-                        comparison_failures.append(
-                            f"{kb.kb_id}/{mode}: comparison failed: {error}"
-                        )
+                        comparison_failures.append(f"{kb.kb_id}/{mode}: comparison failed: {error}")
                     else:
                         if report.regression.has_regression:
                             comparison_failures.append(
@@ -643,15 +610,9 @@ def _run(
                                 baseline.results, report.results, strict=True
                             ):
                                 lost = []
-                                if (
-                                    previous.top_1_path_hit
-                                    and not current.top_1_path_hit
-                                ):
+                                if previous.top_1_path_hit and not current.top_1_path_hit:
                                     lost.append("Top-1")
-                                if (
-                                    previous.top_5_path_hit
-                                    and not current.top_5_path_hit
-                                ):
+                                if previous.top_5_path_hit and not current.top_5_path_hit:
                                     lost.append("Top-5")
                                 if lost:
                                     comparison_failures.append(
@@ -682,9 +643,7 @@ def _run(
     summary_md.write_text(_summary_markdown(summary), encoding="utf-8")
     click.echo(f"Summary: {summary_md}")
     if comparison_failures:
-        raise click.ClickException(
-            "Battle comparison failed:\n" + "\n".join(comparison_failures)
-        )
+        raise click.ClickException("Battle comparison failed:\n" + "\n".join(comparison_failures))
     if baseline_dir is not None:
         click.echo("Battle comparison: all KB/mode gates passed")
 

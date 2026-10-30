@@ -18,24 +18,25 @@ from trace_search.extraction.chunking import (
     create_contextual_chunk,
     extract_breadcrumb,
 )
-from trace_search.extraction.frontmatter import Frontmatter, split_frontmatter
 from trace_search.extraction.extractors import (
     SUPPORTED_EXTENSIONS,
     extract_content,
     extract_title,
 )
+from trace_search.extraction.frontmatter import Frontmatter, split_frontmatter
 from trace_search.indexing.embeddings import (
     EmbeddingArray,
     EmbeddingBackend,
 )
 from trace_search.indexing.index_metadata import (
+    SourceFileRecord,
     build_index_metadata,
     categorize_source_changes,
     metadata_matches_settings,
     utc_now_iso,
-    SourceFileRecord,
 )
 from trace_search.indexing.index_paths import chunk_id
+from trace_search.indexing.index_reader import IndexReader
 from trace_search.indexing.index_store import (
     ChunkMetadata,
     IndexCorruptError,
@@ -44,7 +45,6 @@ from trace_search.indexing.index_store import (
     writer_lock,
 )
 from trace_search.indexing.kb_paths import should_exclude_path
-from trace_search.indexing.index_reader import IndexReader
 
 logger = logging.getLogger(__name__)
 
@@ -84,11 +84,7 @@ def _document_card(doc: LoadedDocument) -> tuple[str, str]:
     """
     meta = doc["frontmatter"]
     title_key = doc["title"].casefold()
-    names = [
-        name
-        for name in (meta.title, *meta.aliases)
-        if name and name.casefold() != title_key
-    ]
+    names = [name for name in (meta.title, *meta.aliases) if name and name.casefold() != title_key]
     aliases = "; ".join(dict.fromkeys(names))
     lead = ""
     if aliases:
@@ -127,9 +123,7 @@ class IndexBuilder:
         ext = file_path.suffix.lower()
         if ext not in SUPPORTED_EXTENSIONS:
             return ExcludedSource(file_path)
-        if should_exclude_path(
-            file_path, self.kb_path, self.config.exclude_patterns_list
-        ):
+        if should_exclude_path(file_path, self.kb_path, self.config.exclude_patterns_list):
             return ExcludedSource(file_path)
 
         before = file_path.stat()
@@ -140,9 +134,7 @@ class IndexBuilder:
             or before.st_mtime != record.mtime
             or len(captured) != record.size
         ):
-            raise RuntimeError(
-                f"Source changed during capture: {file_path}. Retry reindex."
-            )
+            raise RuntimeError(f"Source changed during capture: {file_path}. Retry reindex.")
         try:
             with tempfile.TemporaryDirectory(prefix="trace-source-") as temp:
                 source = Path(temp) / file_path.name
@@ -157,16 +149,12 @@ class IndexBuilder:
             after.st_size,
             after.st_ino,
         ):
-            raise RuntimeError(
-                f"Source changed during extraction: {file_path}. Retry reindex."
-            )
+            raise RuntimeError(f"Source changed during extraction: {file_path}. Retry reindex.")
 
         if not content.strip():
             return EmptySource(file_path)
 
-        frontmatter, body = (
-            split_frontmatter(content) if ext == ".md" else (Frontmatter(), content)
-        )
+        frontmatter, body = split_frontmatter(content) if ext == ".md" else (Frontmatter(), content)
         stat = before
         return CapturedDocument(
             {
@@ -260,9 +248,7 @@ class IndexBuilder:
             logger.info("Index metadata missing or outdated; running a full rebuild")
             return None
         if not metadata_matches_settings(current.metadata, self.config, self.backend):
-            logger.info(
-                "Index was built with other model or chunk settings; rebuilding"
-            )
+            logger.info("Index was built with other model or chunk settings; rebuilding")
             return None
         return current
 
@@ -271,13 +257,8 @@ class IndexBuilder:
             return np.empty((0, dim), dtype=np.float32)
         logger.info("Embedding %d chunks...", len(texts))
         result = self.backend.encode(texts)
-        if (
-            result.shape != (len(texts), self.backend.dim)
-            or not np.isfinite(result).all()
-        ):
-            raise ValueError(
-                "Embedding backend returned invalid dimensions or non-finite vectors"
-            )
+        if result.shape != (len(texts), self.backend.dim) or not np.isfinite(result).all():
+            raise ValueError("Embedding backend returned invalid dimensions or non-finite vectors")
         return result
 
     def build_index(self, force: bool = False) -> int:
@@ -313,9 +294,7 @@ class IndexBuilder:
             if current is not None:
                 unchanged = set(changes.unchanged)
                 kept = [
-                    row
-                    for row, chunk in enumerate(current.chunks)
-                    if chunk["path"] in unchanged
+                    row for row, chunk in enumerate(current.chunks) if chunk["path"] in unchanged
                 ]
                 to_index = changes.added + changes.changed
             else:
@@ -325,9 +304,7 @@ class IndexBuilder:
             new_ids, new_texts, new_chunks = self._build_chunks(
                 self._load_documents_subset(to_index, changes.inventory)
             )
-            reused_dim = (
-                current.embeddings.shape[1] if current is not None else self.backend.dim
-            )
+            reused_dim = current.embeddings.shape[1] if current is not None else self.backend.dim
             new_embeddings = self._encode(new_texts, reused_dim)
 
             ids = [current.chunk_ids[row] for row in kept] if current else []
@@ -383,8 +360,7 @@ class IndexBuilder:
             self.reader.install(published)
 
         logger.info(
-            "Reindex (%s): +%d added, ~%d changed, -%d removed, =%d unchanged; "
-            "%d chunks total",
+            "Reindex (%s): +%d added, ~%d changed, -%d removed, =%d unchanged; %d chunks total",
             "incremental" if current is not None else "full",
             len(changes.added),
             len(changes.changed),

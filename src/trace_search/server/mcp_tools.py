@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from collections.abc import Callable
 from functools import wraps
+from pathlib import Path
 from typing import ParamSpec
 
 from fastmcp import FastMCP
@@ -18,7 +18,7 @@ from trace_search.config import Settings
 P = ParamSpec("P")
 
 
-def _tool_errors(operation: Callable[P, str]) -> Callable[P, str]:
+def _tool_errors[**P](operation: Callable[P, str]) -> Callable[P, str]:
     @wraps(operation)
     def call(*args: P.args, **kwargs: P.kwargs) -> str:
         try:

@@ -17,30 +17,29 @@ import json
 import logging
 import os
 import re
-import threading
 import shutil
 import stat
 import tempfile
+import threading
 import time
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, NotRequired, TypedDict, cast
 
-from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_validator
-
 import bm25s
 import numpy as np
 from numpy.typing import NDArray
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_validator
 
+from trace_search.indexing.bm25_tokenize import english_stemmer
 from trace_search.indexing.embeddings import EmbeddingArray
 from trace_search.indexing.index_metadata import (
     IndexMetadata,
     index_metadata_from_dict,
 )
-from trace_search.indexing.bm25_tokenize import english_stemmer
 
 logger = logging.getLogger(__name__)
 
@@ -91,9 +90,7 @@ class _StoredChunk(BaseModel):
 
 
 OPTIONAL_CHUNK_METADATA_FIELDS = tuple(
-    name
-    for name, definition in _StoredChunk.model_fields.items()
-    if not definition.is_required()
+    name for name, definition in _StoredChunk.model_fields.items() if not definition.is_required()
 )
 
 
@@ -125,10 +122,7 @@ class _StoredRows(BaseModel):
             if chunk.path in counts and counts[chunk.path] != chunk.chunk_count:
                 raise ValueError("Inconsistent document chunk count")
             counts[chunk.path] = chunk.chunk_count
-        if any(
-            sorted(indices) != list(range(counts[path]))
-            for path, indices in positions.items()
-        ):
+        if any(sorted(indices) != list(range(counts[path])) for path, indices in positions.items()):
             raise ValueError("Document chunks must include each declared position once")
         return self
 
@@ -142,7 +136,7 @@ class IndexCorruptError(RuntimeError):
 
 
 @contextmanager
-def writer_lock(index_root: Path) -> Iterator[None]:
+def writer_lock(index_root: Path) -> Generator[None]:
     """Hold the exclusive writer lock for an index root, or fail immediately.
 
     The lock is advisory ``flock`` on ``<index_root>/.write.lock``; the kernel
@@ -152,13 +146,9 @@ def writer_lock(index_root: Path) -> Iterator[None]:
     index_root.mkdir(parents=True, exist_ok=True)
     lock_path = index_root / LOCK_FILENAME
     try:
-        lock_fd = os.open(
-            lock_path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600
-        )
+        lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
     except OSError as exc:
-        raise IndexCorruptError(
-            f"Cannot safely open index writer lock {lock_path}: {exc}"
-        ) from exc
+        raise IndexCorruptError(f"Cannot safely open index writer lock {lock_path}: {exc}") from exc
     with os.fdopen(lock_fd, "r+", encoding="utf-8") as handle:
         lock_stat = os.fstat(handle.fileno())
         if not stat.S_ISREG(lock_stat.st_mode) or lock_stat.st_nlink != 1:
@@ -211,9 +201,7 @@ def read_current(index_root: Path) -> str | None:
 
 
 def _tokenize(texts: list[str]) -> Any:
-    return bm25s.tokenize(
-        texts, stopwords="en", stemmer=english_stemmer(), show_progress=False
-    )
+    return bm25s.tokenize(texts, stopwords="en", stemmer=english_stemmer(), show_progress=False)
 
 
 def build_bm25(texts: list[str], *, k1: float, b: float) -> bm25s.BM25:
@@ -244,9 +232,7 @@ class IndexSnapshot:
     embeddings: EmbeddingArray
     bm25: bm25s.BM25 | None
     row_by_id: Mapping[str, int] = field(default_factory=dict, compare=False)
-    _row_terms: dict[int, frozenset[str]] = field(
-        default_factory=dict, compare=False, repr=False
-    )
+    _row_terms: dict[int, frozenset[str]] = field(default_factory=dict, compare=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.embeddings.ndim != 2 or not np.isfinite(self.embeddings).all():
@@ -258,20 +244,14 @@ class IndexSnapshot:
             self.metadata.chunk_count != rows
             or (self.metadata.embedding_dims != self.embeddings.shape[1])
         ):
-            raise ValueError(
-                "Index metadata dimensions or chunk count do not match payload"
-            )
+            raise ValueError("Index metadata dimensions or chunk count do not match payload")
         if self.metadata is not None and self.metadata.version >= 7:
             documents = {chunk["path"] for chunk in self.chunks}
             source_paths = {record.path for record in self.metadata.source_files}
             if self.metadata.document_count != len(documents):
-                raise ValueError(
-                    "Index metadata document count does not match chunk payload"
-                )
+                raise ValueError("Index metadata document count does not match chunk payload")
             if not documents <= source_paths:
-                raise ValueError(
-                    "Index chunks refer to documents absent from the source inventory"
-                )
+                raise ValueError("Index chunks refer to documents absent from the source inventory")
         if not (
             len(self.texts) == rows
             and len(self.chunks) == rows
@@ -290,21 +270,15 @@ class IndexSnapshot:
             ):
                 raise ValueError("BM25 rows or scores do not match the index payload")
             if self.metadata.version >= 7 and (
-                self.bm25.k1 != self.metadata.bm25_k1
-                or self.bm25.b != self.metadata.bm25_b
+                self.bm25.k1 != self.metadata.bm25_k1 or self.bm25.b != self.metadata.bm25_b
             ):
-                raise ValueError(
-                    "BM25 parameters do not match the persisted build recipe"
-                )
+                raise ValueError("BM25 parameters do not match the persisted build recipe")
         object.__setattr__(self, "chunk_ids", tuple(self.chunk_ids))
         object.__setattr__(self, "texts", tuple(self.texts))
         object.__setattr__(
             self,
             "chunks",
-            tuple(
-                cast(ChunkMetadata, MappingProxyType(dict(chunk)))
-                for chunk in self.chunks
-            ),
+            tuple(cast(ChunkMetadata, MappingProxyType(dict(chunk))) for chunk in self.chunks),
         )
         object.__setattr__(
             self,
@@ -356,9 +330,7 @@ class IndexSnapshot:
     def __len__(self) -> int:
         return len(self.chunk_ids)
 
-    def row_terms(
-        self, row: int, extract: Callable[[str], frozenset[str]]
-    ) -> frozenset[str]:
+    def row_terms(self, row: int, extract: Callable[[str], frozenset[str]]) -> frozenset[str]:
         """Terms of one chunk's text, computed once per snapshot.
 
         Cached here rather than globally so the cache is bounded by the corpus
@@ -370,13 +342,9 @@ class IndexSnapshot:
             self._row_terms[row] = terms
         return terms
 
-    def row_mask(
-        self, key: object, keep: Callable[[ChunkMetadata], bool]
-    ) -> NDArray[np.bool_]:
+    def row_mask(self, key: object, keep: Callable[[ChunkMetadata], bool]) -> NDArray[np.bool_]:
         """Evaluate a request mask without retaining arbitrary request filters."""
-        return np.fromiter(
-            (keep(chunk) for chunk in self.chunks), dtype=np.bool_, count=len(self)
-        )
+        return np.fromiter((keep(chunk) for chunk in self.chunks), dtype=np.bool_, count=len(self))
 
 
 def _generation_dir(index_root: Path, name: str) -> Path:
@@ -467,7 +435,7 @@ def _write_snapshot_locked(index_root: Path, snapshot: IndexSnapshot) -> IndexSn
             pointer.write(name)
             pointer.flush()
             os.fsync(pointer.fileno())
-        os.replace(pointer_tmp, index_root / CURRENT_FILENAME)
+        Path(pointer_tmp).replace(index_root / CURRENT_FILENAME)
         published = True
         _fsync(index_root)
     except BaseException:
@@ -523,8 +491,7 @@ def _load_generation(index_root: Path, name: str) -> IndexSnapshot:
         json.loads((gen_dir / _METADATA_FILENAME).read_text(encoding="utf-8"))
     )
     chunks = [
-        cast(ChunkMetadata, chunk.model_dump(exclude_none=True))
-        for chunk in raw_chunks.chunks
+        cast(ChunkMetadata, chunk.model_dump(exclude_none=True)) for chunk in raw_chunks.chunks
     ]
     if metadata is None:
         raise ValueError("Unknown index metadata schema. Run `reindex` to rebuild it.")
@@ -573,10 +540,8 @@ def read_current_metadata(index_root: Path) -> IndexMetadata | None:
         return None
     try:
         raw = json.loads(
-            (_generation_dir(index_root, name) / _METADATA_FILENAME).read_text(
-                encoding="utf-8"
-            )
+            (_generation_dir(index_root, name) / _METADATA_FILENAME).read_text(encoding="utf-8")
         )
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
     return index_metadata_from_dict(raw) if isinstance(raw, dict) else None

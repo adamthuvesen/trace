@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path, PurePosixPath
 import statistics
+from pathlib import Path, PurePosixPath
 from typing import Annotated, Literal, Self
 
-from tools.eval.metrics import percentile
-
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from tools.eval.metrics import percentile
 
 Nonempty = Annotated[str, Field(min_length=1)]
 PositiveInt = Annotated[int, Field(strict=True, gt=0)]
@@ -66,16 +66,12 @@ class GoldenQuery(EvalModel):
     def relative_paths(cls, value: str | list[str]) -> str | list[str]:
         for item in [value] if isinstance(value, str) else value:
             if PurePosixPath(item).is_absolute() or ".." in PurePosixPath(item).parts:
-                raise ValueError(
-                    "expected paths must be relative to the knowledge base"
-                )
+                raise ValueError("expected paths must be relative to the knowledge base")
         return value
 
     @model_validator(mode="after")
     def keyword_requirement(self) -> Self:
-        if self.min_keywords is not None and self.min_keywords > len(
-            self.expected_keywords
-        ):
+        if self.min_keywords is not None and self.min_keywords > len(self.expected_keywords):
             raise ValueError("min_keywords exceeds the expected keyword count")
         return self
 
@@ -292,9 +288,7 @@ class EvaluationMetrics(EvalModel):
     adaptive_fallback_rate: Rate | None = None
 
     @classmethod
-    def summarize(
-        cls, results: list[QueryResult], *, adaptive: bool
-    ) -> EvaluationMetrics:
+    def summarize(cls, results: list[QueryResult], *, adaptive: bool) -> EvaluationMetrics:
         total = len(results)
         if not total:
             raise ValueError("current reports require a nonempty result population")
@@ -305,20 +299,12 @@ class EvaluationMetrics(EvalModel):
             if result.adaptive_fallback_used is not None
         ]
         return cls(
-            top_1_path_accuracy=sum(result.top_1_path_hit for result in results)
-            / total,
-            top_5_path_accuracy=sum(result.top_5_path_hit for result in results)
-            / total,
-            top_1_keyword_accuracy=sum(result.top_1_keyword_hit for result in results)
-            / total,
-            top_5_keyword_accuracy=sum(result.top_5_keyword_hit for result in results)
-            / total,
-            mean_reciprocal_rank=statistics.mean(
-                result.path_reciprocal_rank for result in results
-            ),
-            within_max_rank_path_accuracy=sum(
-                result.path_hit_within_max_rank for result in results
-            )
+            top_1_path_accuracy=sum(result.top_1_path_hit for result in results) / total,
+            top_5_path_accuracy=sum(result.top_5_path_hit for result in results) / total,
+            top_1_keyword_accuracy=sum(result.top_1_keyword_hit for result in results) / total,
+            top_5_keyword_accuracy=sum(result.top_5_keyword_hit for result in results) / total,
+            mean_reciprocal_rank=statistics.mean(result.path_reciprocal_rank for result in results),
+            within_max_rank_path_accuracy=sum(result.path_hit_within_max_rank for result in results)
             / total,
             latency_p50_ms=percentile(latencies, 50),
             latency_p95_ms=percentile(latencies, 95),
@@ -384,9 +370,7 @@ class EvaluationReport(EvaluationMetrics):
     def from_results(
         cls, *, timestamp: str, manifest: EvaluationManifest, results: list[QueryResult]
     ) -> EvaluationReport:
-        metrics = EvaluationMetrics.summarize(
-            results, adaptive=manifest.search_mode == "adaptive"
-        )
+        metrics = EvaluationMetrics.summarize(results, adaptive=manifest.search_mode == "adaptive")
         return cls.model_validate(
             {
                 **metrics.to_dict(),
@@ -412,13 +396,8 @@ class EvaluationReport(EvaluationMetrics):
         if len(ids) != len(set(ids)):
             raise ValueError("report query IDs must be unique")
         if self.manifest is not None:
-            if (
-                len(ids) != self.total_queries
-                or ids != self.manifest.selected_query_ids
-            ):
-                raise ValueError(
-                    "report results must match the manifest query population"
-                )
+            if len(ids) != self.total_queries or ids != self.manifest.selected_query_ids:
+                raise ValueError("report results must match the manifest query population")
             if self.search_mode != self.manifest.search_mode:
                 raise ValueError("report search mode must match its manifest")
             expected_flags = {
@@ -443,18 +422,14 @@ class EvaluationReport(EvaluationMetrics):
                 ):
                     raise ValueError("result path hits contradict their first hit rank")
                 if rank is None and result.path_hit_within_max_rank:
-                    raise ValueError(
-                        "result without a path hit cannot satisfy max_rank"
-                    )
+                    raise ValueError("result without a path hit cannot satisfy max_rank")
                 if result.top_1_keyword_hit and not result.top_5_keyword_hit:
                     raise ValueError("result keyword hits contradict their scopes")
                 if (
                     self.manifest.strict_keywords_top1
                     and result.top_1_keyword_hit != result.top_5_keyword_hit
                 ):
-                    raise ValueError(
-                        "top-1 keyword scope requires equal keyword metrics"
-                    )
+                    raise ValueError("top-1 keyword scope requires equal keyword metrics")
             expected_metrics = EvaluationMetrics.summarize(
                 self.results, adaptive=self.search_mode == "adaptive"
             )
@@ -470,12 +445,8 @@ class EvaluationReport(EvaluationMetrics):
     def to_dict(self) -> dict[str, object]:
         return {
             **super().to_dict(),
-            "by_category": {
-                key: value.to_dict() for key, value in self.by_category.items()
-            },
-            "by_file_type": {
-                key: value.to_dict() for key, value in self.by_file_type.items()
-            },
+            "by_category": {key: value.to_dict() for key, value in self.by_category.items()},
+            "by_file_type": {key: value.to_dict() for key, value in self.by_file_type.items()},
         }
 
     @classmethod
@@ -506,11 +477,7 @@ class EvaluationReport(EvaluationMetrics):
                     raise ValueError("query_count must be an integer")
                 for name in names:
                     accuracy = item.pop(f"{name}_accuracy", 0)
-                    hit_name = (
-                        f"{name}_hits"
-                        if group == "by_category"
-                        else f"{name}_path_hits"
-                    )
+                    hit_name = f"{name}_hits" if group == "by_category" else f"{name}_path_hits"
                     if hit_name not in item and not current_schema:
                         if not isinstance(accuracy, (int, float)):
                             raise ValueError("legacy accuracy must be numeric")
@@ -522,9 +489,7 @@ class EvaluationReport(EvaluationMetrics):
                         if derived_name in raw and raw[derived_name] != getattr(
                             converted_metrics, derived_name
                         ):
-                            raise ValueError(
-                                f"{group} {derived_name} contradicts its hit counts"
-                            )
+                            raise ValueError(f"{group} {derived_name} contradicts its hit counts")
                 converted[key] = converted_metrics
             decoded[group] = converted
         return cls.model_validate(decoded)

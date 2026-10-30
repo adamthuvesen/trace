@@ -273,9 +273,7 @@ def _run(
     elif ci_mode:
         latest = get_latest_baseline(search_mode=search)
         if latest is None:
-            raise ValueError(
-                "CI requires a comparative baseline. Supply --baseline PATH."
-            )
+            raise ValueError("CI requires a comparative baseline. Supply --baseline PATH.")
         baseline_report = load_baseline(latest)
     if baseline_report is not None and baseline_report.manifest is None:
         raise ValueError(

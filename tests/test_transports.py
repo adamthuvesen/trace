@@ -111,9 +111,7 @@ async def assert_document_protocol(client):
     ("mode", "expected_version"),
     [("auto", "2026-07-28"), ("legacy", "2025-11-25"), ("2026-07-28", "2026-07-28")],
 )
-def test_stdio_protocol_in_real_subprocess(
-    server_environment, tmp_path, mode, expected_version
-):
+def test_stdio_protocol_in_real_subprocess(server_environment, tmp_path, mode, expected_version):
     async def check():
         with (tmp_path / "stdio-stderr.log").open("w") as log:
             transport = StdioTransport(
@@ -123,9 +121,7 @@ def test_stdio_protocol_in_real_subprocess(
                 cwd=str(REPO_ROOT),
                 log_file=log,
             )
-            async with Client(
-                transport, timeout=10, init_timeout=20, mode=mode
-            ) as client:
+            async with Client(transport, timeout=10, init_timeout=20, mode=mode) as client:
                 assert client.protocol_version == expected_version
                 await assert_document_protocol(client)
 
@@ -133,9 +129,7 @@ def test_stdio_protocol_in_real_subprocess(
 
 
 @pytest.mark.slow
-def test_cached_model_indexes_and_searches_without_external_network(
-    server_environment, tmp_path
-):
+def test_cached_model_indexes_and_searches_without_external_network(server_environment, tmp_path):
     async def check():
         with (tmp_path / "offline-stderr.log").open("w") as log:
             transport = StdioTransport(
@@ -210,9 +204,7 @@ def http_server(environment, port, log_path):
     ("mode", "expected_version"),
     [("auto", "2026-07-28"), ("legacy", "2025-11-25"), ("2026-07-28", "2026-07-28")],
 )
-def test_http_protocol_and_stateless_restart(
-    server_environment, tmp_path, mode, expected_version
-):
+def test_http_protocol_and_stateless_restart(server_environment, tmp_path, mode, expected_version):
     port = available_port()
     log_path = tmp_path / "http-stderr.log"
 
@@ -227,9 +219,7 @@ def test_http_protocol_and_stateless_restart(
                 first.terminate()
                 first.wait(timeout=10)
                 with http_server(server_environment, port, log_path):
-                    document = await client.call_tool_mcp(
-                        "get_document", {"path": "hello.md"}
-                    )
+                    document = await client.call_tool_mcp("get_document", {"path": "hello.md"})
                     assert not document.is_error
                     assert "Protocol fixture content" in str(document.content)
                     assert client.transport.get_session_id() is None
@@ -245,9 +235,7 @@ def test_http_protocol_and_stateless_restart(
         ({"Origin": "https://attacker.example"}, 403),
     ],
 )
-def test_http_rejects_nonlocal_host_and_origin(
-    server_environment, tmp_path, headers, status
-):
+def test_http_rejects_nonlocal_host_and_origin(server_environment, tmp_path, headers, status):
     port = available_port()
     with http_server(server_environment, port, tmp_path / "http-security.log"):
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
@@ -277,8 +265,7 @@ def test_fastmcp_inspector_loads_noarg_factory(tmp_path, monkeypatch):
 
     async def check():
         source = FileSystemSource(
-            path=str(REPO_ROOT / "src/trace_search/server/trace_server.py")
-            + ":create_mcp"
+            path=str(REPO_ROOT / "src/trace_search/server/trace_server.py") + ":create_mcp"
         )
         server = await source.load_server()
         information = await inspect_fastmcp(server)
