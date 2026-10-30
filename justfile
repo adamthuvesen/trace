@@ -49,5 +49,9 @@ integration:
     just battle-challenge
 
 # Run all locally reproducible checks, using the same recipes as CI.
-verify: check
+full: check
     just integration
+
+# Drive the real CLI, MCP server, and wheel (verify-trace skill). Pass all, list, control, or drive names.
+verify *args:
+    .agents/skills/verify-trace/verify {{args}}

@@ -1,7 +1,7 @@
 # Development
 
-Use Python 3.13 or newer, `uv`, and `just`.
-The repository defaults to Python 3.13 through `.python-version`.
+Use Python 3.14 or newer, `uv`, and `just`.
+The repository defaults to Python 3.14 through `.python-version`.
 
 Minimal Linux installations can require a C compiler when PyStemmer has no wheel for the platform.
 For Debian or Ubuntu, install `build-essential` before `just bootstrap`.
@@ -29,11 +29,12 @@ The type check covers `src/trace_search` and `tools`.
 | `just battle-challenge` | Comparative gates for the separate challenge populations | Committed public fixtures |
 | `just package` | Fresh wheel environment, public imports, typing marker, CLI, stdio MCP, external type consumers | Package fixture checks do not measure retrieval quality |
 | `just integration` | Slow model tests, real stdio and HTTP transport tests, package verification, both fixture gates, both comparative battle gates | Requires model preparation |
-| `just verify` | `check` followed by `integration` | Runs on the current host and interpreter |
+| `just full` | `check` followed by `integration` | Runs on the current host and interpreter |
+| `just verify` | Drives the real CLI, MCP server, and wheel (`verify-trace` skill) | Needs the cached embedding model |
 
 CI uses these recipes in [.github/workflows/ci.yml](../.github/workflows/ci.yml).
-Its fast-check matrix configures Ubuntu with Python 3.13 and macOS with Python 3.14.
-The model, package, and retrieval job configures Ubuntu with Python 3.13.
+Its fast-check matrix configures Ubuntu with Python 3.14 and macOS with Python 3.14.
+The model, package, and retrieval job configures Ubuntu with Python 3.14.
 A successful local run verifies its local environment.
 CI matrix coverage requires successful runs of those jobs.
 

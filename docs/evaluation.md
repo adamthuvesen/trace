@@ -16,11 +16,9 @@ Model preparation can require downloads, as described in [development.md](develo
 
 ## Commands and scope
 
-Both module entrypoints remain available:
+Run the evaluation CLI:
 
 ```bash
-KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
-  uv run --locked python -m tools.eval --full --search semantic
 KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
   uv run --locked python -m tools.eval.cli --full --search adaptive
 ```
@@ -36,7 +34,7 @@ For a private knowledge base:
 
 ```bash
 cp tools/eval/golden_queries.example.yaml tools/eval/golden_queries.yaml
-KB_PATH=/path/to/docs uv run --locked python -m tools.eval --full --search adaptive
+KB_PATH=/path/to/docs uv run --locked python -m tools.eval.cli --full --search adaptive
 ```
 
 The local query file is gitignored.
@@ -63,7 +61,7 @@ The current metric version preserves the shipped path, keyword, and percentile d
 The historical Top-5 keyword name refers to the configured retrieval scope.
 It can cover more than five results when `top_k` exceeds five.
 The Top-5 path metric still checks five results.
-Keyword matching requires two keywords by default, from [thresholds.yaml](../tools/eval/thresholds.yaml).
+Keyword matching requires two keywords by default (`DEFAULT_MIN_KEYWORDS` in `tools/eval/models.py`).
 A query's `min_keywords` overrides that requirement.
 `--strict-keywords` requires every expected keyword unless the query overrides it.
 `--strict-keywords-top1` restricts both keyword metrics to the first result body.
@@ -96,7 +94,9 @@ A comparison requires identical input populations and measurement semantics.
 Changed corpus, query set, selection, metric version, `top_k`, or keyword rules cause an explicit error.
 Different modes, model recipes, or source revisions are recorded as experiment differences.
 They can be compared on the same inputs.
-The existing regression thresholds remain in `thresholds.yaml`.
+The committed baseline is the only quality gate.
+A run regresses when Top-1 drops more than 5 points, Top-5 drops more than 3 points, or two queries lose their Top-1 hit.
+The tolerances live in `tools/eval/regression.py`.
 
 ```bash
 KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
@@ -105,7 +105,7 @@ KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_qu
 ```
 
 `--quality-only` excludes baseline latency regression from the comparison gate.
-Latency values and deltas remain visible, and absolute CI latency ceilings still apply.
+Latency values and deltas remain visible but do not gate.
 Use it for quality comparisons across hosts.
 A latency comparison rejects different recorded host/interpreter descriptions.
 Matching descriptions alone do not establish equal hardware, load, or timing noise.
@@ -127,7 +127,7 @@ Their explicit migration notes explain reconstructed provenance from the matchin
 The migration preserves their recorded quality and latency values.
 It does not infer provenance automatically for other historical reports.
 
-`--promote` validates the report and checks the applicable CI thresholds before writing a new baseline.
+`--promote` validates the report and refuses it when it regresses against the supplied baseline.
 A failed evaluation cannot replace a baseline.
 When changing the committed fixture baseline, review its source observations and manifest together.
 
@@ -148,7 +148,7 @@ Add `--baseline-dir tools/eval/baselines/battle-standard --quality-only` to gate
 Use `tools/eval/baselines/battle-challenge` for the challenge suite.
 `just integration` runs both comparative gates.
 Use `just battle` or `just battle-challenge` to run either gate separately.
-Each gate uses the existing regression thresholds for every selected KB and search mode.
+Each gate uses the same baseline tolerances for every selected KB and search mode.
 Missing, malformed, or incompatible baselines fail before model initialization.
 A regression returns a nonzero status and retains reports with the failing KB, mode, and query transitions.
 Without `--baseline-dir`, the command remains an exploratory report run.

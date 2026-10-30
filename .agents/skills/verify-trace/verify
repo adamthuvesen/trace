@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+"""Drive Trace's real CLI, MCP server, and wheel against temp fixture collections.
+
+verify | verify all | verify <drive>... | verify list | verify control
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Awaitable, Callable
+from datetime import datetime, timezone
+from fnmatch import fnmatch
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[3]
+HELPER = Path(__file__).resolve()
+if Path(sys.prefix).resolve() != (ROOT / ".venv").resolve():
+    uv = [
+        "uv",
+        "run",
+        "--quiet",
+        "--locked",
+        "--extra",
+        "convert",
+        "--project",
+        str(ROOT),
+    ]
+    os.execvp("uv", [*uv, "python", str(HELPER), *sys.argv[1:]])
+
+import trace_search  # noqa: E402
+
+from drives import DRIVES, GUARD, MODEL_DIR, SMOKE, Context, Failure, control  # noqa: E402
+
+GLOBAL_PATHS = ["pyproject.toml", "uv.lock", ".agents/skills/verify-trace/*"]
+REDACT = ("KEY", "TOKEN", "SECRET", "PASSWORD")
+
+
+def git(*args: str) -> str:
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    result = subprocess.run(
+        ["git", *args], cwd=ROOT, env=env, capture_output=True, text=True
+    )
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def changed_files() -> set[str]:
+    base = git("merge-base", "HEAD", "main") or git("merge-base", "HEAD", "origin/main")
+    files = set(git("diff", "--name-only", base).splitlines()) if base else set()
+    for line in git("status", "--porcelain", "--untracked-files=all").splitlines():
+        files.add(line[3:].split(" -> ")[-1])
+    return {f for f in files if f}
+
+
+def select(files: set[str]) -> list[str]:
+    if any(fnmatch(f, g) for f in files for g in GLOBAL_PATHS):
+        return list(DRIVES)
+    picked = [
+        n
+        for n, d in DRIVES.items()
+        if any(fnmatch(f, g) for f in files for g in d.paths)
+    ]
+    return picked or [SMOKE]
+
+
+def model_source() -> Path:
+    override = os.environ.get("TRACE_MODEL_CACHE")
+    return (
+        Path(override).expanduser()
+        if override
+        else Path.home() / ".cache" / "trace" / "models"
+    )
+
+
+def child_env(scratch: Path) -> dict[str, str]:
+    keep = ("PATH", "LANG", "LC_ALL", "TERM", "TMPDIR")
+    env = {k: os.environ[k] for k in keep if k in os.environ}
+    home = scratch / "home"
+    guard = scratch / "guard"
+    guard.mkdir(parents=True)
+    (guard / "sitecustomize.py").write_text(GUARD)
+    models = scratch / "models"
+    # A private copy: fastembed may write lock or download files into its cache.
+    shutil.copytree(model_source(), models, symlinks=True)
+    env.update(
+        HOME=str(home),
+        XDG_CONFIG_HOME=str(home / ".config"),
+        XDG_DATA_HOME=str(home / ".local/share"),
+        XDG_CACHE_HOME=str(home / ".cache"),
+        XDG_STATE_HOME=str(home / ".local/state"),
+        TRACE_MODEL_CACHE=str(models),
+        PYTHONPATH=str(guard),
+        TRACE_VERIFY_NETWORK_LOG=str(scratch / "network-attempts.log"),
+        HF_HUB_OFFLINE="1",
+        TRANSFORMERS_OFFLINE="1",
+        NO_PROXY="127.0.0.1,localhost,::1",
+        FASTMCP_CHECK_FOR_UPDATES="off",
+        LOG_LEVEL="WARNING",
+    )
+    (scratch / "network-attempts.log").touch()
+    home.mkdir(exist_ok=True)
+    return env
+
+
+def preflight(env: dict[str, str], scratch: Path) -> None:
+    src = Path(trace_search.__file__).resolve()
+    if not src.is_relative_to(ROOT / "src"):
+        sys.exit(
+            f"preflight: trace_search imports from {src}, not this checkout's src/"
+        )
+    if not Path(sys.executable).with_name("trace").is_file():
+        sys.exit("preflight: the trace console script is missing; run just bootstrap")
+    if not (Path(env["TRACE_MODEL_CACHE"]) / MODEL_DIR).is_dir():
+        sys.exit(
+            f"preflight: no cached embedding model at {model_source() / MODEL_DIR}. Run `just integration` once to download it."
+        )
+    probe = {**env, "KB_PATH": str(scratch), "INDEX_PATH": str(scratch / "probe-index")}
+    code = "from trace_search.config import Settings as S; s=S(); print(s.kb_path, s.index_path, s.kb_collections)"
+    out = subprocess.run(
+        [sys.executable, "-c", code],
+        env=probe,
+        cwd=scratch,
+        capture_output=True,
+        text=True,
+    )
+    expected = [str(scratch), str(scratch / "probe-index"), "None"]
+    if out.stdout.split() != expected:
+        sys.exit(
+            f"preflight: child settings are not isolated: {out.stdout.strip()} {out.stderr[-300:]}"
+        )
+
+
+def run_dir() -> Path:
+    sha = git("rev-parse", "--short=7", "HEAD") or "nogit"
+    dirty = "-dirty" if git("status", "--porcelain") else ""
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    path = ROOT / ".verify" / "runs" / f"{stamp}-{sha}{dirty}"
+    path.mkdir(parents=True, exist_ok=False)
+    return path
+
+
+async def run_one(
+    name: str, fn: Callable[[Context], Awaitable[str]], ctx: Context, timeout: float
+) -> tuple[str, float, str]:
+    start = time.monotonic()
+    try:
+        detail = await asyncio.wait_for(fn(ctx), timeout)
+        attempts = Path(ctx.env["TRACE_VERIFY_NETWORK_LOG"]).read_text()
+        result = "PASS"
+        if attempts:
+            result, detail = "FAIL", f"external network attempted: {attempts.strip()}"
+    except Failure as exc:
+        result, detail = "FAIL", str(exc)
+    except TimeoutError:
+        result, detail = "FAIL", f"timed out after {timeout:.0f}s"
+    except Exception as exc:  # a crash inside a drive is a FAIL with its reason
+        result, detail = "FAIL", f"{type(exc).__name__}: {exc}"
+    finally:
+        ctx.stop_processes()
+    seconds = time.monotonic() - start
+    print(f"{result} {name} {seconds:.1f}s {detail}", flush=True)
+    return result, seconds, detail
+
+
+def main(argv: list[str]) -> int:
+    command = argv[0] if argv else ""
+    if command == "list":
+        for name, drive in DRIVES.items():
+            print(
+                f"{name}{' (smoke)' if name == SMOKE else ''}: {drive.proves}\n  paths: {', '.join(drive.paths)}"
+            )
+        return 0
+    if command == "control":
+        names = ["control"]
+    elif command == "all":
+        names = list(DRIVES)
+    elif argv:
+        unknown = [n for n in argv if n not in DRIVES]
+        if unknown:
+            print(
+                f"unknown drive(s): {', '.join(unknown)}. Run verify list.",
+                file=sys.stderr,
+            )
+            return 2
+        names = argv
+    else:
+        names = select(changed_files())
+    evidence = run_dir()
+    with tempfile.TemporaryDirectory(prefix="trace-verify-") as temporary:
+        scratch = Path(temporary)
+        env = child_env(scratch)
+        preflight(env, scratch)
+        (evidence / "env.json").write_text(
+            json.dumps(
+                {
+                    k: "<redacted>" if any(r in k for r in REDACT) else v
+                    for k, v in env.items()
+                },
+                indent=2,
+            )
+        )
+
+        def drive(name: str) -> dict[str, object]:
+            fn, timeout = (
+                (control, 60.0)
+                if name == "control"
+                else (DRIVES[name].run, DRIVES[name].timeout)
+            )
+            ctx = Context(
+                name=name,
+                scratch=scratch / name,
+                evidence=evidence / name,
+                env=env,
+                root=ROOT,
+            )
+            result, seconds, detail = asyncio.run(run_one(name, fn, ctx, timeout))
+            return {
+                "drive": name,
+                "result": result,
+                "seconds": round(seconds, 2),
+                "detail": detail,
+            }
+
+        # The wheel check is mostly mypy and installs; it shares nothing with the other drives.
+        with ThreadPoolExecutor(max_workers=1) as background:
+            package = (
+                background.submit(drive, "package") if "package" in names else None
+            )
+            results = [drive(name) for name in names if name != "package"]
+            if package is not None:
+                results.append(package.result())
+    summary = {
+        "sha": git("rev-parse", "HEAD"),
+        "dirty": bool(git("status", "--porcelain")),
+        "drives": results,
+    }
+    (evidence / "summary.json").write_text(json.dumps(summary, indent=2))
+    print(f"evidence: {evidence}")
+    failed = any(r["result"] == "FAIL" for r in results)
+    if command == "control":
+        print(
+            "control: FAIL observed"
+            if failed
+            else "control: the wrong expectation passed, so the drive asserts nothing"
+        )
+        return 0 if failed else 1
+    return int(failed)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

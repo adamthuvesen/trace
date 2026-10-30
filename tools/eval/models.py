@@ -18,6 +18,7 @@ Milliseconds = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 SearchMode = Literal["semantic", "bm25", "hybrid", "adaptive"]
 RecipeValue = str | int | float
 METRIC_VERSION = "path-keyword-v1-inclusive-linear-percentiles"
+DEFAULT_MIN_KEYWORDS = 2
 LATENCY_PROTOCOL = "warm-model-cold-query-cache-core-search-v1"
 
 
@@ -119,7 +120,7 @@ class EvaluationManifest(EvalModel):
     metric_version: Nonempty = METRIC_VERSION
     search_mode: SearchMode
     top_k: PositiveInt = 5
-    min_keywords: Count = 2
+    min_keywords: Count = DEFAULT_MIN_KEYWORDS
     strict_keywords: bool = False
     strict_keywords_top1: bool = False
     latency_protocol: Nonempty = LATENCY_PROTOCOL

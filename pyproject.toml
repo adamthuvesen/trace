@@ -3,7 +3,7 @@ name = "trace"
 version = "0.3.0"
 description = "Local document search for file-backed knowledge bases"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
     "fastmcp==4.1.6",
     "fastembed>=0.3.0",
@@ -63,7 +63,7 @@ markers = [
 ]
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.14"
 files = ["src/trace_search", "tools"]
 mypy_path = "src"
 explicit_package_bases = true

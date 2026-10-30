@@ -22,7 +22,9 @@ ENV/
 *.swp
 *.swo
 .DS_Store
-.claude/
+.claude/*
+!.claude/skills
+.verify/
 
 # Environment
 .env

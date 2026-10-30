@@ -32,7 +32,7 @@ Usage:
     # CI mode (exit 1 on regression)
     uv run python -m tools.eval.cli --full --ci --search adaptive --baseline tools/eval/baselines/core-adaptive.json --quality-only
 
-    # CI against stress thresholds (implies --stress)
+    # CI on the stress subset against its baseline (implies --stress)
     uv run python -m tools.eval.cli --ci-stress --search adaptive --baseline tools/eval/baselines/stress-adaptive.json --quality-only
 
     # Promote current results to baseline
@@ -47,18 +47,17 @@ from pathlib import Path
 
 import click
 
-from tools.eval import load_thresholds
 from tools.eval.evaluator import (
     SEARCH_MODES,
     load_golden_queries,
     run_evaluation,
 )
 from tools.eval.regression import (
-    check_ci_thresholds,
     compare_results,
     get_latest_baseline,
     load_baseline,
     promote_to_baseline,
+    regression_failures,
 )
 from tools.eval.reporter import (
     generate_console_report,
@@ -126,12 +125,12 @@ def resolve_eval_scope(
 @click.option(
     "--ci",
     is_flag=True,
-    help="CI mode: exit 1 on regression or critical threshold failure",
+    help="CI mode: exit 1 on regression against the baseline",
 )
 @click.option(
     "--ci-stress",
     is_flag=True,
-    help="Like --ci but evaluate only the stress subset and use stress CI thresholds",
+    help="Like --ci but evaluate only the stress subset",
 )
 @click.option(
     "--include-stress",
@@ -283,8 +282,6 @@ def _run(
             "Cannot compare legacy reports without provenance. Re-run or explicitly migrate the baseline."
         )
 
-    load_thresholds()
-
     # Initialize indexer
     from trace_search.config import settings
     from trace_search.indexing.wiki_indexer import WikiIndexer
@@ -324,8 +321,8 @@ def _run(
         click.echo(f"  {fmt}: {path}")
 
     if ci_mode:
-        passed, failures = check_ci_thresholds(report, stress_subset=ci_stress)
-        if not passed:
+        failures = regression_failures(report)
+        if failures:
             click.echo()
             click.echo("CI FAILURES:")
             for failure in failures:
@@ -334,7 +331,7 @@ def _run(
         else:
             click.echo()
             suffix = " (stress subset)" if ci_stress else ""
-            click.echo(f"CI: All thresholds passed{suffix}")
+            click.echo(f"CI: No regression against the baseline{suffix}")
 
     if promote:
         baseline_path = promote_to_baseline(report)

@@ -16,6 +16,7 @@ from trace_search.retrieval.search_types import SearchHit
 
 from tools.eval.metrics import percentile as percentile
 from tools.eval.models import (
+    DEFAULT_MIN_KEYWORDS,
     EvaluationReport,
     GoldenQuery,
     GoldenQueries,
@@ -168,7 +169,7 @@ def evaluate_query(
     searcher: Searcher,
     search_mode: str,
     top_k: int = 5,
-    min_keywords: int = 2,
+    min_keywords: int = DEFAULT_MIN_KEYWORDS,
     strict_keywords: bool = False,
     strict_keywords_top1: bool = False,
 ) -> QueryResult:
@@ -297,10 +298,7 @@ def run_evaluation(
 
     from tools.eval.provenance import build_manifest
 
-    from tools.eval import load_thresholds
-
-    thresholds = load_thresholds()
-    min_keywords = thresholds["keyword_match"]["min_keywords"]
+    min_keywords = DEFAULT_MIN_KEYWORDS
     if search_mode not in SEARCH_MODES:
         raise ValueError(f"Unknown search mode: {search_mode}")
     if type(top_k) is not int or top_k < 1:

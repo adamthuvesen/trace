@@ -129,19 +129,9 @@ See [index compatibility](docs/architecture.md#index-compatibility) for the v6 t
 
 ## Development and evaluation
 
-```bash
-just bootstrap
-just check
-just eval
-just stress
-just verify
-```
-
-`just eval` checks all 17 core queries against a committed quality baseline.
-`just stress` checks a separate 12-query population.
-Both use scratch indexes regardless of `INDEX_PATH`.
-The fixtures test public retrieval behavior on a small corpus.
-They do not establish corpus-scale performance.
+[AGENTS.md](AGENTS.md) lists the development commands and the checks they enforce.
+`just eval` and `just stress` check the public fixture against committed quality baselines.
+The fixtures test retrieval behavior on a small corpus. They do not establish corpus-scale performance.
 
 Read [development](docs/development.md) for commands and check coverage.
 Read [evaluation](docs/evaluation.md) for metrics, manifests, baseline migration, and private query sets.

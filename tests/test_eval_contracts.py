@@ -31,9 +31,9 @@ from tools.eval.models import (
 )
 from tools.eval.provenance import fingerprint
 from tools.eval.regression import (
-    check_ci_thresholds,
     compare_results,
     promote_to_baseline,
+    regression_failures,
 )
 
 FIXTURE_GOLDEN = Path("tests/fixtures/eval_golden_queries.yaml")
@@ -222,9 +222,29 @@ def test_failed_evaluation_cannot_replace_baseline(tmp_path):
     failed = EvaluationReport.from_results(
         timestamp=failed.timestamp, manifest=failed.manifest, results=failed.results
     )
+    failed.regression = compare_results(failed, report())
     with pytest.raises(ValueError, match="Cannot promote failed"):
         promote_to_baseline(failed, output_path=target)
     assert target.read_text() == "unchanged"
+
+
+def test_ci_gate_requires_a_baseline_comparison():
+    with pytest.raises(ValueError, match="baseline comparison"):
+        regression_failures(report())
+
+
+def test_ci_gate_fails_on_regression_and_passes_a_match():
+    current = report()
+    current.regression = compare_results(current, report())
+    assert regression_failures(current) == []
+    current.results[0].top_1_path_hit = False
+    current.results[0].path_first_hit_rank = 2
+    current.results[0].path_reciprocal_rank = 0.5
+    worse = EvaluationReport.from_results(
+        timestamp=current.timestamp, manifest=current.manifest, results=current.results
+    )
+    worse.regression = compare_results(worse, report())
+    assert regression_failures(worse)[0].startswith("Regression against baseline")
 
 
 def test_report_roundtrip_preserves_regression_and_manifest():
@@ -353,7 +373,7 @@ def test_current_report_rejects_conflicting_aggregates_and_flags(
     current = report()
     setattr(current, field, value)
     with pytest.raises(ValueError, match=field):
-        check_ci_thresholds(current)
+        regression_failures(current)
     with pytest.raises(ValueError, match=field):
         compare_results(current, report())
     with pytest.raises(ValueError, match=field):
@@ -367,7 +387,7 @@ def test_false_green_result_rows_cannot_pass_gate_or_promotion(tmp_path):
     current.results[0].top_5_path_hit = False
     current.results[0].latency_ms = 99999.0
     for operation in (
-        lambda: check_ci_thresholds(current),
+        lambda: regression_failures(current),
         lambda: compare_results(current, report()),
         lambda: promote_to_baseline(current, tmp_path / "baseline.json"),
     ):

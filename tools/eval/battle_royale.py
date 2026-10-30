@@ -13,6 +13,7 @@ from typing import Annotated, Literal, NotRequired, Self, TypedDict
 from pydantic import Field, TypeAdapter, model_validator
 
 from tools.eval.models import (
+    DEFAULT_MIN_KEYWORDS,
     EvalModel,
     EvaluationManifest,
     EvaluationReport,
@@ -33,7 +34,6 @@ from tools.eval.evaluator import (
     run_evaluation,
 )
 from tools.eval.reporter import generate_json_report, generate_markdown_report
-from tools.eval import load_thresholds
 from tools.eval.provenance import (
     comparison_differences,
     current_latency_environment,
@@ -199,7 +199,7 @@ def load_battle_baselines(
         raise ValueError("Missing battle baselines: " + ", ".join(missing))
 
     config = get_settings()
-    min_keywords = load_thresholds()["keyword_match"]["min_keywords"]
+    min_keywords = DEFAULT_MIN_KEYWORDS
     selected: dict[tuple[str, str], EvaluationReport] = {}
     for kb in kbs:
         queries = load_golden_queries(

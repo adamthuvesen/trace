@@ -5,12 +5,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from tools.eval import load_thresholds
 from tools.eval.models import EvaluationReport, QueryRegression, RegressionReport
 from tools.eval.provenance import comparison_differences
 
 EVAL_DIR = Path(__file__).parent
 BASELINES_DIR = EVAL_DIR / "results" / "baselines"
+
+# A run regresses when it falls this far below its baseline.
+TOP_1_DROP_TOLERANCE = 0.05
+TOP_5_DROP_TOLERANCE = 0.03
+LATENCY_INCREASE_TOLERANCE = 0.50
+MIN_REGRESSED_QUERIES = 2
 
 
 def load_baseline(baseline_path: Path) -> EvaluationReport:
@@ -48,8 +53,6 @@ def compare_results(
     experiment_differences = comparison_differences(
         current.manifest, baseline.manifest, compare_latency=compare_latency
     )
-    thresholds = load_thresholds()
-    reg_thresh = thresholds["regression"]
 
     top_1_delta = current.top_1_path_accuracy - baseline.top_1_path_accuracy
     top_5_delta = current.top_5_path_accuracy - baseline.top_5_path_accuracy
@@ -96,13 +99,10 @@ def compare_results(
             )
 
     has_regression = (
-        top_1_delta < -reg_thresh["top_1_drop_threshold"]
-        or top_5_delta < -reg_thresh["top_5_drop_threshold"]
-        or (
-            compare_latency
-            and latency_delta_pct > reg_thresh["latency_increase_threshold"]
-        )
-        or len(regressed_queries) >= reg_thresh["min_regressed_queries"]
+        top_1_delta < -TOP_1_DROP_TOLERANCE
+        or top_5_delta < -TOP_5_DROP_TOLERANCE
+        or (compare_latency and latency_delta_pct > LATENCY_INCREASE_TOLERANCE)
+        or len(regressed_queries) >= MIN_REGRESSED_QUERIES
     )
 
     return RegressionReport(
@@ -125,89 +125,23 @@ def compare_results(
     )
 
 
-def check_ci_thresholds(
-    report: EvaluationReport,
-    stress_subset: bool = False,
-) -> tuple[bool, list[str]]:
-    """Check if the report meets CI thresholds.
-
-    When ``stress_subset`` is True, uses the optional ``stress`` block from
-    thresholds.yaml (falling back to the default thresholds for missing keys).
-
-    Returns:
-        Tuple of (passed, list of failure reasons)
-    """
+def regression_failures(report: EvaluationReport) -> list[str]:
+    """Return why a report fails its baseline comparison, or nothing when it passes."""
     report = EvaluationReport.from_dict(report.to_dict())
     if report.manifest is None:
         raise ValueError(
             "CI checks require evaluation provenance. Historical reports are readable only."
         )
-    thresholds = load_thresholds()
-    stress_cfg = thresholds.get("stress") if stress_subset else None
-    if isinstance(stress_cfg, dict):
-        path_thresh = stress_cfg.get("path_accuracy", thresholds["path_accuracy"])
-        keyword_thresh = stress_cfg.get(
-            "keyword_accuracy", thresholds["keyword_accuracy"]
-        )
-        latency_thresh = stress_cfg.get("latency", thresholds["latency"])
-        ci_config = stress_cfg.get("ci", thresholds["ci"])
-    else:
-        path_thresh = thresholds["path_accuracy"]
-        keyword_thresh = thresholds["keyword_accuracy"]
-        latency_thresh = thresholds["latency"]
-        ci_config = thresholds["ci"]
-
-    failures = []
-
-    prefix = "[stress] " if stress_subset else ""
-    fail_on = ci_config.get("fail_on", [])
-
-    if "top_1_below_critical" in fail_on:
-        if report.top_1_path_accuracy < path_thresh["top_1"]["critical"]:
-            failures.append(
-                f"{prefix}Top-1 path accuracy ({report.top_1_path_accuracy:.1%}) below critical threshold ({path_thresh['top_1']['critical']:.0%})"
-            )
-
-    if "top_5_below_critical" in fail_on:
-        if report.top_5_path_accuracy < path_thresh["top_5"]["critical"]:
-            failures.append(
-                f"{prefix}Top-5 path accuracy ({report.top_5_path_accuracy:.1%}) below critical threshold ({path_thresh['top_5']['critical']:.0%})"
-            )
-
-    if "top_1_keyword_below_critical" in fail_on:
-        crit = keyword_thresh["top_1"]["critical"]
-        if report.top_1_keyword_accuracy < crit:
-            failures.append(
-                f"{prefix}Top-1 keyword accuracy ({report.top_1_keyword_accuracy:.1%}) below critical threshold ({crit:.0%})"
-            )
-    if "top_5_keyword_below_critical" in fail_on:
-        crit = keyword_thresh["top_5"]["critical"]
-        if report.top_5_keyword_accuracy < crit:
-            failures.append(
-                f"{prefix}Top-5 keyword accuracy ({report.top_5_keyword_accuracy:.1%}) below critical threshold ({crit:.0%})"
-            )
-
-    if "mrr_below_critical" in fail_on:
-        crit = ci_config.get("mrr_critical", 0.0)
-        if report.mean_reciprocal_rank < crit:
-            failures.append(
-                f"{prefix}Mean reciprocal rank ({report.mean_reciprocal_rank:.3f}) below critical threshold ({crit:.3f})"
-            )
-
-    if "latency_above_critical" in fail_on:
-        if report.latency_p95_ms > latency_thresh["p95"]["critical"]:
-            failures.append(
-                f"{prefix}Latency p95 ({report.latency_p95_ms:.1f}ms) above critical threshold ({latency_thresh['p95']['critical']}ms)"
-            )
-
-    if "regression_detected" in fail_on:
-        if report.regression and report.regression.has_regression:
-            failures.append(
-                f"{prefix}Regression detected: Top-1 delta {report.regression.top_1_delta:+.1%}, "
-                f"{len(report.regression.regressed_queries)} queries regressed"
-            )
-
-    return len(failures) == 0, failures
+    regression = report.regression
+    if regression is None:
+        raise ValueError("CI checks require a baseline comparison. Supply --baseline.")
+    if not regression.has_regression:
+        return []
+    return [
+        f"Regression against baseline: Top-1 {regression.top_1_delta:+.1%}, "
+        f"Top-5 {regression.top_5_delta:+.1%}, "
+        f"{len(regression.regressed_queries)} queries regressed"
+    ]
 
 
 def promote_to_baseline(
@@ -217,8 +151,8 @@ def promote_to_baseline(
     EvaluationReport.from_dict(report.to_dict())
     if report.manifest is None:
         raise ValueError("Cannot promote a report without evaluation provenance")
-    passed, failures = check_ci_thresholds(report, stress_subset=report.stress_only)
-    if not passed:
+    failures = regression_failures(report) if report.regression else []
+    if failures:
         raise ValueError("Cannot promote failed evaluation: " + "; ".join(failures))
     BASELINES_DIR.mkdir(parents=True, exist_ok=True)
 

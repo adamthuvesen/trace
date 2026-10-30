@@ -105,13 +105,3 @@ def test_console_report_keeps_section_contract():
     assert "search             2   50%  100%" in rendered
     assert "BY FILE TYPE" in rendered
     assert ".md            2   50%  100%" in rendered
-
-
-def test_stress_renderer_uses_the_stress_thresholds():
-    report = _sample_report()
-    report.stress_only = True
-    report.top_1_path_accuracy = 0.5
-    console = generate_console_report(report)
-    markdown = generate_markdown_report(report)
-    assert "Top-1 Path:    50.0% [PASS] (target: ≥50%)" in console
-    assert "| Top-1 Path Accuracy | 50.0% | ✓ | ≥50% |" in markdown
