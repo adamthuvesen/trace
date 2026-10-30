@@ -74,8 +74,9 @@ ignore = ["E501"]
 [tool.basedpyright]
 typeCheckingMode = "strict"
 enableTypeIgnoreComments = false
+reportUnnecessaryTypeIgnoreComment = "error"
 pythonVersion = "3.14"
-include = ["src/trace_search", "tools", "tests", ".agents/skills/verify-trace"]
+include = ["src/trace_search", "tools", "tests"]
 exclude = ["**/__pycache__"]
 extraPaths = ["src"]
 venvPath = "."

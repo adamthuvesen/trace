@@ -227,6 +227,7 @@ class _KeywordHitGroup:
     best_score: float
     metadata_overlap: float
     names_query: bool = False
+    covers_query: bool = False
     chunk_scores: list[float] = field(default_factory=list)
 
     def add_hit(
@@ -235,9 +236,11 @@ class _KeywordHitGroup:
         *,
         score: float,
         metadata_overlap: float,
+        covers_query: bool,
     ) -> None:
         self.chunk_scores.append(score)
         self.metadata_overlap = max(self.metadata_overlap, metadata_overlap)
+        self.covers_query = self.covers_query or covers_query
         if score > self.best_score:
             self.best_hit = hit
             self.best_score = score
@@ -308,7 +311,11 @@ def _aggregate_keyword_hits(
                 names_query=_query_names_page(query_terms, hit),
             )
             grouped[path] = group
-        group.add_hit(hit, score=score, metadata_overlap=overlap)
+        # BM25 scores a rare term at roughly half its IDF, which stays below the
+        # weak cutoff at every corpus size. A chunk that holds every query term
+        # is an exact match, not a weak hit.
+        covers_query = bool(query_terms) and query_terms <= _rank_terms(hit.content)
+        group.add_hit(hit, score=score, metadata_overlap=overlap, covers_query=covers_query)
 
     weak_score = _weak_file_score(corpus_size)
     ranked: list[tuple[float, int, SearchHit]] = []
@@ -319,6 +326,7 @@ def _aggregate_keyword_hits(
             require_anchor_for_weak_hits
             and file_score < weak_score
             and group.metadata_overlap < _BM25_WEAK_METADATA_OVERLAP
+            and not group.covers_query
         ):
             continue
 

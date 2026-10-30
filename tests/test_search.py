@@ -1,11 +1,13 @@
 """Tests for search module."""
 
+from pathlib import Path
 from typing import get_type_hints
 from unittest.mock import MagicMock
 
 import numpy as np
 
 from tests.search_hits import make_hit
+from tests.test_runtime_hardening import FakeBackend
 from tests.typed_fakes import fake_indexer
 from trace_search.config import settings
 from trace_search.indexing.index_store import ChunkMetadata, IndexSnapshot
@@ -223,6 +225,21 @@ class TestKeywordSearchAggregation:
         )
 
         assert hits == []
+
+    def test_keyword_search_keeps_exact_match_of_a_rare_term(self, tmp_path: Path):
+        # A rare term scores about half its IDF, below the weak cutoff at every
+        # corpus size, so only full query coverage keeps this hit.
+        kb = tmp_path / "kb"
+        kb.mkdir()
+        (kb / "garden.md").write_text("# Garden\n\nThe zucchini harvest was large.")
+        for i in range(30):
+            (kb / f"note-{i}.md").write_text(f"# Note {i}\n\nMeeting notes about topic {i}.")
+        indexer = WikiIndexer(kb, index_root=tmp_path / "idx", backend=FakeBackend())
+        indexer.build_index()
+
+        hits = KeywordSearch(indexer).search("zucchini", max_results=5)
+
+        assert [hit.path for hit in hits] == ["garden.md"]
 
 
 class TestBM25Parameters:

@@ -280,6 +280,7 @@ async def drive_index(ctx: Context) -> str:
 async def drive_mcp(ctx: Context) -> str:
     from fastmcp import Client
     from fastmcp.client.transports import StdioTransport
+    from mcp.types import TextContent
 
     trace = str(Path(sys.executable).with_name("trace"))
 
@@ -291,9 +292,11 @@ async def drive_mcp(ctx: Context) -> str:
         )
         found = await client.call_tool_mcp("search", {"query": "INDEX_PATH"})
         ctx.log(f"{transport}-search", str(found.content))
+        first = found.content[0]
         expect(
             not found.is_error
-            and top_path(str(found.content[0].text)) == ("config/index-path.md", "docs"),
+            and isinstance(first, TextContent)
+            and top_path(first.text) == ("config/index-path.md", "docs"),
             f"{transport} search: expected docs/config/index-path.md first, got {str(found.content)[:300]}",
         )
         document = await client.call_tool_mcp(

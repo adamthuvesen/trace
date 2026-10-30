@@ -12,6 +12,7 @@ check:
     uv run --locked --extra convert ruff check .
     uv run --locked --extra convert ruff format --check .
     uv run --locked --extra convert basedpyright
+    uv run --locked --extra convert basedpyright --project .agents/skills/verify-trace
     uv run --locked --extra convert lint-imports --no-logo
     uv run --locked --extra convert python -m pytest -m "not slow and not transport" -q -n auto
 

@@ -172,9 +172,9 @@ async def run_one(
 def main(argv: list[str]) -> int:
     command = argv[0] if argv else ""
     if command == "list":
-        for name, drive in DRIVES.items():
+        for name, entry in DRIVES.items():
             print(
-                f"{name}{' (smoke)' if name == SMOKE else ''}: {drive.proves}\n  paths: {', '.join(drive.paths)}"
+                f"{name}{' (smoke)' if name == SMOKE else ''}: {entry.proves}\n  paths: {', '.join(entry.paths)}"
             )
         return 0
     if command == "control":
