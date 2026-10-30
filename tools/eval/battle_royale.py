@@ -16,6 +16,10 @@ from tools.eval.models import (
     EvalModel,
     EvaluationManifest,
     EvaluationReport,
+    EvaluationScope,
+    RegressionReport,
+    METRIC_VERSION,
+    LATENCY_PROTOCOL,
     SearchMode,
 )
 
@@ -29,6 +33,13 @@ from tools.eval.evaluator import (
     run_evaluation,
 )
 from tools.eval.reporter import generate_json_report, generate_markdown_report
+from tools.eval import load_thresholds
+from tools.eval.provenance import (
+    comparison_differences,
+    current_latency_environment,
+    fingerprint,
+)
+from tools.eval.regression import compare_results, load_baseline
 
 DEFAULT_SUITE = Path("tests/fixtures/eval_battle_royale.yaml")
 DEFAULT_OUTPUT_DIR = Path("docs/benchmarks/retrieval_battle_royale")
@@ -114,6 +125,8 @@ class BattleSummary(TypedDict):
     by_kb: list[KnowledgeBaseSummary]
     manifests: dict[str, dict[str, EvaluationManifest]]
     reports: NotRequired[dict[str, dict[str, dict[str, str]]]]
+    comparisons: NotRequired[dict[str, dict[str, RegressionReport]]]
+    comparison_failures: NotRequired[list[str]]
 
 
 def load_suite(path: Path) -> tuple[str, list[BattleKnowledgeBase], tuple[str, ...]]:
@@ -143,6 +156,94 @@ def load_suite(path: Path) -> tuple[str, list[BattleKnowledgeBase], tuple[str, .
         return suite.description, kbs, tuple(suite.modes)
     except (ValueError, OSError, yaml.YAMLError) as error:
         raise click.ClickException(str(error)) from error
+
+
+def load_battle_baselines(
+    baseline_dir: Path,
+    kbs: list[BattleKnowledgeBase],
+    modes: tuple[str, ...],
+    *,
+    top_k: int,
+    compare_latency: bool,
+) -> dict[tuple[str, str], EvaluationReport]:
+    """Validate the inventory and selected input identities before loading a model."""
+    from trace_search.config import get_settings
+    from trace_search.indexing.index_metadata import collect_source_files
+
+    names = {
+        f"{kb.kb_id}_{mode}.json": (kb.kb_id, mode)
+        for kb in kbs
+        for mode in SEARCH_MODES
+    }
+    inventory: dict[tuple[str, str], EvaluationReport] = {}
+    for path in sorted(baseline_dir.glob("*.json")):
+        if path.name not in names:
+            raise ValueError(f"Unknown battle baseline: {path.name}")
+        key: tuple[str, str] = names[path.name]
+        try:
+            report = load_baseline(path)
+            if report.manifest is None:
+                raise ValueError("baseline requires evaluation provenance")
+            if report.search_mode != key[1]:
+                raise ValueError("report mode does not match its filename")
+        except (ValueError, OSError) as error:
+            raise ValueError(f"Invalid battle baseline {path.name}: {error}") from error
+        inventory[key] = report
+    required = [(kb.kb_id, mode) for kb in kbs for mode in modes]
+    missing = [
+        f"{kb_id}_{mode}.json"
+        for kb_id, mode in required
+        if (kb_id, mode) not in inventory
+    ]
+    if missing:
+        raise ValueError("Missing battle baselines: " + ", ".join(missing))
+
+    config = get_settings()
+    min_keywords = load_thresholds()["keyword_match"]["min_keywords"]
+    selected: dict[tuple[str, str], EvaluationReport] = {}
+    for kb in kbs:
+        queries = load_golden_queries(
+            golden_queries_path=kb.golden_queries_path, include_stress=kb.include_stress
+        )
+        corpus = sorted(
+            (record.path, record.content_sha)
+            for record in collect_source_files(kb.kb_path, config=config)
+        )
+        for mode in modes:
+            key = kb.kb_id, mode
+            report = inventory[key]
+            assert report.manifest is not None
+            # Only input fields are known before construction. Actual reports verify the built recipe later.
+            known_inputs = report.manifest.model_copy(
+                update={
+                    "corpus_fingerprint": fingerprint(corpus),
+                    "queryset_fingerprint": fingerprint(
+                        [query.to_dict() for query in queries]
+                    ),
+                    "selected_query_ids": [query.id for query in queries],
+                    "scope": EvaluationScope(include_stress=kb.include_stress),
+                    "includes_stress_queries": any(
+                        query.stress_set for query in queries
+                    ),
+                    "metric_version": METRIC_VERSION,
+                    "latency_protocol": LATENCY_PROTOCOL,
+                    "latency_environment": current_latency_environment(),
+                    "top_k": top_k,
+                    "min_keywords": min_keywords,
+                    "strict_keywords": False,
+                    "strict_keywords_top1": False,
+                }
+            )
+            try:
+                comparison_differences(
+                    known_inputs, report.manifest, compare_latency=compare_latency
+                )
+            except ValueError as error:
+                raise ValueError(
+                    f"Incompatible battle baseline {kb.kb_id}/{mode}: {error}"
+                ) from error
+            selected[key] = report
+    return selected
 
 
 def _write_mode_report(
@@ -224,6 +325,7 @@ def _summary_json(
     saved_reports: dict[str, dict[str, dict[str, str]]],
     modes: tuple[str, ...],
     kbs: list[BattleKnowledgeBase],
+    comparison_failures: list[str] | None = None,
 ) -> BattleSummary:
     by_mode = {}
     for mode in modes:
@@ -278,6 +380,17 @@ def _summary_json(
         "by_kb": by_kb,
         "manifests": manifests,
     }
+    if comparison_failures is not None:
+        summary["comparison_failures"] = comparison_failures
+        summary["comparisons"] = {
+            kb.kb_id: {
+                mode: regression
+                for mode in modes
+                if (regression := reports_by_kb_mode[kb.kb_id, mode].regression)
+                is not None
+            }
+            for kb in kbs
+        }
     if saved_reports:
         summary["reports"] = saved_reports
     return summary
@@ -356,6 +469,12 @@ def _summary_markdown(summary: BattleSummary) -> str:
         lines.append(
             f"- **{kb['id']}**: `{kb['kb_path']}` with `{kb['golden_queries']}`"
         )
+    if "comparison_failures" in summary:
+        gate_failures = summary["comparison_failures"]
+        lines.extend(
+            ["", "## Comparative gate", "", "FAIL" if gate_failures else "PASS"]
+        )
+        lines.extend(f"- {failure}" for failure in gate_failures)
     lines.append("")
     return "\n".join(lines)
 
@@ -396,6 +515,16 @@ def _summary_markdown(summary: BattleSummary) -> str:
     help="Results per query.",
 )
 @click.option(
+    "--baseline-dir",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="Directory of KB_MODE.json reports for comparative quality gates.",
+)
+@click.option(
+    "--quality-only",
+    is_flag=True,
+    help="Exclude baseline latency regression for cross-host quality comparisons.",
+)
+@click.option(
     "--detail-reports",
     is_flag=True,
     help="Also write per-KB/per-mode JSON and Markdown reports.",
@@ -407,10 +536,21 @@ def main(
     requested_modes: tuple[str, ...],
     top_k: int,
     detail_reports: bool,
+    baseline_dir: Path | None,
+    quality_only: bool,
 ) -> None:
     """Run the committed multi-KB retrieval battle suite."""
     try:
-        _run(suite, output_dir, label, requested_modes, top_k, detail_reports)
+        _run(
+            suite,
+            output_dir,
+            label,
+            requested_modes,
+            top_k,
+            detail_reports,
+            baseline_dir,
+            quality_only,
+        )
     except (ValueError, OSError) as error:
         raise click.ClickException(str(error)) from error
 
@@ -422,14 +562,32 @@ def _run(
     requested_modes: tuple[str, ...],
     top_k: int,
     detail_reports: bool,
+    baseline_dir: Path | None,
+    quality_only: bool,
 ) -> None:
     if Path(label).name != label or label in (".", ".."):
         raise click.BadParameter(
             "label must be a single directory name", param_hint="--label"
         )
+    if quality_only and baseline_dir is None:
+        raise click.UsageError("--quality-only requires --baseline-dir")
+    if len(requested_modes) != len(set(requested_modes)):
+        raise click.UsageError("Search modes must be unique")
     description, kbs, suite_modes = load_suite(suite)
     modes = requested_modes or suite_modes
     run_dir = output_dir / label
+    baselines = (
+        load_battle_baselines(
+            baseline_dir,
+            kbs,
+            tuple(modes),
+            top_k=top_k,
+            compare_latency=not quality_only,
+        )
+        if baseline_dir is not None
+        else {}
+    )
+    comparison_failures: list[str] = []
 
     from trace_search.indexing.embeddings import build_embedding_backend
     from trace_search.indexing.wiki_indexer import WikiIndexer
@@ -466,7 +624,40 @@ def _run(
                     golden_queries_path=kb.golden_queries_path,
                 )
                 reports_by_kb_mode[(kb.kb_id, mode)] = report
-                if detail_reports:
+                if baseline_dir is not None:
+                    baseline = baselines[kb.kb_id, mode]
+                    try:
+                        report.regression = compare_results(
+                            report, baseline, compare_latency=not quality_only
+                        )
+                    except ValueError as error:
+                        comparison_failures.append(
+                            f"{kb.kb_id}/{mode}: comparison failed: {error}"
+                        )
+                    else:
+                        if report.regression.has_regression:
+                            comparison_failures.append(
+                                f"{kb.kb_id}/{mode}: regression, Top-1 delta {report.regression.top_1_delta:+.1%}, Top-5 delta {report.regression.top_5_delta:+.1%}, latency p95 delta {report.regression.latency_delta_pct:+.0%}"
+                            )
+                            for previous, current in zip(
+                                baseline.results, report.results, strict=True
+                            ):
+                                lost = []
+                                if (
+                                    previous.top_1_path_hit
+                                    and not current.top_1_path_hit
+                                ):
+                                    lost.append("Top-1")
+                                if (
+                                    previous.top_5_path_hit
+                                    and not current.top_5_path_hit
+                                ):
+                                    lost.append("Top-5")
+                                if lost:
+                                    comparison_failures.append(
+                                        f"{kb.kb_id}/{mode} query {current.query_id}: lost {', '.join(lost)}, {previous.retrieved_path} -> {current.retrieved_path}"
+                                    )
+                if detail_reports or baseline_dir is not None:
                     saved_reports.setdefault(kb.kb_id, {})[mode] = _write_mode_report(
                         report, run_dir, kb.kb_id, mode
                     )
@@ -479,6 +670,7 @@ def _run(
         saved_reports=saved_reports,
         modes=tuple(modes),
         kbs=kbs,
+        comparison_failures=comparison_failures if baseline_dir is not None else None,
     )
     run_dir.mkdir(parents=True, exist_ok=True)
     summary_json = run_dir / "summary.json"
@@ -489,6 +681,12 @@ def _run(
     )
     summary_md.write_text(_summary_markdown(summary), encoding="utf-8")
     click.echo(f"Summary: {summary_md}")
+    if comparison_failures:
+        raise click.ClickException(
+            "Battle comparison failed:\n" + "\n".join(comparison_failures)
+        )
+    if baseline_dir is not None:
+        click.echo("Battle comparison: all KB/mode gates passed")
 
 
 if __name__ == "__main__":

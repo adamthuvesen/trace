@@ -2,10 +2,10 @@
 """CLI for Trace search evaluation suite.
 
 Usage:
-    # Quick evaluation (~14 template queries; stress subset excluded by default)
+    # Quick evaluation (stress subset excluded by default)
     uv run python -m tools.eval.cli --quick
 
-    # Full evaluation (~26 template queries, excluding stress items)
+    # Full core evaluation (excluding stress items)
     uv run python -m tools.eval.cli --full
 
     # Include stress / paraphrase queries in quick or full
@@ -30,10 +30,10 @@ Usage:
     uv run python -m tools.eval.cli --baseline results/baselines/latest.json
 
     # CI mode (exit 1 on regression)
-    uv run python -m tools.eval.cli --ci
+    uv run python -m tools.eval.cli --full --ci --search adaptive --baseline tools/eval/baselines/core-adaptive.json --quality-only
 
     # CI against stress thresholds (implies --stress)
-    uv run python -m tools.eval.cli --ci-stress
+    uv run python -m tools.eval.cli --ci-stress --search adaptive --baseline tools/eval/baselines/stress-adaptive.json --quality-only
 
     # Promote current results to baseline
     uv run python -m tools.eval.cli --promote
@@ -95,12 +95,12 @@ def resolve_eval_scope(
 @click.option(
     "--quick",
     is_flag=True,
-    help="Run quick evaluation (~14 template queries)",
+    help="Run queries marked quick_set (excluding stress by default)",
 )
 @click.option(
     "--full",
     is_flag=True,
-    help="Run full evaluation (~26 template queries)",
+    help="Run every core query (excluding stress by default)",
 )
 @click.option(
     "--search",

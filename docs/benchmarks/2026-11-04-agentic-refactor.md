@@ -42,9 +42,10 @@ The same recipes configure CI.
 
 | Local check | Result |
 | --- | --- |
-| Python 3.13 `just verify` | Passed, 500 fast tests and 6 slow tests, no skips |
-| Python 3.14 `just check` | Passed, 500 fast tests, no skips |
-| Strict mypy | Passed across 50 runtime and tooling files |
+| macOS Python 3.13 `just verify` | Passed, 537 fast tests and 6 slow tests, no skips |
+| Linux ARM64 Python 3.13 `just verify` | Passed, 537 fast tests and 6 slow tests, no skips |
+| macOS Python 3.14 `just check` | Passed, 537 fast tests, no skips |
+| Strict mypy | Passed across 51 runtime and tooling files |
 | Import contracts | Both passed |
 | Installed wheel | All 12 verification stages passed |
 | Independent review | No unresolved findings after correction |
@@ -105,6 +106,40 @@ Current-family invariants survive a version bump, while unknown persisted schema
 Future schema decoding still requires an explicit compatibility decision.
 The exercise field and scratch source were removed.
 
+## Final reassessment
+
+A second audit found failure paths that the first pass had missed.
+The completed corrections include:
+
+- Unreadable directories stop indexing instead of becoming silent deletions.
+- Collection index paths cannot alias on the destination filesystem.
+- Forked processes cannot inherit usable writer-lock ownership or unlock their parent's lock.
+- Symlink and hard-link lockfiles cannot truncate source documents.
+- Pointer publication ignores unsafe stale temporary paths and uses exclusive creation.
+- Failed publication removes only that attempt's unpublished files.
+- Invalid UTF-8 code sources fail extraction and preserve the previous generation.
+- Relative KB paths derive names from the resolved directory.
+- Requested paths, symbolic-link targets, and filesystem spelling variants obey consistent visibility rules.
+- Unrelated backend classes cannot impersonate the built-in ONNX backend by name.
+
+The registry's unused merge implementation was removed.
+Runtime searches and their tests now use the one application-owned merge.
+The converter and registry share destination equivalence checks.
+
+Both battle suites now enforce the existing regression thresholds against 24 observed reports.
+Failure injection proves that collapsed retrieval and missing baselines return failure.
+The reports retain the failing KB, mode, and query transitions.
+`just battle` and `just battle-challenge` expose focused verification.
+No quality threshold or measurement definition changed.
+
+Independent review repeated the original failure inputs and closed all findings.
+All 14 selected negative controls failed against `472a793` and pass in the corrected suite.
+Those controls include real filesystem and fork cases plus explicit ENOSPC fault injection.
+The Linux run used an unprivileged user and a case-sensitive container filesystem.
+This complements macOS case and Unicode alias checks.
+PyStemmer required C build tools on the minimal Linux ARM64 image.
+That prerequisite is now documented.
+
 ## Compatibility and limits
 
 Missing documents, failed extraction, and failed conversion now report failure instead of success.
@@ -117,8 +152,8 @@ Configured embedding incompatibility requires reindexing before semantic queries
 Search snapshots remain independent per collection.
 Document fetch and listing read live sources.
 
-Local evidence covers macOS with Python 3.13 and fast checks with Python 3.14.
-Linux CI and hosted client integrations require their own execution.
+Local evidence covers macOS and Linux ARM64 with Python 3.13, plus macOS fast checks with Python 3.14.
+Hosted CI, Linux x86-64, and deployed client integrations require their own execution.
 Nothing was pushed, and no running daemon index was changed.
 Private knowledge bases, large-corpus performance, hardware failures, and deployment behavior remain outside this evidence.
 Initial dependency and model preparation can require network access.

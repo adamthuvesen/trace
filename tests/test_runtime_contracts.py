@@ -61,7 +61,8 @@ def test_empty_collection_path_cannot_select_current_directory():
 
 
 @pytest.mark.parametrize(
-    "filename,body", [("broken.md", b"\xff"), ("broken.ipynb", b"not-json")]
+    "filename,body",
+    [("broken.md", b"\xff"), ("broken.ipynb", b"not-json"), ("broken.py", b"\xff")],
 )
 def test_failed_extraction_preserves_generation_and_retry_reextracts(
     indexed, filename, body

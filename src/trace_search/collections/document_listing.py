@@ -11,9 +11,6 @@ from trace_search.extraction.extractors import extract_title
 from trace_search.config import Settings, get_settings
 from trace_search.retrieval.search_types import SearchFilters
 
-DEFAULT_LIST_LIMIT = 50
-MAX_LIST_LIMIT = 500
-
 
 @dataclass(frozen=True)
 class ListedDocument:
@@ -33,12 +30,6 @@ class ListedDocument:
         if include_collection and self.collection:
             return f"{self.collection}/{folder}"
         return folder
-
-
-def _normalize_limit(limit: int) -> int:
-    if limit < 1:
-        limit = DEFAULT_LIST_LIMIT
-    return min(limit, MAX_LIST_LIMIT)
 
 
 def _resolve_folder_root(kb_path: Path, folder: str | None) -> Path | None:
@@ -159,7 +150,6 @@ def list_documents_for_collections(
             )
         )
 
-    limit = _normalize_limit(limit)
     documents = sorted(documents, key=lambda document: document.sort_key)[:limit]
     return render_document_list(
         documents,

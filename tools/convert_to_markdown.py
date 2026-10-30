@@ -13,7 +13,6 @@ import os
 import shutil
 from collections import Counter
 from collections.abc import Callable
-from contextlib import ExitStack
 from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -22,6 +21,8 @@ from typing import Literal
 import click
 from pydantic import BaseModel, ConfigDict, ValidationError
 from rich.console import Console
+
+from trace_search.filesystem_paths import validate_distinct_targets
 
 console = Console()
 CONVERTER_VERSION = 1
@@ -259,51 +260,16 @@ def build_conversion_plan(
 
 
 def validate_filesystem_destinations(entries: list[PlannedConversion]) -> None:
-    """Check aliases with the destination filesystem's actual naming rules."""
-    # A scratch mirror detects case and Unicode aliases without creating outputs.
-    with ExitStack() as stack:
-        mirrors: dict[tuple[int, int], Path] = {}
-        claimed: dict[tuple[int, int], Path] = {}
-        for entry in entries:
-            for destination in (
+    validate_distinct_targets(
+        [
+            (str(entry.source_path), target)
+            for entry in entries
+            for target in (
                 entry.destination_path,
                 provenance_path(entry.destination_path),
-            ):
-                ancestor = destination.parent
-                while not ancestor.exists():
-                    ancestor = ancestor.parent
-                ancestor_stat = ancestor.stat()
-                directory_identity = (ancestor_stat.st_dev, ancestor_stat.st_ino)
-                mirror = mirrors.get(directory_identity)
-                if mirror is None:
-                    mirror = Path(
-                        stack.enter_context(
-                            TemporaryDirectory(prefix=".trace-plan-", dir=ancestor)
-                        )
-                    )
-                    mirrors[directory_identity] = mirror
-                probe = mirror / destination.relative_to(ancestor)
-                try:
-                    probe.parent.mkdir(parents=True, exist_ok=True)
-                except (FileExistsError, NotADirectoryError) as error:
-                    raise ValueError(
-                        f"Destination file conflicts with a directory: {destination}"
-                    ) from error
-                if probe.exists():
-                    if probe.is_dir():
-                        raise ValueError(
-                            f"Destination file conflicts with a directory: {destination}"
-                        )
-                    identity = probe.stat()
-                    previous = claimed[(identity.st_dev, identity.st_ino)]
-                    raise ValueError(
-                        f"Destination collision: {previous} and {entry.source_path} "
-                        f"both map to {destination} on this filesystem"
-                    )
-                with probe.open("xb"):
-                    pass
-                identity = probe.stat()
-                claimed[(identity.st_dev, identity.st_ino)] = entry.source_path
+            )
+        ]
+    )
 
 
 def existing_status(entry: PlannedConversion, force: bool) -> ConversionStatus | None:

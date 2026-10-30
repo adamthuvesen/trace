@@ -51,6 +51,10 @@ def source_identity() -> tuple[str, str]:
     )
 
 
+def current_latency_environment() -> str:
+    return f"{platform.system()}-{platform.machine()}-python{platform.python_version()}"
+
+
 def build_manifest(
     indexer: WikiIndexer,
     queries: list[GoldenQuery],
@@ -88,7 +92,7 @@ def build_manifest(
         },
         source_revision=revision,
         source_fingerprint=source,
-        latency_environment=f"{platform.system()}-{platform.machine()}-python{platform.python_version()}",
+        latency_environment=current_latency_environment(),
     )
 
 

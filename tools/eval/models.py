@@ -17,6 +17,8 @@ Rate = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
 Milliseconds = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 SearchMode = Literal["semantic", "bm25", "hybrid", "adaptive"]
 RecipeValue = str | int | float
+METRIC_VERSION = "path-keyword-v1-inclusive-linear-percentiles"
+LATENCY_PROTOCOL = "warm-model-cold-query-cache-core-search-v1"
 
 
 class EvalModel(BaseModel):
@@ -114,13 +116,13 @@ class EvaluationManifest(EvalModel):
     queryset_fingerprint: Nonempty
     selected_query_ids: list[Nonempty] = Field(min_length=1)
     scope: EvaluationScope
-    metric_version: Nonempty = "path-keyword-v1-inclusive-linear-percentiles"
+    metric_version: Nonempty = METRIC_VERSION
     search_mode: SearchMode
     top_k: PositiveInt = 5
     min_keywords: Count = 2
     strict_keywords: bool = False
     strict_keywords_top1: bool = False
-    latency_protocol: Nonempty = "warm-model-cold-query-cache-core-search-v1"
+    latency_protocol: Nonempty = LATENCY_PROTOCOL
     build_recipe: dict[str, RecipeValue]
     source_revision: Nonempty
     source_fingerprint: Nonempty

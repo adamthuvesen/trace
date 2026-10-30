@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import unicodedata
 from functools import lru_cache
 from pathlib import Path
 
@@ -53,6 +55,81 @@ def is_traceignored(path: Path, kb_path: Path) -> bool:
     return spec.match_file("/".join(_relative_parts(kb_path, path)))
 
 
+def is_traceignored_directory(path: Path, kb_path: Path) -> bool:
+    """Prune ignored trees unless a later negation can include a descendant."""
+    spec = load_traceignore(kb_path)
+    if spec is None:
+        return False
+    relative = "/".join(_relative_parts(kb_path, path))
+    result = spec.check_file(relative + "/")
+    if not result.include or result.index is None:
+        return False
+    for pattern in spec.patterns[result.index + 1 :]:
+        if pattern.include is not False or not isinstance(pattern.pattern, str):
+            continue
+        text = pattern.pattern.removeprefix("!")
+        if "\\" in text or not (text.startswith("/") or "/" in text.rstrip("/")):
+            return False
+        prefix: list[str] = []
+        for part in text.lstrip("/").split("/"):
+            if not part or any(mark in part for mark in "*?["):
+                break
+            prefix.append(part)
+        literal = "/".join(prefix)
+        if (
+            not literal
+            or relative == literal
+            or relative.startswith(literal + "/")
+            or literal.startswith(relative + "/")
+        ):
+            return False
+    return True
+
+
+def actual_path_spelling(path: Path, kb_path: Path) -> Path:
+    """Recover existing entry names without conflating distinct hard links."""
+    try:
+        parts = path.relative_to(kb_path).parts
+    except ValueError:
+        return path
+    if ".." in parts:
+        return path
+    current = kb_path
+    for part in parts:
+        candidate = current / part
+        try:
+            requested = candidate.lstat()
+        except FileNotFoundError:
+            return path
+        with os.scandir(current) as entries:
+            children = list(entries)
+        exact = next((entry for entry in children if entry.name == part), None)
+        if exact is not None:
+            current /= exact.name
+            continue
+        matches = []
+        for entry in children:
+            identity = entry.stat(follow_symlinks=False)
+            if (identity.st_dev, identity.st_ino) == (
+                requested.st_dev,
+                requested.st_ino,
+            ):
+                matches.append(entry)
+        folded = unicodedata.normalize("NFC", part).casefold()
+        aliases = [
+            entry
+            for entry in matches
+            if unicodedata.normalize("NFC", entry.name).casefold() == folded
+        ]
+        if len(aliases) == 1:
+            current /= aliases[0].name
+        elif len(matches) == 1:
+            current /= matches[0].name
+        else:
+            raise ValueError(f"Cannot identify the actual path spelling: {candidate}")
+    return current
+
+
 def should_exclude_path(
     path: Path,
     kb_path: Path,
@@ -66,12 +143,16 @@ def should_exclude_path(
         if exclude_patterns is not None
         else get_settings().exclude_patterns_list
     )
+    resolved = path.resolve()
+    if resolved != path:
+        resolved = actual_path_spelling(resolved, kb_path)
     if any(
         part.startswith(".") or part in exclude
-        for part in _relative_parts(kb_path, path)
+        for candidate in (path, resolved)
+        for part in _relative_parts(kb_path, candidate)
     ):
         return True
-    return is_traceignored(path, kb_path)
+    return is_traceignored(path, kb_path) or is_traceignored(resolved, kb_path)
 
 
 def get_default_index_root(

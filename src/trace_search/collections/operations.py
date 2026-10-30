@@ -13,6 +13,7 @@ from trace_search.collections.diagnostics import (
     render_doctor_report,
 )
 from trace_search.collections.document_listing import list_documents_for_collections
+from trace_search.collections.index_stats import render_index_stats
 from trace_search.collections.errors import (
     DocumentNotFoundError,
     DocumentReadError,
@@ -21,7 +22,7 @@ from trace_search.collections.errors import (
 )
 from trace_search.extraction.extractors import extract_content
 from trace_search.indexing.index_metadata import metadata_query_compatible
-from trace_search.indexing.kb_paths import should_exclude_path
+from trace_search.indexing.kb_paths import actual_path_spelling, should_exclude_path
 from trace_search.retrieval.search import (
     AdaptiveSearch,
     HybridSearch,
@@ -126,9 +127,12 @@ class TraceOperations:
     def get_document(self, path: str, collection: str | None = None) -> str:
         for col in self.registry._resolve(collection):
             kb = col.kb_path.resolve()
-            doc_path = (kb / path).resolve()
+            requested_path = kb / path
+            doc_path = requested_path.resolve()
+            if doc_path.is_relative_to(kb):
+                requested_path = actual_path_spelling(requested_path, kb)
             if not doc_path.is_relative_to(kb) or should_exclude_path(
-                doc_path, kb, self.registry.config.exclude_patterns_list
+                requested_path, kb, self.registry.config.exclude_patterns_list
             ):
                 logger.warning(
                     "get_document: rejected traversal or excluded path (path=%s, kb=%s)",
@@ -166,14 +170,45 @@ class TraceOperations:
         extensions: str | list[str] | None = None,
         since: str | None = None,
     ) -> str:
-        filters = _build_filters(path_prefix, extensions, since)
-        return self.document_listing(folder, limit, collection, filters)
+        _validate_limit(limit, maximum=500)
+        return list_documents_for_collections(
+            [(col.name, col.kb_path) for col in self.registry._resolve(collection)],
+            folder=folder,
+            limit=limit,
+            filters=_build_filters(path_prefix, extensions, since),
+            config=self.registry.config,
+        )
 
     def index_stats(self, collection: str | None = None) -> str:
-        return self.registry.index_stats(collection)
+        collection_stats = [
+            (
+                col.name,
+                col.indexer(
+                    self.registry.shared_backend, build_if_missing=False
+                ).get_stats(),
+            )
+            for col in self.registry._resolve(collection)
+        ]
+        return render_index_stats(
+            collection_stats, SemanticSearch.get_cache_stats(), self.registry.config
+        )
 
     def reindex(self, collection: str | None = None, force: bool = False) -> str:
-        return self.registry.reindex(collection, force=force)
+        completed: list[tuple[str, int]] = []
+        failed: list[tuple[str, str]] = []
+        for col in self.registry._resolve(collection):
+            try:
+                completed.append(
+                    (col.name, col.rebuild(self.registry.shared_backend, force=force))
+                )
+            except Exception as exc:
+                failed.append((col.name, str(exc)))
+        if failed:
+            raise ReindexError(tuple(completed), tuple(failed))
+        suffix = " (forced rebuild)" if force else ""
+        return "Reindex complete.\n\n" + "\n".join(
+            f"**{name}**: {count} chunks indexed{suffix}" for name, count in completed
+        )
 
     def doctor(
         self,
@@ -271,39 +306,6 @@ class TraceOperations:
             )
         return SearchResponse(tuple(merged[:limit]), route)
 
-    def document_listing(
-        self,
-        folder: str | None,
-        limit: int,
-        collection: str | None,
-        filters: SearchFilters | None = None,
-    ) -> str:
-        _validate_limit(limit, maximum=500)
-        return list_documents_for_collections(
-            [(col.name, col.kb_path) for col in self.registry._resolve(collection)],
-            folder=folder,
-            limit=limit,
-            filters=filters or SearchFilters(),
-            config=self.registry.config,
-        )
-
-    def build_collections(self, collection: str | None, force: bool = False) -> str:
-        completed: list[tuple[str, int]] = []
-        failed: list[tuple[str, str]] = []
-        for col in self.registry._resolve(collection):
-            try:
-                completed.append(
-                    (col.name, col.rebuild(self.registry.shared_backend, force=force))
-                )
-            except Exception as exc:
-                failed.append((col.name, str(exc)))
-        if failed:
-            raise ReindexError(tuple(completed), tuple(failed))
-        suffix = " (forced rebuild)" if force else ""
-        return "Reindex complete.\n\n" + "\n".join(
-            f"**{name}**: {count} chunks indexed{suffix}" for name, count in completed
-        )
-
     def doctor_report(
         self, sample_query: str | None = None, collection: str | None = None
     ) -> DoctorReport:
@@ -314,9 +316,9 @@ class TraceOperations:
             config=self.registry.config,
             sample_query=sample_query,
             sample_collection=collection,
-            sample_query_runner=lambda query, name: self.registry.probe_search(
-                query, 5, name
-            ),
+            sample_query_runner=lambda query, name: self.search_response(
+                "adaptive", query, 5, name, build_if_missing=False
+            ).legacy_hits(),
         )
 
 

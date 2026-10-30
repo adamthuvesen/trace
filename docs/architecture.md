@@ -9,6 +9,7 @@ The [retrieval guide](retrieval-modes.md) defines ranking behavior.
 | Module | Owns |
 | --- | --- |
 | `config.py` | Validated settings, model specifications, collection configuration |
+| `filesystem_paths.py` | Destination equivalence for index roots and conversion outputs |
 | `extraction/` | Supported formats, corpus visibility, frontmatter, chunk construction |
 | `indexing/index_builder.py` | Source capture, incremental reuse, embedding, publication |
 | `indexing/index_reader.py` | Current generation loading, retained snapshots, neighbor lookup |
@@ -17,7 +18,7 @@ The [retrieval guide](retrieval-modes.md) defines ranking behavior.
 | `retrieval/search_types.py` | Document and chunk identity, filters, hits, score evidence, ordered responses |
 | `retrieval/search.py` | BM25, semantic, hybrid, and adaptive ranking |
 | `retrieval/formatting.py` | Render an existing ranking and its evidence |
-| `collections/collection_registry.py` | Collection resources, shared backend, public compatibility methods |
+| `collections/collection_registry.py` | Collection resources, lazily opened indexers, shared backend |
 | `collections/operations.py` | Application operations, collection selection, snapshot pinning, merge, neighbors, errors |
 | `server/` | CLI parsing, MCP tools, transport configuration |
 | `tools/eval/` | Validated evaluation inputs, measurement, manifests, comparisons, reporting |
@@ -26,7 +27,6 @@ The [retrieval guide](retrieval-modes.md) defines ranking behavior.
 The dependency contracts reject runtime imports from `server/`.
 They also reject indexing or extraction imports from retrieval and collections.
 BM25 tokenization and model warmup therefore live in `indexing/`.
-Their former module paths remain compatibility exports.
 
 ## Typed operations and public dictionaries
 
@@ -37,8 +37,8 @@ Typed response rendering preserves the supplied order.
 Legacy list-based context formatting retains its score sorting.
 
 Existing search methods still return dictionaries or `AdaptiveSearchResult`.
-`WikiIndexer` keeps its constructor, snapshot, build, and neighbor methods.
-`CollectionRegistry` keeps its public methods as delegates to the shared operations.
+`WikiIndexer` is the public handle for one index: it opens snapshots, builds generations, and reads neighbors.
+`CollectionRegistry` owns collection resources only. Every collection operation goes through `TraceOperations`.
 `trace_search/__init__.py` exposes the public imports and typed retrieval records.
 
 Registry construction captures a settings copy.
@@ -52,6 +52,11 @@ Persisted compatibility checks and query cache keys use that identity.
 It writes a complete `gen-*/` directory before atomically replacing `CURRENT`.
 It synchronizes files and directories before publication.
 A failed extraction or build leaves the previous generation available.
+Traversal errors also stop publication. An unreadable directory is not a deleted directory.
+Explicit exclusions are pruned without reading their contents.
+Failed publication removes that attempt's unpublished files.
+The stable lock rejects symlinks and hard links. Pointer updates use exclusive temporary files.
+Lock ownership includes the process, so a forked child cannot reuse its parent's ownership.
 
 Changed files are extracted from captured bytes.
 The builder checks each capture against the source inventory and checks for mutation during extraction.
@@ -70,6 +75,10 @@ Loaded chunk records and embedding arrays resist mutation.
 `get_document` reads the current source file.
 `list_documents` also scans current files.
 Their content can therefore differ from an earlier search snapshot until the next reindex.
+Visibility rules apply to both a requested path and its resolved target.
+Case and Unicode filename variants cannot bypass hidden-directory or `.traceignore` exclusions.
+Symbolic links also obey target exclusions. Distinct hard-link filenames retain their own visibility rules.
+Collection construction rejects index paths that alias on the destination filesystem.
 
 ## Index compatibility
 

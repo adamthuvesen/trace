@@ -2,7 +2,9 @@
 
 import pytest
 
+from trace_search.collections.operations import TraceOperations
 from trace_search.config import Settings
+from trace_search.retrieval.search import KeywordSearch
 
 
 class TestKBCollectionsParsing:
@@ -208,7 +210,7 @@ class TestListDocumentsLimit:
             (folder / f"doc_{i:02d}.md").write_text(f"# Doc {i}\n\nContent.")
 
         reg = CollectionRegistry({"docs": kb})
-        result = reg.list_documents(folder=None, limit=10, collection=None)
+        result = TraceOperations(reg).list_documents(limit=10)
         listed = [line for line in result.splitlines() if line.startswith("- **")]
         assert len(listed) == 10
 
@@ -223,36 +225,20 @@ class TestListDocumentsLimit:
             (folder / f"doc_{i}.md").write_text(f"# Doc {i}\n\nContent.")
 
         reg = CollectionRegistry({"docs": kb})
-        result = reg.list_documents(folder=None, limit=50, collection=None)
+        result = TraceOperations(reg).list_documents(limit=50)
         listed = [line for line in result.splitlines() if line.startswith("- **")]
         assert len(listed) == 5
 
-    @pytest.mark.parametrize("limit", [0, -10])
-    def test_invalid_limit_defaults_to_50(self, tmp_path, limit):
+    @pytest.mark.parametrize("limit", [0, -10, 501])
+    def test_out_of_range_limit_is_rejected(self, tmp_path, limit):
         from trace_search.collections.collection_registry import CollectionRegistry
 
         kb = tmp_path / "docs"
         kb.mkdir()
-        for i in range(60):
-            (kb / f"doc_{i:02d}.md").write_text(f"# Doc {i}\n\nContent.")
 
         reg = CollectionRegistry({"docs": kb})
-        result = reg.list_documents(folder=None, limit=limit, collection=None)
-        listed = [line for line in result.splitlines() if line.startswith("- **")]
-        assert len(listed) == 50
-
-    def test_large_limit_caps_at_500(self, tmp_path):
-        from trace_search.collections.collection_registry import CollectionRegistry
-
-        kb = tmp_path / "docs"
-        kb.mkdir()
-        for i in range(520):
-            (kb / f"doc_{i:03d}.md").write_text(f"# Doc {i}\n\nContent.")
-
-        reg = CollectionRegistry({"docs": kb})
-        result = reg.list_documents(folder=None, limit=10_000, collection=None)
-        listed = [line for line in result.splitlines() if line.startswith("- **")]
-        assert len(listed) == 500
+        with pytest.raises(ValueError, match="between 1 and 500"):
+            TraceOperations(reg).list_documents(limit=limit)
 
 
 class TestGetDocumentWarning:
@@ -269,7 +255,7 @@ class TestGetDocumentWarning:
             logging.WARNING, logger="trace_search.collections.operations"
         ):
             with pytest.raises(RuntimeError, match="Document not found"):
-                reg.get_document("../../etc/passwd", "docs")
+                TraceOperations(reg).get_document("../../etc/passwd", "docs")
 
         assert "rejected traversal" in caplog.text
 
@@ -293,7 +279,7 @@ class TestGetDocumentWarning:
                 side_effect=RuntimeError("disk read failed"),
             ):
                 with pytest.raises(RuntimeError, match="disk read failed"):
-                    reg.get_document("broken.md", "docs")
+                    TraceOperations(reg).get_document("broken.md", "docs")
 
         assert "extraction failed" in caplog.text
         assert "broken.md" in caplog.text
@@ -357,43 +343,44 @@ class TestMultiCollectionFilters:
         from trace_search.retrieval.search import parse_filters
 
         registry = self._make_registry(tmp_path)
-        result = registry.search_adaptive(
+        result = TraceOperations(registry).search_response(
+            "adaptive",
             "router",
-            top_k=5,
-            collection=None,
-            filters=parse_filters(path_prefix="architecture/"),
+            5,
+            None,
+            parse_filters(path_prefix="architecture/"),
         )
         assert result.hits
-        for hit in result.hits:
+        for hit in result.legacy_hits():
             assert hit["path"].startswith("architecture/")
             assert hit.get("collection") in {"docs", "brain"}
-        assert {hit.get("collection") for hit in result.hits} == {"docs", "brain"}
+        assert {hit.ref.document.collection for hit in result.hits} == {"docs", "brain"}
+        assert result.route is not None
         assert result.route.filters.path_prefix == ("architecture/",)
 
     def test_keyword_search_filters_respect_explicit_collection(self, tmp_path):
         from trace_search.retrieval.search import parse_filters
 
         registry = self._make_registry(tmp_path)
-        results = registry.search_keyword(
-            "router",
-            top_k=5,
-            collection="brain",
-            filters=parse_filters(path_prefix="architecture/"),
+        results = (
+            TraceOperations(registry)
+            .search_response(
+                "keyword",
+                "router",
+                5,
+                "brain",
+                parse_filters(path_prefix="architecture/"),
+            )
+            .legacy_hits()
         )
         assert results
         for hit in results:
             assert hit["path"].startswith("architecture/")
 
     def test_list_documents_path_prefix_scopes_each_collection(self, tmp_path):
-        from trace_search.retrieval.search import parse_filters
 
         registry = self._make_registry(tmp_path)
-        rendered = registry.list_documents(
-            folder=None,
-            limit=50,
-            collection=None,
-            filters=parse_filters(path_prefix="rfcs/"),
-        )
+        rendered = TraceOperations(registry).list_documents(path_prefix="rfcs/")
         assert "rfcs/001.md" in rendered
         assert "intro.md" not in rendered
         assert "notes.md" not in rendered
@@ -407,9 +394,43 @@ class TestMultiCollectionFilters:
         assert "collection" in result
 
 
+def _operation_rankings(tmp_path, rankings, top_k, collection_names):
+    from unittest.mock import patch
+    from tests.test_runtime_hardening import FakeBackend
+    from trace_search.collections.collection_registry import CollectionRegistry
+    from trace_search.collections.operations import TraceOperations
+    from trace_search.retrieval.search_types import (
+        SearchHit,
+        SearchResponse,
+        SearchRoute,
+    )
+
+    paths = {name: tmp_path / name for name in collection_names}
+    for path in paths.values():
+        path.mkdir()
+    registry = CollectionRegistry(paths)
+    registry._backend = FakeBackend()
+    registry._warmed = True
+    responses = [
+        SearchResponse(
+            tuple(SearchHit.from_dict(hit) for hit in hits[:top_k]),
+            SearchRoute("keyword", "fixture ranking", False),
+        )
+        for hits in rankings
+    ]
+    with patch(
+        "trace_search.collections.operations.AdaptiveSearch.response",
+        side_effect=responses,
+    ):
+        return (
+            TraceOperations(registry)
+            .search_response("adaptive", "query", top_k)
+            .legacy_hits()
+        )
+
+
 class TestMergeResults:
-    def test_merge_interleaves_by_rank(self):
-        from trace_search.collections.collection_registry import CollectionRegistry
+    def test_merge_interleaves_by_rank(self, tmp_path):
 
         results_a = [
             {"path": "a.md", "score": 5.0, "source": "keyword"},
@@ -419,7 +440,8 @@ class TestMergeResults:
             {"path": "c.md", "score": 4.0, "source": "keyword"},
             {"path": "d.md", "score": 1.0, "source": "keyword"},
         ]
-        merged = CollectionRegistry._merge_results(
+        merged = _operation_rankings(
+            tmp_path,
             [results_a, results_b],
             top_k=3,
             collection_names=["a", "b"],
@@ -431,10 +453,9 @@ class TestMergeResults:
         assert merged[1]["collection"] == "b"
         assert merged[2]["path"] == "b.md"
 
-    def test_merge_does_not_starve_small_collection(self):
+    def test_merge_does_not_starve_small_collection(self, tmp_path):
         """Regression: raw BM25 scores from a large corpus (higher IDF) used to
         crowd out a small collection's genuinely relevant top hit."""
-        from trace_search.collections.collection_registry import CollectionRegistry
 
         large = [
             {"path": f"large_{i}.md", "score": 12.0 - i * 0.5, "source": "keyword"}
@@ -449,7 +470,8 @@ class TestMergeResults:
         by_raw_score = sorted(large + small, key=lambda h: h["score"], reverse=True)
         assert all(h["path"].startswith("large_") for h in by_raw_score[:5])
 
-        merged = CollectionRegistry._merge_results(
+        merged = _operation_rankings(
+            tmp_path,
             [large, small],
             top_k=5,
             collection_names=["large", "small"],
@@ -458,10 +480,9 @@ class TestMergeResults:
         assert merged[1]["path"] == "answer.md"
         assert merged[1]["collection"] == "small"
 
-    def test_merge_handles_mixed_score_types_across_collections(self):
+    def test_merge_handles_mixed_score_types_across_collections(self, tmp_path):
         """Adaptive search can return raw BM25 for one collection and hybrid
         RRF (~0.03 scale) for another; rank fusion must not compare them."""
-        from trace_search.collections.collection_registry import CollectionRegistry
 
         keyword_hits = [
             {"path": "k1.md", "score": 8.5, "source": "keyword"},
@@ -471,18 +492,18 @@ class TestMergeResults:
             {"path": "h1.md", "score": 0.9, "rrf_score": 0.032, "source": "hybrid"},
             {"path": "h2.md", "score": 0.8, "rrf_score": 0.030, "source": "hybrid"},
         ]
-        merged = CollectionRegistry._merge_results(
+        merged = _operation_rankings(
+            tmp_path,
             [keyword_hits, hybrid_hits],
             top_k=2,
             collection_names=["kw", "hy"],
         )
         assert [h["path"] for h in merged] == ["k1.md", "h1.md"]
 
-    def test_format_search_context_preserves_fused_order(self):
+    def test_format_search_context_preserves_fused_order(self, tmp_path):
         """Regression: format_search_context used to re-sort merged hits by
         raw score, demoting the hybrid collection's rank-1 hit below the
         keyword collection's rank-2 hit in the rendered output."""
-        from trace_search.collections.collection_registry import CollectionRegistry
         from trace_search.retrieval.formatting import format_search_context
 
         keyword_hits = [
@@ -514,7 +535,8 @@ class TestMergeResults:
                 "content": "alpha topic notes",
             },
         ]
-        merged = CollectionRegistry._merge_results(
+        merged = _operation_rankings(
+            tmp_path,
             [keyword_hits, hybrid_hits],
             top_k=3,
             collection_names=["kw", "hy"],
@@ -590,11 +612,11 @@ class TestCrossCollectionFairness:
         registry = self._make_registry(tmp_path)
         filters = SearchFilters()
 
-        large_hits = registry.collections["large"].search(
-            "keyword", self.QUERY, 5, filters, registry.shared_backend
-        )
-        small_hits = registry.collections["small"].search(
-            "keyword", self.QUERY, 5, filters, registry.shared_backend
+        large_hits, small_hits = (
+            KeywordSearch(
+                registry.collections[name].indexer(registry.shared_backend)
+            ).search(self.QUERY, 5, filters=filters)
+            for name in ("large", "small")
         )
         assert small_hits and small_hits[0]["path"] == "kubernetes-deployment-guide.md"
 
@@ -606,8 +628,10 @@ class TestCrossCollectionFairness:
         outscoring = [h for h in large_hits if float(h["score"]) > small_best]
         assert len(outscoring) >= 2
 
-        merged = registry.search_keyword(
-            self.QUERY, top_k=5, collection=None, filters=filters
+        merged = (
+            TraceOperations(registry)
+            .search_response("keyword", self.QUERY, 5, None, filters)
+            .legacy_hits()
         )
         top2 = [(h["collection"], h["path"]) for h in merged[:2]]
         assert ("small", "kubernetes-deployment-guide.md") in top2
@@ -620,24 +644,23 @@ class TestCrossCollectionFairness:
         from trace_search.retrieval.formatting import format_search_context
 
         registry = self._make_registry(tmp_path)
-        result = registry.search_adaptive(self.QUERY, top_k=5, collection=None)
-        rendered = format_search_context(
-            result.hits, query=self.QUERY, route=result.route, max_documents=5
+        response = TraceOperations(registry).search_response(
+            "adaptive", self.QUERY, 5, None
         )
+        rendered = format_search_context(response, query=self.QUERY, max_documents=5)
         assert "### 3." in rendered
         assert rendered.index("kubernetes-deployment-guide.md") < rendered.index(
             "### 3."
         )
 
-    def test_merge_respects_top_k(self):
-        from trace_search.collections.collection_registry import CollectionRegistry
+    def test_merge_respects_top_k(self, tmp_path):
 
         results = [
             {"path": f"{i}.md", "score": float(i), "source": "keyword"}
             for i in range(10)
         ]
-        merged = CollectionRegistry._merge_results(
-            [results], top_k=3, collection_names=["x"]
+        merged = _operation_rankings(
+            tmp_path, [results], top_k=3, collection_names=["x"]
         )
         assert len(merged) == 3
 

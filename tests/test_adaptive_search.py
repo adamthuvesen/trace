@@ -337,6 +337,7 @@ def test_default_search_tool_renders_all_top_k_documents(tmp_path):
 def test_multi_collection_adaptive_search_batches_neighbor_fetches(tmp_path):
     from tests.test_runtime_hardening import FakeBackend
     from trace_search.collections.collection_registry import CollectionRegistry
+    from trace_search.collections.operations import TraceOperations
 
     paths = {name: tmp_path / name for name in ("kb1", "kb2")}
     for kb in paths.values():
@@ -361,7 +362,7 @@ def test_multi_collection_adaptive_search_batches_neighbor_fetches(tmp_path):
             wraps=indexers[1].neighbor_contents_batch,
         ) as second,
     ):
-        result = registry.search_adaptive("query", top_k=10, collection=None)
+        result = TraceOperations(registry).search_response("adaptive", "query", 10)
     assert len(result.hits) == 10
     first.assert_called_once()
     second.assert_called_once()

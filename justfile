@@ -31,14 +31,22 @@ stress:
 package:
     uv run --locked --extra convert python -m tools.verify_package
 
+# Compare every standard battle KB and mode with its observed baseline.
+battle:
+    uv run --locked --extra convert python -m tools.eval.battle_royale --output-dir tools/eval/results/runs/battle --label verification --detail-reports --baseline-dir tools/eval/baselines/battle-standard --quality-only
+
+# Compare the challenge populations with their separate observed baselines.
+battle-challenge:
+    uv run --locked --extra convert python -m tools.eval.battle_royale --suite tests/fixtures/eval_battle_royale_challenge.yaml --output-dir tools/eval/results/runs/battle --label verification-challenge --detail-reports --baseline-dir tools/eval/baselines/battle-challenge --quality-only
+
 # Run model, package, and evaluation checks. Model preparation may require a download.
 integration:
     uv run --locked --extra convert python -m pytest -m slow -q
     just package
     just eval
     just stress
-    uv run --locked --extra convert python -m tools.eval.battle_royale --output-dir tools/eval/results/runs/battle --label verification --detail-reports
-    uv run --locked --extra convert python -m tools.eval.battle_royale --suite tests/fixtures/eval_battle_royale_challenge.yaml --output-dir tools/eval/results/runs/battle --label verification-challenge --detail-reports
+    just battle
+    just battle-challenge
 
 # Run all locally reproducible checks, using the same recipes as CI.
 verify: check

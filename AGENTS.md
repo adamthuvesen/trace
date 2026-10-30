@@ -35,6 +35,8 @@ The following checks define the enforced boundaries.
 | Runtime dependency direction | `lint-imports`, contracts in `pyproject.toml` |
 | Runtime and tooling types | Strict `mypy` over `src/trace_search` and `tools` |
 | Fixture quality populations | `just eval` and `just stress`, explicit manifest-bearing baselines |
+| Multi-KB quality regression | `just battle` and `just battle-challenge`, observed per-mode baselines |
+| Filesystem ownership and failed publication | `tests/test_runtime_boundaries.py`, actual filesystem and process cases |
 | Installed public API | `just package`, isolated wheel and consumer checks |
 
 ## Index and evaluation traps

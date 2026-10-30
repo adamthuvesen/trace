@@ -190,37 +190,33 @@ def test_indexing_allows_hidden_parent_dirs(tmp_path, monkeypatch):
     assert [doc["path"] for doc in docs] == ["intro.md"]
 
 
-def test_indexing_walks_the_kb_once(tmp_path, monkeypatch):
-    """A build should traverse the KB with exactly one rglob('*') call."""
-    from unittest.mock import patch
+def test_indexing_scans_each_visible_directory_once(tmp_path, monkeypatch):
     from trace_search.config import get_settings
 
     (tmp_path / "docs").mkdir()
-    (tmp_path / "docs" / "intro.md").write_text("# Intro\n\ncontent", encoding="utf-8")
-    (tmp_path / "docs" / "query.sql").write_text("SELECT 1;", encoding="utf-8")
-
+    (tmp_path / "docs" / "intro.md").write_text("# Intro\n\ncontent")
+    (tmp_path / "docs" / "query.sql").write_text("SELECT 1;")
     monkeypatch.setenv("KB_PATH", str(tmp_path))
     get_settings.cache_clear()
+    scans = []
+    original = os.scandir
 
-    rglob_calls = []
-    original_rglob = Path.rglob
+    def scan(path):
+        if isinstance(path, (str, Path)):
+            candidate = Path(path)
+            if candidate.is_relative_to(tmp_path) and not any(
+                part.startswith(".") for part in candidate.relative_to(tmp_path).parts
+            ):
+                scans.append(candidate)
+        return original(path)
 
-    def spy_rglob(self, pattern):
-        rglob_calls.append(pattern)
-        return original_rglob(self, pattern)
-
+    monkeypatch.setattr(os, "scandir", scan)
     try:
-        indexer = WikiIndexer(backend=FakeBackend())
-        with patch.object(Path, "rglob", spy_rglob):
-            docs = _indexed_docs(indexer)
+        docs = _indexed_docs(WikiIndexer(backend=FakeBackend()))
     finally:
         get_settings.cache_clear()
-
-    assert rglob_calls == ["*"], (
-        f"Expected exactly one rglob('*') call, got: {rglob_calls}"
-    )
-    paths = [d["path"] for d in docs]
-    assert paths == sorted(paths)
+    assert scans == [tmp_path, tmp_path / "docs"]
+    assert [doc["path"] for doc in docs] == sorted(doc["path"] for doc in docs)
 
 
 class TestExcludePatternMatching:

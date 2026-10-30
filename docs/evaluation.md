@@ -144,7 +144,20 @@ uv run --locked python -m tools.eval.battle_royale \
 Suite loading validates modes, unique KB IDs, paths, and every selected query population before loading a model.
 Summaries contain each KB/mode manifest.
 `--detail-reports` also writes individual reports.
-Battle summaries provide comparison evidence but do not apply the single-KB CI regression gate.
+Add `--baseline-dir tools/eval/baselines/battle-standard --quality-only` to gate the standard suite.
+Use `tools/eval/baselines/battle-challenge` for the challenge suite.
+`just integration` runs both comparative gates.
+Use `just battle` or `just battle-challenge` to run either gate separately.
+Each gate uses the existing regression thresholds for every selected KB and search mode.
+Missing, malformed, or incompatible baselines fail before model initialization.
+A regression returns a nonzero status and retains reports with the failing KB, mode, and query transitions.
+Without `--baseline-dir`, the command remains an exploratory report run.
+
+The 24 committed battle reports preserve observed runs and their recorded `b081c5f` source revision.
+Their ranking outputs matched the original source in the refactor verification.
+To update them, generate detail reports in a scratch output directory and inspect each proposed JSON replacement.
+Review manifest changes, improvements, and regressions before committing baseline replacements.
+Do not overwrite baselines automatically during verification.
 
 ## Focused tests
 

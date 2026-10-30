@@ -19,6 +19,8 @@ import os
 import re
 import threading
 import shutil
+import stat
+import tempfile
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -149,7 +151,20 @@ def writer_lock(index_root: Path) -> Iterator[None]:
     """
     index_root.mkdir(parents=True, exist_ok=True)
     lock_path = index_root / LOCK_FILENAME
-    with open(lock_path, "a+", encoding="utf-8") as handle:
+    try:
+        lock_fd = os.open(
+            lock_path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600
+        )
+    except OSError as exc:
+        raise IndexCorruptError(
+            f"Cannot safely open index writer lock {lock_path}: {exc}"
+        ) from exc
+    with os.fdopen(lock_fd, "r+", encoding="utf-8") as handle:
+        lock_stat = os.fstat(handle.fileno())
+        if not stat.S_ISREG(lock_stat.st_mode) or lock_stat.st_nlink != 1:
+            raise IndexCorruptError(
+                f"Index writer lock must be a regular file with one link: {lock_path}"
+            )
         try:
             fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as exc:
@@ -165,15 +180,17 @@ def writer_lock(index_root: Path) -> Iterator[None]:
         handle.truncate()
         handle.write(str(os.getpid()))
         handle.flush()
-        held: set[Path] = getattr(_HELD_LOCKS, "roots", set())
-        _HELD_LOCKS.roots = held | {index_root.resolve()}
+        owner_pid = os.getpid()
+        held: dict[Path, int] = getattr(_HELD_LOCKS, "roots", {})
+        _HELD_LOCKS.roots = {**held, index_root.resolve(): owner_pid}
         try:
             yield
         finally:
             _HELD_LOCKS.roots = held
-            handle.seek(0)
-            handle.truncate()
-            fcntl.flock(handle, fcntl.LOCK_UN)
+            if os.getpid() == owner_pid:
+                handle.seek(0)
+                handle.truncate()
+                fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 def read_current(index_root: Path) -> str | None:
@@ -377,7 +394,7 @@ def _fsync(path: Path) -> None:
 
 def write_snapshot(index_root: Path, snapshot: IndexSnapshot) -> IndexSnapshot:
     """Publish under the physical writer lock, including direct library calls."""
-    if index_root.resolve() in getattr(_HELD_LOCKS, "roots", set()):
+    if getattr(_HELD_LOCKS, "roots", {}).get(index_root.resolve()) == os.getpid():
         return _write_snapshot_locked(index_root, snapshot)
     with writer_lock(index_root):
         return _write_snapshot_locked(index_root, snapshot)
@@ -409,38 +426,57 @@ def _write_snapshot_locked(index_root: Path, snapshot: IndexSnapshot) -> IndexSn
     tmp_dir = _generation_dir(index_root, name + _TMP_SUFFIX)
     tmp_dir.mkdir(parents=True)
 
-    (tmp_dir / _CHUNKS_FILENAME).write_text(
-        json.dumps(
-            {
-                "ids": list(snapshot.chunk_ids),
-                "texts": list(snapshot.texts),
-                "chunks": [dict(chunk) for chunk in snapshot.chunks],
-            }
-        ),
-        encoding="utf-8",
-    )
-    np.save(tmp_dir / _EMBEDDINGS_FILENAME, snapshot.embeddings)
-    if snapshot.bm25 is not None:
-        snapshot.bm25.save(str(tmp_dir / _BM25_DIRNAME))
-    (tmp_dir / _METADATA_FILENAME).write_text(
-        json.dumps(snapshot.metadata.to_dict(), indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-    # A power loss must not leave CURRENT naming a generation whose files never
-    # reached the disk. Directories are synced bottom-up so every entry
-    # (including bm25/ and its files) is durable before the rename.
-    for folder, _, files in os.walk(tmp_dir, topdown=False):
-        for filename in files:
-            _fsync(Path(folder) / filename)
-        _fsync(Path(folder))
-    tmp_dir.rename(_generation_dir(index_root, name))
-    _fsync(index_root)
+    pointer_tmp: Path | None = None
+    generation_dir = _generation_dir(index_root, name)
+    renamed = False
+    published = False
+    try:
+        (tmp_dir / _CHUNKS_FILENAME).write_text(
+            json.dumps(
+                {
+                    "ids": list(snapshot.chunk_ids),
+                    "texts": list(snapshot.texts),
+                    "chunks": [dict(chunk) for chunk in snapshot.chunks],
+                }
+            ),
+            encoding="utf-8",
+        )
+        np.save(tmp_dir / _EMBEDDINGS_FILENAME, snapshot.embeddings)
+        if snapshot.bm25 is not None:
+            snapshot.bm25.save(str(tmp_dir / _BM25_DIRNAME))
+        (tmp_dir / _METADATA_FILENAME).write_text(
+            json.dumps(snapshot.metadata.to_dict(), indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        # A power loss must not leave CURRENT naming a generation whose files never
+        # reached the disk. Directories are synced bottom-up so every entry
+        # (including bm25/ and its files) is durable before the rename.
+        for folder, _, files in os.walk(tmp_dir, topdown=False):
+            for filename in files:
+                _fsync(Path(folder) / filename)
+            _fsync(Path(folder))
+        tmp_dir.rename(generation_dir)
+        renamed = True
+        _fsync(index_root)
 
-    pointer_tmp = index_root / (CURRENT_FILENAME + _TMP_SUFFIX)
-    pointer_tmp.write_text(name, encoding="utf-8")
-    _fsync(pointer_tmp)
-    os.replace(pointer_tmp, index_root / CURRENT_FILENAME)
-    _fsync(index_root)
+        pointer_fd, pointer_name = tempfile.mkstemp(
+            prefix=".CURRENT-", suffix=".tmp", dir=index_root
+        )
+        pointer_tmp = Path(pointer_name)
+        with os.fdopen(pointer_fd, "w", encoding="utf-8") as pointer:
+            pointer.write(name)
+            pointer.flush()
+            os.fsync(pointer.fileno())
+        os.replace(pointer_tmp, index_root / CURRENT_FILENAME)
+        published = True
+        _fsync(index_root)
+    except BaseException:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        if renamed and not published:
+            shutil.rmtree(generation_dir, ignore_errors=True)
+        if pointer_tmp is not None:
+            pointer_tmp.unlink(missing_ok=True)
+        raise
     _prune_generations(index_root, keep=name)
     logger.info("Published index generation %s (%d chunks)", name, len(snapshot))
 

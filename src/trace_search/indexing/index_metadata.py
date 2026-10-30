@@ -13,7 +13,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator
 
 from trace_search.config import Settings, get_settings
-from trace_search.indexing.embeddings import EmbeddingBackend
+from trace_search.indexing.embeddings import EmbeddingBackend, OnnxBackend
 from trace_search.extraction.corpus import iter_kb_files
 
 # v4: generation store (no Chroma). v5: frontmatter-aware chunks. v6: records
@@ -285,11 +285,7 @@ def index_metadata_from_dict(raw: dict[str, Any]) -> IndexMetadata | None:
 def backend_identity(backend: EmbeddingBackend) -> str:
     """Identify the runtime that produced the vectors, including injected backends."""
     cls = type(backend)
-    return (
-        "onnx"
-        if cls.__name__ == "OnnxBackend"
-        else f"{cls.__module__}.{cls.__qualname__}"
-    )
+    return "onnx" if cls is OnnxBackend else f"{cls.__module__}.{cls.__qualname__}"
 
 
 def metadata_query_compatible(

@@ -3,6 +3,9 @@
 Use Python 3.13 or newer, `uv`, and `just`.
 The repository defaults to Python 3.13 through `.python-version`.
 
+Minimal Linux installations can require a C compiler when PyStemmer has no wheel for the platform.
+For Debian or Ubuntu, install `build-essential` before `just bootstrap`.
+
 ```bash
 just bootstrap
 just check
@@ -22,8 +25,10 @@ The type check covers `src/trace_search` and `tools`.
 | `just test-file tests/test_eval_contracts.py` | One file or pytest node | Scope depends on the supplied path |
 | `just eval` | All 17 core fixture queries and committed quality baseline | Small public corpus |
 | `just stress` | Separate 12-query stress population and its baseline | Same public corpus |
+| `just battle` | Comparative gates for all standard battle KBs and modes | Committed public fixtures |
+| `just battle-challenge` | Comparative gates for the separate challenge populations | Committed public fixtures |
 | `just package` | Fresh wheel environment, public imports, typing marker, CLI, stdio MCP, external type consumers | Package fixture checks do not measure retrieval quality |
-| `just integration` | Slow model tests, package verification, both fixture gates, both battle suites | Requires model preparation |
+| `just integration` | Slow model tests, package verification, both fixture gates, both comparative battle gates | Requires model preparation |
 | `just verify` | `check` followed by `integration` | Runs on the current host and interpreter |
 
 CI uses these recipes in [.github/workflows/ci.yml](../.github/workflows/ci.yml).
@@ -101,3 +106,7 @@ The [architecture guide](architecture.md) identifies each owner.
 Run the relevant focused test while changing behavior.
 Then use `just check` and the integration recipe affected by the change.
 Use the [evaluation guide](evaluation.md) before modifying metrics or baselines.
+
+Text and code sources must use valid UTF-8.
+Unreadable visible directories and malformed source text stop a build and preserve the last complete index.
+Correct the source or exclude it explicitly before retrying.

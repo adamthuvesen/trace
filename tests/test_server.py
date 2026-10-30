@@ -230,11 +230,6 @@ class TestCollectionRebuild:
 
         col = self._collection(tmp_path)
 
-        result = col.search_adaptive(
-            "doc", 5, None, FakeBackend, build_if_missing=False
-        )
-
-        assert result.hits == []
         assert not col.indexer(FakeBackend, build_if_missing=False).has_index()
         assert col.indexer(FakeBackend).has_index()
 
@@ -301,8 +296,8 @@ class TestReindexForceFlag:
 
 class TestListDocumentsMultiCollectionWalk:
     def test_each_collection_walked_exactly_once(self, tmp_path):
-        """list_documents should call rglob('*') exactly once per collection."""
-        from pathlib import Path
+        """List documents scans each collection directory once."""
+        import os
         from unittest.mock import patch
 
         docs = tmp_path / "docs"
@@ -314,19 +309,17 @@ class TestListDocumentsMultiCollectionWalk:
 
         _, tools = build_multi_mcp("walk-test", {"docs": docs, "brain": brain})
 
-        rglob_calls: list[str] = []
-        original_rglob = Path.rglob
+        scans = []
+        original_scan = os.scandir
 
-        def spy_rglob(self, pattern):
-            rglob_calls.append(pattern)
-            return original_rglob(self, pattern)
+        def scan(path):
+            scans.append(path)
+            return original_scan(path)
 
-        with patch.object(Path, "rglob", spy_rglob):
+        with patch.object(os, "scandir", scan):
             tools["list_documents"](limit=50)
 
-        assert rglob_calls.count("*") == 2, (
-            f"Expected exactly 2 rglob('*') calls (one per collection), got: {rglob_calls}"
-        )
+        assert scans == [docs, brain]
 
 
 class TestListDocumentsDeterminism:

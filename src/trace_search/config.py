@@ -221,7 +221,7 @@ class Settings(BaseSettings):
         if self.kb_collections:
             return parse_kb_collections(self.kb_collections)
         if self.kb_path:
-            name = self.kb_path.name
+            name = self.kb_path.resolve().name or "default"
             return {"default" if name.lower() == "all" else name: self.kb_path}
         raise ValueError(
             "Set KB_COLLECTIONS or KB_PATH. "

@@ -149,7 +149,7 @@ def extract_csv_content(path: Path) -> str:
 
 def extract_code_content(path: Path) -> str:
     """Extract code file content (SQL, Python, TypeScript, YAML)."""
-    return path.read_text(encoding="utf-8", errors="replace")
+    return path.read_text(encoding="utf-8")
 
 
 def extract_notebook_content(path: Path) -> str:

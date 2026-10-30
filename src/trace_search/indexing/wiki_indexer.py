@@ -1,4 +1,4 @@
-"""Public compatibility facade for index reading and building."""
+"""Public handle for reading and building one index."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ __all__ = ["WikiIndexer", "BackendProvider"]
 
 
 class WikiIndexer:
-    """Keep the public constructor while separating reads from publication."""
+    """Compose the index reader and builder behind one public constructor."""
 
     def __init__(
         self,

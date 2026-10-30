@@ -308,6 +308,16 @@ def test_diagnose_collections_reports_zero_result_probe(tmp_path):
     assert "broader query" in (report.probe.message or "")
 
 
+def _probe(registry, query, collection):
+    from trace_search.collections.operations import TraceOperations
+
+    return (
+        TraceOperations(registry)
+        .search_response("adaptive", query, 5, collection, build_if_missing=False)
+        .legacy_hits()
+    )
+
+
 def test_registry_probe_skips_missing_indexes(tmp_path):
     import pytest
 
@@ -318,7 +328,7 @@ def test_registry_probe_skips_missing_indexes(tmp_path):
     registry = CollectionRegistry({"docs": kb})
 
     with pytest.raises(RuntimeError, match="indexes are missing"):
-        registry.probe_search("intro", 5, None)
+        _probe(registry, "intro", None)
 
 
 def test_registry_probe_skips_incompatible_indexes(tmp_path):
@@ -350,7 +360,7 @@ def test_registry_probe_skips_incompatible_indexes(tmp_path):
     registry._backend = FakeBackend()
     registry._warmed = True
     with pytest.raises(RuntimeError, match="indexes are incompatible"):
-        registry.probe_search("intro", 5, "docs")
+        _probe(registry, "intro", "docs")
 
 
 def test_registry_probe_uses_existing_indexes_without_rebuild(tmp_path):
@@ -371,7 +381,7 @@ def test_registry_probe_uses_existing_indexes_without_rebuild(tmp_path):
     # A stale corpus must not make the probe reindex.
     (kb / "later.md").write_text("# Later\n\nlater notes", encoding="utf-8")
 
-    hits = registry.probe_search("intro widget", 5, "docs")
+    hits = _probe(registry, "intro widget", "docs")
 
     assert hits[0]["path"] == "intro.md"
     assert read_current(col.index_path) == generation
