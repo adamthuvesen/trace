@@ -97,6 +97,8 @@ def extract_docx_content(path: Path) -> str:
 def extract_pptx_content(path: Path) -> str:
     """Extract text from PowerPoint (text frames + tables + notes)."""
     from pptx import Presentation
+    from pptx.shapes.autoshape import Shape
+    from pptx.shapes.graphfrm import GraphicFrame
 
     prs = Presentation(str(path))
     texts = []
@@ -106,11 +108,11 @@ def extract_pptx_content(path: Path) -> str:
 
         for shape in slide.shapes:
             if shape.has_text_frame:
-                for para in shape.text_frame.paragraphs:
+                for para in cast("Shape", shape).text_frame.paragraphs:
                     if para.text.strip():
                         slide_texts.append(para.text)
             elif shape.has_table:
-                for row in shape.table.rows:
+                for row in cast("GraphicFrame", shape).table.rows:
                     row_text = " | ".join(
                         cell.text.strip() for cell in row.cells if cell.text.strip()
                     )
@@ -118,7 +120,8 @@ def extract_pptx_content(path: Path) -> str:
                         slide_texts.append(row_text)
 
         if slide.has_notes_slide:
-            notes_text = slide.notes_slide.notes_text_frame.text.strip()
+            notes_frame = slide.notes_slide.notes_text_frame
+            notes_text = notes_frame.text.strip() if notes_frame is not None else ""
             if notes_text:
                 slide_texts.append(f"[Notes: {notes_text}]")
 

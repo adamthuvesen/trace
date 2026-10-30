@@ -74,7 +74,7 @@ ignore = ["E501"]
 [tool.basedpyright]
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
-include = ["src/trace_search", "tools"]
+include = ["src/trace_search", "tools", "tests", ".agents/skills/verify-trace"]
 exclude = ["**/__pycache__"]
 extraPaths = ["src"]
 venvPath = "."
@@ -88,7 +88,7 @@ reportMissingTypeStubs = false
 
 [[tool.basedpyright.executionEnvironments]]
 root = "tests"
-extraPaths = ["src"]
+extraPaths = ["src", "."]
 reportMissingParameterType = false
 reportPrivateUsage = false
 

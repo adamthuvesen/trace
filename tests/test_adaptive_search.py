@@ -38,6 +38,7 @@ def test_adaptive_search_keeps_strong_keyword_results():
 
     result = adaptive.search("BM25", top_k=3)
 
+    assert result.route is not None
     assert result.route.strategy == "keyword"
     assert not result.route.fallback_used
     adaptive.hybrid.search.assert_not_called()
@@ -54,6 +55,7 @@ def test_adaptive_search_falls_back_for_weak_keyword_results():
 
     result = adaptive.search("how does semantic ranking work", top_k=5)
 
+    assert result.route is not None
     assert result.route.strategy == "hybrid"
     assert result.route.fallback_used
     adaptive.hybrid.search.assert_called_once()
@@ -74,6 +76,7 @@ def test_adaptive_search_abstains_when_fallback_confidence_is_low():
     )
 
     assert result.hits == ()
+    assert result.route is not None
     assert result.route.strategy == "hybrid"
     assert result.route.reason == "hybrid fallback confidence was too low"
     assert result.route.fallback_used
@@ -89,6 +92,7 @@ def test_adaptive_search_keeps_confident_fallback_without_keyword_hits():
     result = adaptive.search("alternate phrasing for retrieval", top_k=5)
 
     assert [hit.path for hit in result.hits] == ["semantic.md"]
+    assert result.route is not None
     assert result.route.strategy == "hybrid"
     assert result.route.fallback_used
 
@@ -103,6 +107,7 @@ def test_adaptive_search_does_not_fallback_for_empty_keywordish_query():
     result = adaptive.search("kubernetes pod security policy", top_k=5)
 
     assert result.hits == ()
+    assert result.route is not None
     assert result.route.strategy == "keyword"
     assert result.route.reason == "keyword query had no meaningful BM25 hits"
     assert not result.route.fallback_used
@@ -128,6 +133,7 @@ def test_adaptive_search_falls_back_when_weak_tail_inflates_hit_count():
 
     result = adaptive.search("how do I set the knowledge base path", top_k=5)
 
+    assert result.route is not None
     assert result.route.strategy == "hybrid"
     assert result.route.fallback_used
     adaptive.hybrid.search.assert_called_once()
@@ -153,6 +159,7 @@ def test_adaptive_search_falls_back_when_top_hit_is_not_dominant():
 
     result = adaptive.search("find nearby vectors fast without scanning every one", top_k=5)
 
+    assert result.route is not None
     assert result.route.strategy == "hybrid"
     assert result.route.fallback_used
     adaptive.hybrid.search.assert_called_once()
@@ -171,6 +178,7 @@ def test_adaptive_search_trusts_decisive_conceptual_keyword_hit():
 
     result = adaptive.search("how do agents keep sentences across chunk boundaries")
 
+    assert result.route is not None
     assert result.route.strategy == "keyword"
     assert not result.route.fallback_used
     adaptive.hybrid.search.assert_not_called()
@@ -192,6 +200,7 @@ def test_adaptive_search_fuses_near_tie_even_when_top_hit_is_anchored():
 
     result = adaptive.search("what shapes the analytics landscape")
 
+    assert result.route is not None
     assert result.route.strategy == "hybrid"
     assert result.route.fallback_used
     assert result.hits[0].path == "right.md"
@@ -205,6 +214,7 @@ def test_adaptive_search_empty_query_does_not_call_engines():
     result = adaptive.search("   ", top_k=5)
 
     assert result.hits == ()
+    assert result.route is not None
     assert result.route.reason == "empty query"
     adaptive.keyword.search.assert_not_called()
     adaptive.hybrid.search.assert_not_called()
@@ -356,6 +366,7 @@ def test_adaptive_search_top_one_still_compares_against_runner_up():
 
     result = adaptive.search("BM25", top_k=1)
 
+    assert result.route is not None
     assert result.route.strategy == "keyword"
     assert [hit.path for hit in result.hits] == ["right.md"]
     adaptive.hybrid.search.assert_not_called()

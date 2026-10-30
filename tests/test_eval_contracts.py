@@ -156,6 +156,7 @@ def test_comparison_rejects_changed_inputs(field, value):
 
 def test_comparison_records_deliberate_experiment_changes():
     current, baseline = report(), report()
+    assert current.manifest is not None
     current.manifest.build_recipe = {"embedding_model": "other"}
     current.manifest.source_revision = "new"
     current = EvaluationReport.from_results(
@@ -168,6 +169,7 @@ def test_comparison_records_deliberate_experiment_changes():
 
 def test_cross_host_latency_requires_quality_only():
     current, baseline = report(), report()
+    assert current.manifest is not None
     current.manifest.latency_environment = "different-host"
     current.results[0].latency_ms = 100.0
     current = EvaluationReport.from_results(
@@ -414,7 +416,9 @@ def test_current_result_rank_must_match_metrics_and_retrieval_scope(invalid):
 
 
 def test_manifest_requires_model_identity():
-    data = report().manifest.to_dict()
+    manifest = report().manifest
+    assert manifest is not None
+    data = manifest.to_dict()
     data["build_recipe"] = {}
     with pytest.raises(ValueError, match="embedding_model identity"):
         EvaluationManifest.model_validate(data)

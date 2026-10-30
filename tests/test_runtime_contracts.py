@@ -145,11 +145,14 @@ def test_recipe_records_injected_backend_and_bm25_change_forces_rebuild(indexed)
         fresh.build_index()
     encode.assert_called_once()
     after = fresh.snapshot().metadata
+    assert after is not None
     assert after.build_recipe["bm25_k1"] == 2.0
     assert after.build_recipe["bm25_b"] == 0.8
     assert after.recipe_fingerprint != before.recipe_fingerprint
-    assert fresh.snapshot().bm25.k1 == 2.0
-    assert fresh.snapshot().bm25.b == 0.8
+    bm25 = fresh.snapshot().bm25
+    assert bm25 is not None
+    assert bm25.k1 == 2.0
+    assert bm25.b == 0.8
 
 
 def test_v6_is_readable_and_query_compatible_but_requires_full_rebuild(tmp_path):
@@ -403,7 +406,9 @@ def test_supported_next_schema_retains_artifact_invariants(
     monkeypatch.setattr(index_metadata, "INDEX_METADATA_VERSION", next_version)
     snapshot = indexed.snapshot()
     metadata = replace(snapshot.metadata, version=next_version)
-    assert index_metadata.index_metadata_from_dict(metadata.to_dict()).version == next_version
+    restored = index_metadata.index_metadata_from_dict(metadata.to_dict())
+    assert restored is not None
+    assert restored.version == next_version
     with pytest.raises(ValueError, match=message):
         replace(snapshot, metadata=replace(metadata, **{field: value}))
 

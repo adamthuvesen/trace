@@ -105,7 +105,7 @@ def _parse_since(since: str | datetime | None) -> datetime | None:
 
     if isinstance(since, datetime):
         parsed_since = since
-    elif isinstance(since, str):
+    elif isinstance(since, str):  # pyright: ignore[reportUnnecessaryIsInstance]  # untrusted input
         try:
             parsed_since = datetime.fromisoformat(since)
         except ValueError as exc:

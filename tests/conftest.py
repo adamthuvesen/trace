@@ -41,6 +41,7 @@ def document_kb(tmp_path: Path) -> Path:
     table.cell(0, 1).text = "Value"
     table.cell(1, 0).text = "Active"
     table.cell(1, 1).text = "7"
+    assert slide.notes_slide.notes_text_frame is not None
     slide.notes_slide.notes_text_frame.text = "Speaker note content"
     slide = slides.slides.add_slide(slides.slide_layouts[6])
     box = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(5), Inches(1))

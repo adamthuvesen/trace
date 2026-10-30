@@ -308,5 +308,6 @@ class TraceOperations:
 
 
 def _validate_limit(value: int, maximum: int = 100) -> None:
-    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
+    # The limit arrives from untrusted MCP and CLI input, so the type hint is not enough.
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:  # pyright: ignore[reportUnnecessaryIsInstance]
         raise ValueError(f"Result limit must be between 1 and {maximum}")

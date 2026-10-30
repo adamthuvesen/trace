@@ -346,12 +346,7 @@ def test_registry_probe_skips_incompatible_indexes(tmp_path):
         document_count=0,
         chunk_count=0,
     )
-    mismatched = metadata.__class__(
-        **{
-            **metadata.to_dict(),
-            "embedding_model": "some-other-model",
-        }
-    )
+    mismatched = replace(metadata, embedding_model="some-other-model")
     _publish_metadata(col.index_path, mismatched)
 
     from tests.test_runtime_hardening import FakeBackend

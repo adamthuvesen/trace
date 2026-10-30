@@ -192,6 +192,7 @@ class TestAdaptiveSearchFilters:
         searcher = AdaptiveSearch(indexer)
         filters = parse_filters(path_prefix="architecture/")
         result = searcher.search("router", top_k=5, filters=filters)
+        assert result.route is not None
         assert result.route.filters.path_prefix == ("architecture/",)
         assert all(h.path.startswith("architecture/") for h in result.hits)
 
@@ -199,4 +200,5 @@ class TestAdaptiveSearchFilters:
         indexer, _ = filter_kb
         searcher = AdaptiveSearch(indexer)
         result = searcher.search("router", top_k=5)
+        assert result.route is not None
         assert result.route.filters.is_empty

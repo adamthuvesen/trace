@@ -72,6 +72,7 @@ def test_collapsed_battle_fails_and_retains_reports(tmp_path):
     assert "retrieval/bm25 query easy-bm25: lost Top-1, Top-5" in result.output
     run_dir = tmp_path / "collapsed"
     stored = load_baseline(run_dir / "retrieval_bm25.json")
+    assert stored.regression is not None
     assert stored.regression.has_regression
     assert stored.top_1_path_accuracy == 0.0
     assert (run_dir / "api_bm25.json").is_file()

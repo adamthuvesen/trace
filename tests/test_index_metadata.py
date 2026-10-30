@@ -2,6 +2,7 @@
 
 import json
 import os
+from dataclasses import replace
 
 from trace_search.indexing.index_metadata import (
     INDEX_METADATA_VERSION,
@@ -32,6 +33,7 @@ def test_metadata_round_trip_records_active_model_and_sources(tmp_path):
     loaded = index_metadata_from_dict(json.loads(json.dumps(metadata.to_dict())))
 
     assert loaded == metadata
+    assert loaded is not None
     assert loaded.version == INDEX_METADATA_VERSION
     record = loaded.source_files[0]
     assert record.path == "intro.md"
@@ -64,12 +66,7 @@ def test_model_mismatch_detection(tmp_path):
         document_count=0,
         chunk_count=0,
     )
-    mismatched = metadata.__class__(
-        **{
-            **metadata.to_dict(),
-            "embedding_model": "different-model",
-        }
-    )
+    mismatched = replace(metadata, embedding_model="different-model")
 
     assert not metadata_matches_settings(mismatched)
 
