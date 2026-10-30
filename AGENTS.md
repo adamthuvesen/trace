@@ -11,8 +11,10 @@ just check
 just test-file tests/test_eval_contracts.py
 ```
 
+Use `just fix` to apply the lint and format fixers.
+
 Use `just eval` for the complete core fixture and `just stress` for the separate stress fixture.
-Use `just full` for fast checks, model checks, packaging, and both battle suites.
+Use `just slow` for fast checks, model checks, packaging, and both battle suites.
 Prove changes with `just verify` (`verify-trace` skill at `.agents/skills/verify-trace/`).
 See [development.md](docs/development.md) for prerequisites and check coverage.
 

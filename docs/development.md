@@ -21,6 +21,7 @@ The type check covers `src/trace_search` and `tools`.
 
 | Command | Coverage | Limits |
 | --- | --- | --- |
+| `just fix` | Apply ruff fixes and formatting | Run before `check` |
 | `just check` | Static checks and fast tests | Excludes tests marked `slow` or `transport` |
 | `just test-file tests/test_eval_contracts.py` | One file or pytest node | Scope depends on the supplied path |
 | `just eval` | All 17 core fixture queries and committed quality baseline | Small public corpus |
@@ -29,7 +30,7 @@ The type check covers `src/trace_search` and `tools`.
 | `just battle-challenge` | Comparative gates for the separate challenge populations | Committed public fixtures |
 | `just package` | Fresh wheel environment, public imports, typing marker, CLI, stdio MCP, external type consumers | Package fixture checks do not measure retrieval quality |
 | `just integration` | Slow model tests, real stdio and HTTP transport tests, package verification, both fixture gates, both comparative battle gates | Requires model preparation |
-| `just full` | `check` followed by `integration` | Runs on the current host and interpreter |
+| `just slow` | `check` followed by `integration` | Runs on the current host and interpreter |
 | `just verify` | Drives the real CLI, MCP server, and wheel (`verify-trace` skill) | Needs the cached embedding model |
 
 CI uses these recipes in [.github/workflows/ci.yml](../.github/workflows/ci.yml).

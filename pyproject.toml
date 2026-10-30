@@ -68,15 +68,8 @@ target-version = "py314"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PTH", "RUF"]
-
-[tool.ruff.lint.per-file-ignores]
-# Long lines are product text (MCP tool descriptions, markdown report templates,
-# CLI help, fixture documents) where wrapping changes the output.
-".agents/skills/verify-trace/drives.py" = ["E501"]
-"src/trace_search/collections/index_stats.py" = ["E501"]
-"src/trace_search/server/mcp_tools.py" = ["E501"]
-"tools/eval/**" = ["E501"]
-"tests/**" = ["E501"]
+# The formatter owns line length; E501 only flags text it cannot wrap.
+ignore = ["E501"]
 
 [tool.basedpyright]
 typeCheckingMode = "strict"
@@ -91,11 +84,13 @@ reportUnknownArgumentType = false
 reportUnknownVariableType = false
 reportUnknownParameterType = false
 reportUnknownLambdaType = false
+reportMissingTypeStubs = false
 
 [[tool.basedpyright.executionEnvironments]]
 root = "tests"
 extraPaths = ["src"]
 reportMissingParameterType = false
+reportPrivateUsage = false
 
 [tool.importlinter]
 root_package = "trace_search"

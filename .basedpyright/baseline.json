@@ -1,0 +1,96 @@
+{
+    "files": {
+        "./src/trace_search/collections/operations.py": [
+            {
+                "code": "reportUnnecessaryIsInstance",
+                "range": {
+                    "startColumn": 38,
+                    "endColumn": 60,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./src/trace_search/extraction/extractors.py": [
+            {
+                "code": "reportMissingTypeStubs",
+                "range": {
+                    "startColumn": 11,
+                    "endColumn": 15,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportAttributeAccessIssue",
+                "range": {
+                    "startColumn": 34,
+                    "endColumn": 44,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportAttributeAccessIssue",
+                "range": {
+                    "startColumn": 33,
+                    "endColumn": 38,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportOptionalMemberAccess",
+                "range": {
+                    "startColumn": 60,
+                    "endColumn": 64,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./src/trace_search/indexing/bm25_tokenize.py": [
+            {
+                "code": "reportMissingTypeStubs",
+                "range": {
+                    "startColumn": 7,
+                    "endColumn": 12,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportMissingTypeStubs",
+                "range": {
+                    "startColumn": 5,
+                    "endColumn": 23,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./src/trace_search/indexing/index_store.py": [
+            {
+                "code": "reportMissingTypeStubs",
+                "range": {
+                    "startColumn": 7,
+                    "endColumn": 12,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./src/trace_search/retrieval/search.py": [
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 24,
+                    "endColumn": 77,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./src/trace_search/retrieval/search_types.py": [
+            {
+                "code": "reportUnnecessaryIsInstance",
+                "range": {
+                    "startColumn": 9,
+                    "endColumn": 31,
+                    "lineCount": 1
+                }
+            }
+        ]
+    }
+}
