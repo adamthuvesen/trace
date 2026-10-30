@@ -6,12 +6,13 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 import yaml
 
-from trace_search.retrieval.search_types import SearchResult
+from trace_search.retrieval.search_types import SearchHit
 
 from tools.eval.metrics import percentile as percentile
 from tools.eval.models import (
@@ -149,16 +150,16 @@ def _effective_min_keywords(
 
 
 def _keyword_scope_content(
-    hits: list[SearchResult],
+    hits: Sequence[SearchHit],
     *,
     top_k: int,
     strict_keywords_top1: bool,
 ) -> tuple[str, str]:
     """Return (top_1_lower, scope_lower) for keyword substring checks."""
-    top_1 = hits[0]["content"].lower() if hits else ""
+    top_1 = hits[0].content.lower() if hits else ""
     if strict_keywords_top1 or not hits:
         return top_1, top_1
-    scope = " ".join(h["content"].lower() for h in hits[:top_k])
+    scope = " ".join(h.content.lower() for h in hits[:top_k])
     return top_1, scope
 
 
@@ -192,15 +193,11 @@ def evaluate_query(
 
     start = time.perf_counter()
     if search_mode == "adaptive":
-        from trace_search.retrieval.search_types import AdaptiveSearchResult
-
-        adaptive_result = cast("AdaptiveSearch", searcher).search(
-            query.query, top_k=top_k
-        )
-        assert isinstance(adaptive_result, AdaptiveSearchResult)
-        hits = adaptive_result.hits
-        adaptive_strategy = adaptive_result.route.strategy
-        adaptive_fallback_used = adaptive_result.route.fallback_used
+        response = cast("AdaptiveSearch", searcher).search(query.query, top_k=top_k)
+        assert response.route is not None
+        hits: Sequence[SearchHit] = response.hits
+        adaptive_strategy = response.route.strategy
+        adaptive_fallback_used = response.route.fallback_used
     elif search_mode == "bm25":
         hits = cast("KeywordSearch", searcher).search(query.query, max_results=top_k)
     else:
@@ -233,7 +230,7 @@ def evaluate_query(
 
     path_first_hit_rank: int | None = None
     for i, h in enumerate(hits[:top_k], start=1):
-        if query.matches_path(h["path"]):
+        if query.matches_path(h.path):
             path_first_hit_rank = i
             break
 
@@ -243,10 +240,10 @@ def evaluate_query(
         path_first_hit_rank is not None and path_first_hit_rank <= max_rank
     )
 
-    top_1_path = hits[0]["path"]
+    top_1_path = hits[0].path
     top_1_path_hit = query.matches_path(top_1_path)
 
-    top_5_path_hit = any(query.matches_path(h["path"]) for h in hits[:5])
+    top_5_path_hit = any(query.matches_path(h.path) for h in hits[:5])
 
     top_1_content, scope_content = _keyword_scope_content(
         hits, top_k=top_k, strict_keywords_top1=strict_keywords_top1
@@ -265,7 +262,7 @@ def evaluate_query(
         top_1_keyword_hit=top_1_keyword_hit,
         top_5_keyword_hit=top_5_keyword_hit,
         retrieved_path=top_1_path,
-        retrieved_score=hits[0].get("score", 0.0),
+        retrieved_score=hits[0].evidence.score,
         latency_ms=latency_ms,
         keywords_found=top_5_keywords,
         keywords_missing=[

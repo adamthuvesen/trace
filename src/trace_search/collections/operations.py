@@ -92,7 +92,7 @@ class TraceOperations:
         _validate_limit(top_k)
         filters = _build_filters(path_prefix, extensions, since)
         results = self.search_response("semantic", query, top_k, collection, filters)
-        return format_results(results.legacy_hits())
+        return format_results(results.hits)
 
     def keyword_search(
         self,
@@ -108,7 +108,7 @@ class TraceOperations:
         results = self.search_response(
             "keyword", keyword, max_results, collection, filters
         )
-        return format_results(results.legacy_hits())
+        return format_results(results.hits)
 
     def search_hybrid(
         self,
@@ -122,7 +122,7 @@ class TraceOperations:
         _validate_limit(top_k)
         filters = _build_filters(path_prefix, extensions, since)
         results = self.search_response("hybrid", query, top_k, collection, filters)
-        return format_results(results.legacy_hits())
+        return format_results(results.hits)
 
     def get_document(self, path: str, collection: str | None = None) -> str:
         for col in self.registry._resolve(collection):
@@ -248,21 +248,25 @@ class TraceOperations:
                         f"Sample query skipped because indexes are incompatible or missing metadata for: {col.name}. Run `reindex` first."
                     )
             if mode == "adaptive":
-                response = AdaptiveSearch(indexer).response(
+                response = AdaptiveSearch(indexer).search(
                     query, limit, filters, snapshot
                 )
             elif mode == "keyword":
                 response = SearchResponse(
-                    tuple(KeywordSearch(indexer).rank(query, limit, filters, snapshot))
+                    tuple(
+                        KeywordSearch(indexer).search(query, limit, filters, snapshot)
+                    )
                 )
             elif mode == "semantic":
                 response = SearchResponse(
-                    tuple(SemanticSearch(indexer).rank(query, limit, filters, snapshot))
+                    tuple(
+                        SemanticSearch(indexer).search(query, limit, filters, snapshot)
+                    )
                 )
             else:
                 response = SearchResponse(
                     tuple(
-                        HybridSearch(indexer).rank(
+                        HybridSearch(indexer).search(
                             query, limit, filters=filters, snapshot=snapshot
                         )
                     )
@@ -277,7 +281,7 @@ class TraceOperations:
                     snapshot=snapshot,
                 )
                 hits = [
-                    replace(hit, neighbor_content=neighbor, include_neighbors=True)
+                    replace(hit, neighbor_content=neighbor)
                     for hit, neighbor in zip(hits, neighbors, strict=True)
                 ]
             results.append(SearchResponse(tuple(hits), response.route))
@@ -316,9 +320,11 @@ class TraceOperations:
             config=self.registry.config,
             sample_query=sample_query,
             sample_collection=collection,
-            sample_query_runner=lambda query, name: self.search_response(
-                "adaptive", query, 5, name, build_if_missing=False
-            ).legacy_hits(),
+            sample_query_runner=lambda query, name: (
+                self.search_response(
+                    "adaptive", query, 5, name, build_if_missing=False
+                ).hits
+            ),
         )
 
 

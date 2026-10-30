@@ -47,11 +47,10 @@ The card and chunk construction belong to `extraction/` and `indexing/index_buil
 `SearchResponse` preserves final ranking order.
 Shared operations retain one generation per selected collection through routing, candidate retrieval, filtering, and neighbor lookup.
 Multi-collection merging compares rank contributions instead of unrelated raw scores.
-Typed response rendering preserves the supplied order when it groups snippets by document.
-Legacy list-based context formatting retains its score sorting.
+Rendering preserves the supplied order when it groups snippets by document.
 
-Public `.search()` methods preserve their dictionary result contracts.
-Typed ranking uses `.rank()`, and adaptive typed retrieval uses `.response()`.
+Each search class has one `.search()` method.
+It returns a list of `SearchHit`, and `AdaptiveSearch.search()` returns a `SearchResponse` with its route.
 `TraceOperations.search_response()` composes collection retrieval and returns a typed response.
 See [architecture.md](architecture.md) for module ownership.
 

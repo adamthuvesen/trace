@@ -98,7 +98,7 @@ class TestMCPServer:
 
 class TestServerImports:
     def test_import_format_results(self):
-        from trace_search.retrieval.search import format_results
+        from trace_search.retrieval.formatting import format_results
 
         assert callable(format_results)
 

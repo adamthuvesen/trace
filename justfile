@@ -13,7 +13,7 @@ check:
     uv run --locked --extra convert ruff format --check .
     uv run --locked --extra convert mypy
     uv run --locked --extra convert lint-imports --no-logo
-    uv run --locked --extra convert python -m pytest -m "not slow" -q
+    uv run --locked --extra convert python -m pytest -m "not slow and not transport" -q -n auto
 
 # Run one test file or pytest node.
 test-file path:
@@ -41,7 +41,7 @@ battle-challenge:
 
 # Run model, package, and evaluation checks. Model preparation may require a download.
 integration:
-    uv run --locked --extra convert python -m pytest -m slow -q
+    uv run --locked --extra convert python -m pytest -m "slow or transport" -q
     just package
     just eval
     just stress

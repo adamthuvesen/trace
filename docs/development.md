@@ -14,21 +14,21 @@ just eval
 ```
 
 `just bootstrap` installs locked development and conversion dependencies.
-`just check` runs lint, formatting, strict typing, import contracts, and tests without the `slow` marker.
+`just check` runs lint, formatting, strict typing, import contracts, and tests without the `slow` or `transport` marker.
 The type check covers `src/trace_search` and `tools`.
 
 ## Verification commands
 
 | Command | Coverage | Limits |
 | --- | --- | --- |
-| `just check` | Static checks and fast tests | Excludes tests marked `slow` |
+| `just check` | Static checks and fast tests | Excludes tests marked `slow` or `transport` |
 | `just test-file tests/test_eval_contracts.py` | One file or pytest node | Scope depends on the supplied path |
 | `just eval` | All 17 core fixture queries and committed quality baseline | Small public corpus |
 | `just stress` | Separate 12-query stress population and its baseline | Same public corpus |
 | `just battle` | Comparative gates for all standard battle KBs and modes | Committed public fixtures |
 | `just battle-challenge` | Comparative gates for the separate challenge populations | Committed public fixtures |
 | `just package` | Fresh wheel environment, public imports, typing marker, CLI, stdio MCP, external type consumers | Package fixture checks do not measure retrieval quality |
-| `just integration` | Slow model tests, package verification, both fixture gates, both comparative battle gates | Requires model preparation |
+| `just integration` | Slow model tests, real stdio and HTTP transport tests, package verification, both fixture gates, both comparative battle gates | Requires model preparation |
 | `just verify` | `check` followed by `integration` | Runs on the current host and interpreter |
 
 CI uses these recipes in [.github/workflows/ci.yml](../.github/workflows/ci.yml).
@@ -100,7 +100,7 @@ The whole conversion batch is not a transaction.
 ## Making a change
 
 Read the subsystem document linked from [AGENTS.md](../AGENTS.md).
-Use existing public dictionaries at compatibility boundaries and typed records within application operations.
+Pass `SearchHit` and `SearchResponse` between modules. Only `retrieval/formatting.py` turns them into output text.
 The [architecture guide](architecture.md) identifies each owner.
 
 Run the relevant focused test while changing behavior.

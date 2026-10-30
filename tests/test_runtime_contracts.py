@@ -13,6 +13,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
+from tests.search_hits import make_hit
 from tests.test_runtime_hardening import FakeBackend
 from trace_search.collections.collection_registry import CollectionRegistry
 from trace_search.collections.errors import DocumentNotFoundError, ReindexError
@@ -36,7 +37,7 @@ from trace_search.indexing.index_store import (
 from trace_search.indexing.wiki_indexer import WikiIndexer
 from trace_search.retrieval.formatting import format_search_context
 from trace_search.retrieval.search import AdaptiveSearch, KeywordSearch, SemanticSearch
-from trace_search.retrieval.search_types import SearchHit, SearchResponse, parse_filters
+from trace_search.retrieval.search_types import SearchResponse, parse_filters
 
 
 @pytest.fixture
@@ -136,7 +137,7 @@ def test_snapshot_payloads_are_read_only(indexed):
         snapshot.embeddings.setflags(write=True)
     assert isinstance(snapshot.texts, tuple)
     assert isinstance(snapshot.metadata.source_files, tuple)
-    hit = KeywordSearch(indexed).rank("Intro")[0]
+    hit = KeywordSearch(indexed).search("Intro")[0]
     with pytest.raises(TypeError):
         hit.metadata["path"] = "wrong.md"
     assert hit.ref.document.path == hit.path == "intro.md"
@@ -232,18 +233,15 @@ def test_empty_published_generation_keeps_its_identity(tmp_path):
 
 
 def test_adaptive_preserves_candidate_depths_and_one_snapshot(indexed):
-    hits = [
-        SearchHit.from_dict({"path": f"doc{i}.md", "score": 1.0, "source": "keyword"})
-        for i in range(6)
-    ]
+    hits = [make_hit(f"doc{i}.md", score=1.0, source="keyword") for i in range(6)]
     adaptive = AdaptiveSearch(indexed)
     with (
-        patch.object(adaptive.keyword, "rank", return_value=hits[:3]) as gate,
-        patch.object(adaptive.hybrid.keyword, "rank", return_value=hits) as lexical,
-        patch.object(adaptive.hybrid.semantic, "rank", return_value=[]) as semantic,
+        patch.object(adaptive.keyword, "search", return_value=hits[:3]) as gate,
+        patch.object(adaptive.hybrid.keyword, "search", return_value=hits) as lexical,
+        patch.object(adaptive.hybrid.semantic, "search", return_value=[]) as semantic,
         patch.object(indexed, "snapshot", wraps=indexed.snapshot) as snapshot,
     ):
-        adaptive.response("a natural language question", top_k=3)
+        adaptive.search("a natural language question", top_k=3)
     snapshot.assert_called_once()
     assert gate.call_args.kwargs["max_results"] == 3
     assert lexical.call_args.kwargs["max_results"] == 6
@@ -266,7 +264,7 @@ def test_reindex_during_adaptive_query_keeps_neighbors_in_original_generation(tm
     registry._backend = FakeBackend()
     registry._warmed = True
     indexer = registry.collections["docs"].indexer(registry.shared_backend)
-    original = KeywordSearch.rank
+    original = KeywordSearch.search
     first_generation = indexer.snapshot().generation
     published = False
 
@@ -283,7 +281,7 @@ def test_reindex_during_adaptive_query_keeps_neighbors_in_original_generation(tm
         return hits
 
     with (
-        patch.object(KeywordSearch, "rank", publish),
+        patch.object(KeywordSearch, "search", publish),
         patch.object(indexer, "snapshot", wraps=indexer.snapshot) as snapshot,
     ):
         response = TraceOperations(registry).search_response("adaptive", "query", 2)
@@ -297,12 +295,8 @@ def test_reindex_during_adaptive_query_keeps_neighbors_in_original_generation(tm
 
 
 def test_formatter_preserves_explicit_response_order():
-    first = SearchHit.from_dict(
-        {"path": "first.md", "title": "First", "score": 0.1, "content": "first"}
-    )
-    second = SearchHit.from_dict(
-        {"path": "second.md", "title": "Second", "score": 99.0, "content": "second"}
-    )
+    first = make_hit("first.md", title="First", score=0.1, content="first")
+    second = make_hit("second.md", title="Second", score=99.0, content="second")
     output = format_search_context(SearchResponse((first, second)), query="")
     assert output.index("### 1. First") < output.index("### 2. Second")
 
@@ -442,24 +436,3 @@ def test_unsupported_schema_cannot_be_published_or_loaded(indexed):
     path.write_text(json.dumps(metadata.to_dict()))
     with pytest.raises(IndexCorruptError, match="Unknown index metadata schema"):
         load_snapshot(indexed.index_root)
-
-
-def test_legacy_metadata_codec_preserves_defaults_and_optional_coercion():
-    hit = SearchHit.from_dict(
-        {
-            "path": 123,
-            "chunk_index": "2",
-            "chunk_count": "3",
-            "source_mtime": "4.5",
-            "aliases": 7,
-            "status": False,
-            "as_of": "2026-01-01",
-            "undeclared": "excluded",
-        }
-    ).to_dict()
-    assert hit["path"] == "123"
-    assert hit["title"] == hit["folder"] == hit["breadcrumb"] == hit["extension"] == ""
-    assert hit["chunk_index"] == 2 and hit["chunk_count"] == 3
-    assert hit["source_mtime"] == 4.5
-    assert hit["aliases"] == "7" and hit["as_of"] == "2026-01-01"
-    assert "status" not in hit and "undeclared" not in hit

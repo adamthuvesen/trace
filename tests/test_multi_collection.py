@@ -351,10 +351,10 @@ class TestMultiCollectionFilters:
             parse_filters(path_prefix="architecture/"),
         )
         assert result.hits
-        for hit in result.legacy_hits():
-            assert hit["path"].startswith("architecture/")
-            assert hit.get("collection") in {"docs", "brain"}
-        assert {hit.ref.document.collection for hit in result.hits} == {"docs", "brain"}
+        for hit in result.hits:
+            assert hit.path.startswith("architecture/")
+            assert hit.collection in {"docs", "brain"}
+        assert {hit.collection for hit in result.hits} == {"docs", "brain"}
         assert result.route is not None
         assert result.route.filters.path_prefix == ("architecture/",)
 
@@ -371,11 +371,11 @@ class TestMultiCollectionFilters:
                 "brain",
                 parse_filters(path_prefix="architecture/"),
             )
-            .legacy_hits()
+            .hits
         )
         assert results
         for hit in results:
-            assert hit["path"].startswith("architecture/")
+            assert hit.path.startswith("architecture/")
 
     def test_list_documents_path_prefix_scopes_each_collection(self, tmp_path):
 
@@ -399,11 +399,8 @@ def _operation_rankings(tmp_path, rankings, top_k, collection_names):
     from tests.test_runtime_hardening import FakeBackend
     from trace_search.collections.collection_registry import CollectionRegistry
     from trace_search.collections.operations import TraceOperations
-    from trace_search.retrieval.search_types import (
-        SearchHit,
-        SearchResponse,
-        SearchRoute,
-    )
+    from tests.search_hits import make_hit
+    from trace_search.retrieval.search_types import SearchResponse, SearchRoute
 
     paths = {name: tmp_path / name for name in collection_names}
     for path in paths.values():
@@ -413,19 +410,17 @@ def _operation_rankings(tmp_path, rankings, top_k, collection_names):
     registry._warmed = True
     responses = [
         SearchResponse(
-            tuple(SearchHit.from_dict(hit) for hit in hits[:top_k]),
+            tuple(make_hit(**hit) for hit in hits[:top_k]),
             SearchRoute("keyword", "fixture ranking", False),
         )
         for hits in rankings
     ]
     with patch(
-        "trace_search.collections.operations.AdaptiveSearch.response",
+        "trace_search.collections.operations.AdaptiveSearch.search",
         side_effect=responses,
     ):
         return (
-            TraceOperations(registry)
-            .search_response("adaptive", "query", top_k)
-            .legacy_hits()
+            TraceOperations(registry).search_response("adaptive", "query", top_k).hits
         )
 
 
@@ -447,11 +442,11 @@ class TestMergeResults:
             collection_names=["a", "b"],
         )
         assert len(merged) == 3
-        assert merged[0]["path"] == "a.md"
-        assert merged[0]["collection"] == "a"
-        assert merged[1]["path"] == "c.md"
-        assert merged[1]["collection"] == "b"
-        assert merged[2]["path"] == "b.md"
+        assert merged[0].path == "a.md"
+        assert merged[0].collection == "a"
+        assert merged[1].path == "c.md"
+        assert merged[1].collection == "b"
+        assert merged[2].path == "b.md"
 
     def test_merge_does_not_starve_small_collection(self, tmp_path):
         """Regression: raw BM25 scores from a large corpus (higher IDF) used to
@@ -476,9 +471,9 @@ class TestMergeResults:
             top_k=5,
             collection_names=["large", "small"],
         )
-        assert merged[0]["path"] == "large_0.md"
-        assert merged[1]["path"] == "answer.md"
-        assert merged[1]["collection"] == "small"
+        assert merged[0].path == "large_0.md"
+        assert merged[1].path == "answer.md"
+        assert merged[1].collection == "small"
 
     def test_merge_handles_mixed_score_types_across_collections(self, tmp_path):
         """Adaptive search can return raw BM25 for one collection and hybrid
@@ -498,13 +493,14 @@ class TestMergeResults:
             top_k=2,
             collection_names=["kw", "hy"],
         )
-        assert [h["path"] for h in merged] == ["k1.md", "h1.md"]
+        assert [h.path for h in merged] == ["k1.md", "h1.md"]
 
     def test_format_search_context_preserves_fused_order(self, tmp_path):
         """Regression: format_search_context used to re-sort merged hits by
         raw score, demoting the hybrid collection's rank-1 hit below the
         keyword collection's rank-2 hit in the rendered output."""
         from trace_search.retrieval.formatting import format_search_context
+        from trace_search.retrieval.search_types import SearchResponse
 
         keyword_hits = [
             {
@@ -541,7 +537,7 @@ class TestMergeResults:
             top_k=3,
             collection_names=["kw", "hy"],
         )
-        rendered = format_search_context(merged, query="alpha")
+        rendered = format_search_context(SearchResponse(merged), query="alpha")
         assert (
             rendered.index("### 1. K1")
             < rendered.index("### 2. H1")
@@ -618,24 +614,24 @@ class TestCrossCollectionFairness:
             ).search(self.QUERY, 5, filters=filters)
             for name in ("large", "small")
         )
-        assert small_hits and small_hits[0]["path"] == "kubernetes-deployment-guide.md"
+        assert small_hits and small_hits[0].path == "kubernetes-deployment-guide.md"
 
         # Precondition for the regression: the large corpus's raw scores beat
         # the small collection's best hit, so the old raw-score merge starved
         # it out of the top ranks. If this stops holding, the fixture no
         # longer exercises the bug.
-        small_best = float(small_hits[0]["score"])
-        outscoring = [h for h in large_hits if float(h["score"]) > small_best]
+        small_best = float(small_hits[0].evidence.score)
+        outscoring = [h for h in large_hits if float(h.evidence.score) > small_best]
         assert len(outscoring) >= 2
 
         merged = (
             TraceOperations(registry)
             .search_response("keyword", self.QUERY, 5, None, filters)
-            .legacy_hits()
+            .hits
         )
-        top2 = [(h["collection"], h["path"]) for h in merged[:2]]
+        top2 = [(h.collection, h.path) for h in merged[:2]]
         assert ("small", "kubernetes-deployment-guide.md") in top2
-        assert {h["collection"] for h in merged} == {"large", "small"}
+        assert {h.collection for h in merged} == {"large", "small"}
 
     def test_rendered_adaptive_search_keeps_small_collection_on_top(self, tmp_path):
         """The production `search` tool path: search_adaptive rendered through

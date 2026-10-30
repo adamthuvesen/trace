@@ -106,7 +106,7 @@ def test_query_naming_a_hub_by_alias_beats_pages_repeating_its_words(tmp_path):
 
     hits = KeywordSearch(indexer).search("hobby builds", max_results=2)
 
-    assert [hit["path"] for hit in hits] == ["repos/index.md", "people/rowan.md"]
+    assert [hit.path for hit in hits] == ["repos/index.md", "people/rowan.md"]
 
 
 def test_superseded_page_ranks_below_its_replacement_but_stays_findable(tmp_path):
@@ -122,8 +122,8 @@ def test_superseded_page_ranks_below_its_replacement_but_stays_findable(tmp_path
 
     hits = KeywordSearch(indexer).search("onboarding checklist", max_results=5)
 
-    assert [hit["path"] for hit in hits] == ["new.md", "old.md"]
-    assert hits[1]["status"] == "superseded"
+    assert [hit.path for hit in hits] == ["new.md", "old.md"]
+    assert hits[1].metadata["status"] == "superseded"
 
 
 def test_aliases_without_a_frontmatter_title_have_no_empty_name(tmp_path):

@@ -20,19 +20,13 @@ from trace_search.indexing.index_store import ChunkMetadata, IndexSnapshot
 from trace_search.indexing.index_metadata import metadata_query_compatible
 from trace_search.indexing.embeddings import EmbeddingBackend
 from trace_search.retrieval.hit_builders import typed_chunk_hit
-from trace_search.retrieval.formatting import (  # noqa: F401 - package re-exports
-    _query_terms,
-    format_results,
-    format_search_context,
-)
+from trace_search.retrieval.formatting import _query_terms
 from trace_search.retrieval.query_profile import (
     BM25_DOMINANCE_MARGIN,
     LEXICAL_STOPWORDS,
     is_keywordish_query,
 )
 from trace_search.retrieval.search_types import (
-    AdaptiveSearchResult as AdaptiveSearchResult,
-    SearchResult,
     SearchRoute as SearchRoute,
     SearchFilters as SearchFilters,
     SearchHit,
@@ -119,10 +113,9 @@ def _rank_terms(text: str, *, remove_stopwords: bool = False) -> frozenset[str]:
 
 
 def _semantic_lexical_boost(
-    query: str, hit: SearchHit | SearchResult, content_terms: frozenset[str]
+    query: str, hit: SearchHit, content_terms: frozenset[str]
 ) -> float:
     """Small deterministic boost for exact lexical anchors in semantic results."""
-    hit = SearchHit.from_dict(hit) if isinstance(hit, dict) else hit
     query_terms = _rank_terms(query, remove_stopwords=True)
     if not query_terms:
         return 0.0
@@ -400,15 +393,6 @@ class SemanticSearch:
         top_k: int = 10,
         filters: SearchFilters | None = None,
         snapshot: IndexSnapshot | None = None,
-    ) -> list[SearchResult]:
-        return [hit.to_dict() for hit in self.rank(query, top_k, filters, snapshot)]
-
-    def rank(
-        self,
-        query: str,
-        top_k: int = 10,
-        filters: SearchFilters | None = None,
-        snapshot: IndexSnapshot | None = None,
     ) -> list[SearchHit]:
         """Search by semantic similarity, optionally scoped by filters."""
         if not query or not query.strip():
@@ -482,17 +466,6 @@ class KeywordSearch:
         max_results: int = 20,
         filters: SearchFilters | None = None,
         snapshot: IndexSnapshot | None = None,
-    ) -> list[SearchResult]:
-        return [
-            hit.to_dict() for hit in self.rank(keyword, max_results, filters, snapshot)
-        ]
-
-    def rank(
-        self,
-        keyword: str,
-        max_results: int = 20,
-        filters: SearchFilters | None = None,
-        snapshot: IndexSnapshot | None = None,
     ) -> list[SearchHit]:
         """Search using BM25 for fast keyword matching, optionally filtered."""
         if not keyword or not keyword.strip():
@@ -551,21 +524,6 @@ _RRF_K = 60
 _SEMANTIC_FUSION_WEIGHT = 0.4
 
 
-def _fuse_by_document(
-    weighted_lists: list[tuple[float, list[SearchResult]]], limit: int
-) -> list[SearchResult]:
-    return [
-        hit.to_dict()
-        for hit in _fuse_typed(
-            [
-                (weight, [SearchHit.from_dict(hit) for hit in hits])
-                for weight, hits in weighted_lists
-            ],
-            limit,
-        )
-    ]
-
-
 def _fuse_typed(
     weighted_lists: list[tuple[float, list[SearchHit]]], limit: int
 ) -> list[SearchHit]:
@@ -613,19 +571,6 @@ class HybridSearch:
         semantic_weight: float = _SEMANTIC_FUSION_WEIGHT,
         filters: SearchFilters | None = None,
         snapshot: IndexSnapshot | None = None,
-    ) -> list[SearchResult]:
-        return [
-            hit.to_dict()
-            for hit in self.rank(query, top_k, semantic_weight, filters, snapshot)
-        ]
-
-    def rank(
-        self,
-        query: str,
-        top_k: int = 10,
-        semantic_weight: float = _SEMANTIC_FUSION_WEIGHT,
-        filters: SearchFilters | None = None,
-        snapshot: IndexSnapshot | None = None,
     ) -> list[SearchHit]:
         """Hybrid search: BM25 files and semantic chunks fused per document.
 
@@ -647,10 +592,10 @@ class HybridSearch:
 
         # Semantic hits are chunks and several can share a file; fetch deeper
         # so fusion still sees enough distinct documents.
-        semantic_results = self.semantic.rank(
+        semantic_results = self.semantic.search(
             query, top_k=n_candidates * 2, filters=filters, snapshot=snapshot
         )
-        keyword_results = self.keyword.rank(
+        keyword_results = self.keyword.search(
             query, max_results=n_candidates, filters=filters, snapshot=snapshot
         )
         candidates = _fuse_typed(
@@ -662,14 +607,6 @@ class HybridSearch:
         )
 
         return candidates[:top_k]
-
-
-def add_match_hints(query: str, hits: list[SearchResult]) -> list[SearchResult]:
-    """Compatibility wrapper around typed match evidence."""
-    return [
-        hit.to_dict()
-        for hit in _typed_match_hints(query, [SearchHit.from_dict(hit) for hit in hits])
-    ]
 
 
 def _typed_match_hints(query: str, hits: list[SearchHit]) -> tuple[SearchHit, ...]:
@@ -733,7 +670,7 @@ class AdaptiveSearch:
             return True, f"BM25 top hit leads the runner-up {margin:.2f}x"
         return False, f"no dominant BM25 hit (top leads runner-up {margin:.2f}x)"
 
-    def response(
+    def search(
         self,
         query: str,
         top_k: int = 10,
@@ -757,7 +694,7 @@ class AdaptiveSearch:
         snapshot = snapshot if snapshot is not None else self.keyword.indexer.snapshot()
         # The confidence gate compares the top hit with the runner-up, so fetch
         # at least two even when the caller asked for one.
-        keyword_hits = self.keyword.rank(
+        keyword_hits = self.keyword.search(
             query, max_results=max(top_k, 2), filters=filters, snapshot=snapshot
         )
         if not keyword_hits and is_keywordish_query(query):
@@ -784,7 +721,7 @@ class AdaptiveSearch:
                 ),
             )
 
-        hybrid_hits = self.hybrid.rank(
+        hybrid_hits = self.hybrid.search(
             query, top_k=top_k, filters=filters, snapshot=snapshot
         )
         if (
@@ -810,14 +747,3 @@ class AdaptiveSearch:
                 filters=filters,
             ),
         )
-
-    def search(
-        self,
-        query: str,
-        top_k: int = 10,
-        filters: SearchFilters | None = None,
-        snapshot: IndexSnapshot | None = None,
-    ) -> AdaptiveSearchResult:
-        response = self.response(query, top_k, filters, snapshot)
-        assert response.route is not None
-        return AdaptiveSearchResult(response.legacy_hits(), response.route)

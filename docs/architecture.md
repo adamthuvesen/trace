@@ -28,15 +28,15 @@ The dependency contracts reject runtime imports from `server/`.
 They also reject indexing or extraction imports from retrieval and collections.
 BM25 tokenization and model warmup therefore live in `indexing/`.
 
-## Typed operations and public dictionaries
+## Typed operations
 
 `TraceOperations.search_response()` returns `SearchResponse` with hits in final ranking order.
 Each `SearchHit` carries `DocumentRef`, `ChunkRef`, metadata, content, and `ScoreEvidence`.
 `ChunkRef` includes the collection, document path, generation, and chunk position.
-Typed response rendering preserves the supplied order.
-Legacy list-based context formatting retains its score sorting.
+Every search method returns `SearchHit` values or a `SearchResponse`.
+`retrieval/formatting.py` renders them to MCP and CLI text in the supplied order.
+That text is the stable output contract.
 
-Existing search methods still return dictionaries or `AdaptiveSearchResult`.
 `WikiIndexer` is the public handle for one index: it opens snapshots, builds generations, and reads neighbors.
 `CollectionRegistry` owns collection resources only. Every collection operation goes through `TraceOperations`.
 `trace_search/__init__.py` exposes the public imports and typed retrieval records.

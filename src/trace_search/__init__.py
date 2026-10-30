@@ -18,7 +18,6 @@ from trace_search.retrieval.search import (
     SemanticSearch as SemanticSearch,
 )
 from trace_search.retrieval.search_types import (
-    AdaptiveSearchResult as AdaptiveSearchResult,
     ChunkRef as ChunkRef,
     DocumentRef as DocumentRef,
     SearchHit as SearchHit,
@@ -38,7 +37,6 @@ __all__ = [
     "KeywordSearch",
     "HybridSearch",
     "AdaptiveSearch",
-    "AdaptiveSearchResult",
     "format_results",
     "format_search_context",
     "CollectionRegistry",

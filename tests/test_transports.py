@@ -106,6 +106,7 @@ async def assert_document_protocol(client):
     assert boolean_limit.is_error
 
 
+@pytest.mark.transport
 @pytest.mark.parametrize(
     ("mode", "expected_version"),
     [("auto", "2026-07-28"), ("legacy", "2025-11-25"), ("2026-07-28", "2026-07-28")],
@@ -204,6 +205,7 @@ def http_server(environment, port, log_path):
                 process.wait(timeout=5)
 
 
+@pytest.mark.transport
 @pytest.mark.parametrize(
     ("mode", "expected_version"),
     [("auto", "2026-07-28"), ("legacy", "2025-11-25"), ("2026-07-28", "2026-07-28")],
@@ -235,6 +237,7 @@ def test_http_protocol_and_stateless_restart(
     asyncio.run(check())
 
 
+@pytest.mark.transport
 @pytest.mark.parametrize(
     ("headers", "status"),
     [

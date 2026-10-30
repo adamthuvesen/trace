@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import time
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 from trace_search.config import Settings, get_settings
+from trace_search.retrieval.search_types import SearchHit
 from trace_search.indexing.index_metadata import (
     INDEX_METADATA_VERSION,
     IndexMetadata,
@@ -33,7 +34,7 @@ from trace_search.indexing.kb_paths import (
     should_exclude_path,
 )
 
-SampleQueryRunner = Callable[[str, str | None], list[dict[str, Any]]]
+SampleQueryRunner = Callable[[str, str | None], Sequence[SearchHit]]
 
 
 @dataclass
@@ -260,9 +261,8 @@ def run_probe(
     top_result = None
     if results:
         top = results[0]
-        title = top.get("title") or top.get("path") or "untitled"
-        path = top.get("path")
-        top_result = f"{title} (`{path}`)" if path else str(title)
+        title = top.metadata["title"] or top.path or "untitled"
+        top_result = f"{title} (`{top.path}`)" if top.path else title
 
     status: Literal["ok", "zero-results"] = "ok" if results else "zero-results"
     return ProbeDiagnosis(

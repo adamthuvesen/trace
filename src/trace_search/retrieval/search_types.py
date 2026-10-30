@@ -5,14 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from types import MappingProxyType
-from typing import Any, Literal, TypeAlias, cast
+from typing import Literal, TypeAlias, cast
 
 from trace_search.indexing.index_store import (
     ChunkMetadata,
-    OPTIONAL_CHUNK_METADATA_FIELDS,
 )
 
-SearchResult: TypeAlias = dict[str, Any]
 SearchSource: TypeAlias = Literal["keyword", "semantic", "hybrid", "unknown"]
 
 
@@ -184,7 +182,6 @@ class SearchHit:
     collection: str = ""
     match_hints: tuple[str, ...] = ()
     neighbor_content: str | None = None
-    include_neighbors: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -202,71 +199,6 @@ class SearchHit:
     @property
     def path(self) -> str:
         return self.metadata["path"]
-
-    def to_dict(self) -> SearchResult:
-        from dataclasses import fields
-
-        result: SearchResult = dict(self.metadata)
-        result.update(
-            id=f"{self.path}::{self.ref.chunk_index}",
-            content=self.content,
-            source=self.source,
-        )
-        for item in fields(self.evidence):
-            value = getattr(self.evidence, item.name)
-            if value is not None:
-                result[item.name] = value
-        if self.ref.document.collection:
-            result["collection"] = self.ref.document.collection
-        if self.match_hints:
-            result["match_hints"] = list(self.match_hints)
-        if self.include_neighbors:
-            result["neighbor_content"] = self.neighbor_content
-        return result
-
-    @classmethod
-    def from_dict(
-        cls, hit: SearchResult, *, generation: str | None = None, collection: str = ""
-    ) -> SearchHit:
-        from dataclasses import fields
-
-        metadata: ChunkMetadata = {
-            "path": str(hit["path"]),
-            "title": str(hit.get("title", "")),
-            "folder": str(hit.get("folder", "")),
-            "chunk_index": int(hit.get("chunk_index", 0)),
-            "chunk_count": int(hit.get("chunk_count", 1)),
-            "breadcrumb": str(hit.get("breadcrumb", "")),
-            "extension": str(hit.get("extension", "")),
-            "source_mtime": float(hit.get("source_mtime", 0)),
-        }
-        optional = {
-            name: str(value)
-            for name in OPTIONAL_CHUNK_METADATA_FIELDS
-            if (value := hit.get(name))
-        }
-        metadata = cast(ChunkMetadata, {**metadata, **optional})
-        evidence = ScoreEvidence(
-            **{
-                item.name: hit[item.name]
-                for item in fields(ScoreEvidence)
-                if item.name in hit
-            }
-        )
-        source = hit.get("source", "unknown")
-        if source not in {"keyword", "semantic", "hybrid", "unknown"}:
-            raise ValueError(f"Unknown search source: {source}")
-        return cls(
-            metadata=metadata,
-            content=str(hit.get("content", "")),
-            source=cast(SearchSource, source),
-            evidence=evidence,
-            generation=generation,
-            collection=collection or str(hit.get("collection", "")),
-            match_hints=tuple(hit.get("match_hints", [])),
-            neighbor_content=hit.get("neighbor_content"),
-            include_neighbors="neighbor_content" in hit,
-        )
 
     def in_collection(self, name: str) -> SearchHit:
         return replace(self, collection=name)
@@ -286,12 +218,3 @@ class SearchResponse:
 
     hits: tuple[SearchHit, ...]
     route: SearchRoute | None = None
-
-    def legacy_hits(self) -> list[SearchResult]:
-        return [hit.to_dict() for hit in self.hits]
-
-
-@dataclass(frozen=True)
-class AdaptiveSearchResult:
-    hits: list[SearchResult]
-    route: SearchRoute

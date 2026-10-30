@@ -70,7 +70,7 @@ def test_full_rebuild_keeps_bm25_content_available_in_memory(kb_paths):
     hits = KeywordSearch(indexer).search("BM25", max_results=1)
 
     assert hits
-    assert "keyword ranking" in hits[0]["content"]
+    assert "keyword ranking" in hits[0].content
 
 
 def test_incremental_rebuild_skips_unchanged_files(kb_paths):

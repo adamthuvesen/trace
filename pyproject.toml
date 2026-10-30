@@ -43,6 +43,7 @@ dev = [
     "types-pyyaml>=6.0.12.20260906",
     "import-linter>=2.15",
     "pandas-stubs>=3.1.0.261029",
+    "pytest-xdist>=3.8",
 ]
 
 [build-system]
@@ -55,8 +56,10 @@ packages = ["src/trace_search"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+strict_markers = true
 markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "slow: needs model preparation; runs in `just integration`",
+    "transport: starts real stdio or HTTP server processes; runs in `just integration`",
 ]
 
 [tool.mypy]

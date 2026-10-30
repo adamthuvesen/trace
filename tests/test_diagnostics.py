@@ -6,6 +6,8 @@ from pathlib import Path
 
 import numpy as np
 
+from tests.search_hits import make_hit
+
 from trace_search.collections.diagnostics import (
     diagnose_collections,
     diagnose_index,
@@ -282,7 +284,7 @@ def test_diagnose_collections_runs_sample_query_probe(tmp_path):
         {"docs": kb},
         sample_query="intro",
         sample_query_runner=lambda query, collection: [
-            {"title": "Intro", "path": "intro.md"}
+            make_hit("intro.md", title="Intro")
         ],
     )
     rendered = render_doctor_report(report)
@@ -314,7 +316,7 @@ def _probe(registry, query, collection):
     return (
         TraceOperations(registry)
         .search_response("adaptive", query, 5, collection, build_if_missing=False)
-        .legacy_hits()
+        .hits
     )
 
 
@@ -383,5 +385,5 @@ def test_registry_probe_uses_existing_indexes_without_rebuild(tmp_path):
 
     hits = _probe(registry, "intro widget", "docs")
 
-    assert hits[0]["path"] == "intro.md"
+    assert hits[0].path == "intro.md"
     assert read_current(col.index_path) == generation

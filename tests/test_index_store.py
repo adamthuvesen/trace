@@ -40,7 +40,7 @@ def _indexer(kb: Path, index_root: Path) -> WikiIndexer:
 
 
 def _paths(hits: list[dict]) -> list[str]:
-    return [hit["path"] for hit in hits]
+    return [hit.path for hit in hits]
 
 
 def _generation_dirs(index_root: Path) -> set[str]:
@@ -239,4 +239,4 @@ def test_hybrid_ranks_both_lists_from_one_generation(kb, tmp_path):
     hits = HybridSearch(indexer).search("welcome notes", top_k=3)
 
     # BM25 took part in the fusion only if it ranked the same generation.
-    assert any("bm25_file_score" in hit for hit in hits)
+    assert any(hit.evidence.bm25_file_score is not None for hit in hits)

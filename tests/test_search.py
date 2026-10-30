@@ -15,11 +15,13 @@ from trace_search.retrieval.search import (
     KeywordSearch,
     SemanticSearch,
     _clamp_top_k,
-    _fuse_by_document,
+    _fuse_typed,
     _keyword_fetch_size,
     _extract_rank_terms,
     _semantic_lexical_boost,
 )
+from tests.search_hits import make_hit
+from trace_search.retrieval.formatting import format_results
 from trace_search.retrieval.search_types import SearchRoute
 
 
@@ -43,21 +45,18 @@ class TestDocumentFusion:
     def test_page_found_by_both_retrievers_outranks_single_retriever_tops(self):
         # Semantic returns chunks (two from kw-top.md); keyword returns files.
         # both.md is second in each list and should win once fused per document.
-        keyword = [
-            {"id": "kw-top.md::0", "path": "kw-top.md"},
-            {"id": "both.md::0", "path": "both.md"},
-        ]
+        keyword = [make_hit("kw-top.md"), make_hit("both.md")]
         semantic = [
-            {"id": "sem-top.md::3", "path": "sem-top.md"},
-            {"id": "sem-top.md::1", "path": "sem-top.md"},
-            {"id": "both.md::2", "path": "both.md"},
+            make_hit("sem-top.md", chunk_index=3),
+            make_hit("sem-top.md", chunk_index=1),
+            make_hit("both.md", chunk_index=2),
         ]
 
-        fused = _fuse_by_document([(0.5, keyword), (0.5, semantic)], limit=3)
+        fused = _fuse_typed([(0.5, keyword), (0.5, semantic)], limit=3)
 
-        assert [hit["path"] for hit in fused] == ["both.md", "kw-top.md", "sem-top.md"]
-        assert fused[0]["id"] == "both.md::0"  # keyword's chunk represents it
-        assert all(hit["source"] == "hybrid" for hit in fused)
+        assert [hit.path for hit in fused] == ["both.md", "kw-top.md", "sem-top.md"]
+        assert fused[0].ref.chunk_index == 0  # keyword's chunk represents it
+        assert all(hit.source == "hybrid" for hit in fused)
 
 
 class TestEmptyCorpusSearch:
@@ -129,8 +128,8 @@ class TestKeywordSearchAggregation:
 
         hits = KeywordSearch(indexer).search("alpha", max_results=1)
 
-        assert [hit["path"] for hit in hits] == ["right.md"]
-        assert hits[0]["bm25_file_support"] == 2
+        assert [hit.path for hit in hits] == ["right.md"]
+        assert hits[0].evidence.bm25_file_support == 2
         assert bm25.fetch_size == 3
 
     def test_keyword_fetch_size_oversamples_files(self):
@@ -153,7 +152,7 @@ class TestKeywordSearchAggregation:
         )
 
         hits = KeywordSearch(indexer).search("alpha", max_results=2)
-        assert [hit["path"] for hit in hits] == ["notes/alpha.md", "notes/index.md"]
+        assert [hit.path for hit in hits] == ["notes/alpha.md", "notes/index.md"]
 
     def test_support_boost_not_inflated_by_raw_chunk_count(self):
         # A file with one clearly stronger chunk beats a file with many weak
@@ -173,8 +172,8 @@ class TestKeywordSearchAggregation:
         )
 
         hits = KeywordSearch(indexer).search("zeta", max_results=2)
-        assert hits[0]["path"] == "strong.md"
-        assert hits[0]["score"] > hits[1]["score"]
+        assert hits[0].path == "strong.md"
+        assert hits[0].evidence.score > hits[1].evidence.score
 
     def test_keyword_search_drops_weak_hits_without_metadata_anchor(self):
         bm25 = TestKeywordSearchAggregation.FakeBM25([5.0])
@@ -210,7 +209,7 @@ class TestKeywordSearchAggregation:
             max_results=5,
         )
 
-        assert [hit["path"] for hit in hits] == ["ops/kubernetes-pod-policy.md"]
+        assert [hit.path for hit in hits] == ["ops/kubernetes-pod-policy.md"]
 
     def test_keyword_search_drops_weak_hits_with_only_tiny_metadata_overlap(self):
         bm25 = TestKeywordSearchAggregation.FakeBM25([5.5])
@@ -246,7 +245,7 @@ class TestHybridSearchFusion:
         hybrid = HybridSearch.__new__(HybridSearch)
         hybrid.semantic = MagicMock()
         hybrid.keyword = MagicMock()
-        hybrid.semantic.rank.return_value = [
+        hybrid.semantic.search.return_value = [
             {
                 "id": "semantic.md::0",
                 "path": "semantic.md",
@@ -257,7 +256,7 @@ class TestHybridSearchFusion:
                 "source": "semantic",
             }
         ]
-        hybrid.keyword.rank.return_value = [
+        hybrid.keyword.search.return_value = [
             {
                 "id": "keyword.md::0",
                 "path": "keyword.md",
@@ -269,87 +268,92 @@ class TestHybridSearchFusion:
             }
         ]
 
-        from trace_search.retrieval.search_types import SearchHit
-
-        hybrid.semantic.rank.return_value = [
-            SearchHit.from_dict(hit) for hit in hybrid.semantic.rank.return_value
+        hybrid.semantic.search.return_value = [
+            make_hit(**hit) for hit in hybrid.semantic.search.return_value
         ]
-        hybrid.keyword.rank.return_value = [
-            SearchHit.from_dict(hit) for hit in hybrid.keyword.rank.return_value
+        hybrid.keyword.search.return_value = [
+            make_hit(**hit) for hit in hybrid.keyword.search.return_value
         ]
         results = hybrid.search("RRF", top_k=2)
 
-        hybrid.semantic.rank.assert_called_once()
-        hybrid.keyword.rank.assert_called_once()
-        assert {hit["path"] for hit in results} == {"semantic.md", "keyword.md"}
-        assert all(hit["source"] == "hybrid" for hit in results)
+        hybrid.semantic.search.assert_called_once()
+        hybrid.keyword.search.assert_called_once()
+        assert {hit.path for hit in results} == {"semantic.md", "keyword.md"}
+        assert all(hit.source == "hybrid" for hit in results)
 
 
 class TestFormatResults:
     def test_format_results_empty_list(self):
-        from trace_search.retrieval.search import format_results
-
         result = format_results([])
         assert result == "No results found."
 
     def test_format_results_minimal_hit(self):
-        from trace_search.retrieval.search import format_results
-
         hits = [
-            {"title": "Test Doc", "path": "test.md", "folder": "", "content": "text"}
+            make_hit(
+                **{
+                    "title": "Test Doc",
+                    "path": "test.md",
+                    "folder": "",
+                    "content": "text",
+                }
+            )
         ]
         result = format_results(hits)
         assert "Test Doc" in result
         assert "test.md" in result
 
     def test_format_results_with_score(self):
-        from trace_search.retrieval.search import format_results
-
         hits = [
-            {
-                "title": "Test",
-                "path": "t.md",
-                "folder": "Docs",
-                "content": "content here",
-                "score": 0.95,
-                "source": "semantic",
-            }
+            make_hit(
+                **{
+                    "title": "Test",
+                    "path": "t.md",
+                    "folder": "Docs",
+                    "content": "content here",
+                    "score": 0.95,
+                    "source": "semantic",
+                }
+            )
         ]
         result = format_results(hits)
         assert "0.95" in result
         assert "Similarity" in result
 
     def test_format_results_hybrid_with_rrf(self):
-        from trace_search.retrieval.search import format_results
-
         hits = [
-            {
-                "title": "Test",
-                "path": "t.md",
-                "folder": "Docs",
-                "content": "content",
-                "score": 0.85,
-                "source": "hybrid",
-                "rrf_score": 0.0123,
-            }
+            make_hit(
+                **{
+                    "title": "Test",
+                    "path": "t.md",
+                    "folder": "Docs",
+                    "content": "content",
+                    "score": 0.85,
+                    "source": "hybrid",
+                    "rrf_score": 0.0123,
+                }
+            )
         ]
         result = format_results(hits)
         assert "RRF Score" in result
         assert "0.0123" in result
 
     def test_format_results_truncates_long_content(self):
-        from trace_search.retrieval.search import format_results
-
         long_content = "x" * 600
-        hits = [{"title": "T", "path": "t.md", "folder": "", "content": long_content}]
+        hits = [
+            make_hit(
+                **{"title": "T", "path": "t.md", "folder": "", "content": long_content}
+            )
+        ]
         result = format_results(hits)
         assert "..." in result
         assert long_content not in result
 
     def test_format_results_without_content(self):
-        from trace_search.retrieval.search import format_results
-
-        hits = [{"title": "T", "path": "t.md", "folder": "", "content": "secret"}]
+        hits = [
+            make_hit(
+                **{"title": "T", "path": "t.md", "folder": "", "content": "secret"}
+            )
+        ]
         result = format_results(hits, include_content=False)
         assert "secret" not in result
 
@@ -379,60 +383,68 @@ class TestSemanticSearchCacheStats:
 class TestSemanticLexicalBoost:
     def test_exact_title_gets_larger_boost_than_partial_title(self):
         query = "What are embeddings?"
-        exact = {
-            "title": "Embeddings",
-            "path": "glossary/embeddings.md",
-            "content": "Embeddings turn text into vectors.",
-        }
-        partial = {
-            "title": "Embedding backend",
-            "path": "config/embedding-backend.md",
-            "content": "EMBEDDING_BACKEND config chooses onnx or torch.",
-        }
+        exact = make_hit(
+            **{
+                "title": "Embeddings",
+                "path": "glossary/embeddings.md",
+                "content": "Embeddings turn text into vectors.",
+            }
+        )
+        partial = make_hit(
+            **{
+                "title": "Embedding backend",
+                "path": "config/embedding-backend.md",
+                "content": "EMBEDDING_BACKEND config chooses onnx or torch.",
+            }
+        )
 
         assert _semantic_lexical_boost(
-            query, exact, _extract_rank_terms(exact["content"])
+            query, exact, _extract_rank_terms(exact.content)
         ) > _semantic_lexical_boost(
-            query, partial, _extract_rank_terms(partial["content"])
+            query, partial, _extract_rank_terms(partial.content)
         )
 
     def test_content_overlap_boosts_header_queries(self):
         query = "HTTP 429 Retry-After burst limit"
-        rate_limit = {
-            "title": "Rate limits",
-            "path": "api/rate-limits.md",
-            "content": "HTTP 429 Retry-After burst sustained request limit.",
-        }
-        retryable = {
-            "title": "Retryable errors",
-            "path": "errors/retryable-errors.md",
-            "content": "Retry HTTP 408, 429, and 503 with backoff.",
-        }
+        rate_limit = make_hit(
+            **{
+                "title": "Rate limits",
+                "path": "api/rate-limits.md",
+                "content": "HTTP 429 Retry-After burst sustained request limit.",
+            }
+        )
+        retryable = make_hit(
+            **{
+                "title": "Retryable errors",
+                "path": "errors/retryable-errors.md",
+                "content": "Retry HTTP 408, 429, and 503 with backoff.",
+            }
+        )
 
         assert _semantic_lexical_boost(
-            query, rate_limit, _extract_rank_terms(rate_limit["content"])
+            query, rate_limit, _extract_rank_terms(rate_limit.content)
         ) > _semantic_lexical_boost(
-            query, retryable, _extract_rank_terms(retryable["content"])
+            query, retryable, _extract_rank_terms(retryable.content)
         )
 
 
 class TestFormatResultsPreviewTruncation:
     def test_preview_ends_on_word_boundary(self):
         """Content over 500 chars should be cut at the last space before 500."""
-        from trace_search.retrieval.search import format_results
-
         words = ["word"] * 200
         content = " ".join(words)
         assert len(content) > 500
 
-        hit = {
-            "title": "Test",
-            "path": "test.md",
-            "folder": "",
-            "content": content,
-            "score": 1.0,
-            "source": "keyword",
-        }
+        hit = make_hit(
+            **{
+                "title": "Test",
+                "path": "test.md",
+                "folder": "",
+                "content": content,
+                "score": 1.0,
+                "source": "keyword",
+            }
+        )
         result = format_results([hit])
         preview_start = result.index("**Preview:**\n") + len("**Preview:**\n")
         preview = result[preview_start:].strip().rstrip("\n")
@@ -444,17 +456,17 @@ class TestFormatResultsPreviewTruncation:
         assert " " not in body[-5:] or body[-1] != " "
 
     def test_content_under_500_not_truncated(self):
-        from trace_search.retrieval.search import format_results
-
         content = "short content"
-        hit = {
-            "title": "Test",
-            "path": "test.md",
-            "folder": "",
-            "content": content,
-            "score": 1.0,
-            "source": "keyword",
-        }
+        hit = make_hit(
+            **{
+                "title": "Test",
+                "path": "test.md",
+                "folder": "",
+                "content": content,
+                "score": 1.0,
+                "source": "keyword",
+            }
+        )
         result = format_results([hit])
         assert "short content" in result
         assert "..." not in result

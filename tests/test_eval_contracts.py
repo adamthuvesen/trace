@@ -12,6 +12,7 @@ import yaml
 from click.testing import CliRunner
 from pydantic import ValidationError
 
+from tests.search_hits import make_hit
 from trace_search.config import get_settings
 from tools.eval.battle_royale import load_suite
 from tools.eval.cli import main
@@ -282,8 +283,8 @@ def test_cli_always_uses_scratch_index(monkeypatch, tmp_path):
 
 def test_shipped_top5_path_and_keyword_scope_semantics():
     query = GoldenQuery.from_dict(query_data())
-    hits = [{"path": "other.md", "content": "", "score": 1.0} for _ in range(5)]
-    hits.append({"path": "answer.md", "content": "one two", "score": 1.0})
+    hits = [make_hit("other.md", score=1.0) for _ in range(5)]
+    hits.append(make_hit("answer.md", content="one two", score=1.0))
     searcher = Mock()
     searcher.search.return_value = hits
     result = evaluate_query(query, searcher, "semantic", top_k=10)
