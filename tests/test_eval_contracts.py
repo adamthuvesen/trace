@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -301,6 +302,23 @@ def test_queryset_fingerprint_contains_no_absolute_path_or_mtime():
                 golden_queries_path=FIXTURE_GOLDEN.resolve()
             )
         ]
+    )
+
+
+def test_committed_benchmark_artifacts_contain_no_absolute_home_paths():
+    home_path = re.compile(r"/(?:Users|home)/[^/\s\"]+")
+    leaks = [
+        f"{path}: {match.group()}"
+        for root in (Path("docs/benchmarks"), Path("tools/eval/baselines"))
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+        for match in [home_path.search(path.read_text(errors="replace"))]
+        if match
+    ]
+    assert not leaks, (
+        "Committed benchmark artifacts name a local home path. "
+        "Rerun the evaluation against a public fixture or replace the path "
+        f"with a repository-relative one: {leaks}"
     )
 
 

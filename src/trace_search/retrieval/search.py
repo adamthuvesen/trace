@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, ClassVar
 import numpy as np
 from numpy.typing import NDArray
 
-from trace_search.retrieval.bm25_tokenize import tokenize_keywords
+from trace_search.indexing.bm25_tokenize import tokenize_keywords
 from trace_search.indexing.index_store import ChunkMetadata, IndexSnapshot
 from trace_search.indexing.index_metadata import metadata_query_compatible
 from trace_search.indexing.embeddings import EmbeddingBackend

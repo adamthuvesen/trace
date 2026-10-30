@@ -10,7 +10,7 @@ import pytest
 from tests.test_runtime_hardening import FakeBackend
 from trace_search.collections.collection_registry import CollectionRegistry
 from trace_search.retrieval.search import SemanticSearch
-from trace_search.server.server_warmup import warm_embedding_model
+from trace_search.indexing.embedding_warmup import warm_embedding_model
 
 
 class RecordingBackend(FakeBackend):

@@ -296,7 +296,7 @@ def run_evaluation(
 ) -> EvaluationReport:
     """Run the full evaluation and return a report."""
     from trace_search.retrieval.search import SemanticSearch
-    from trace_search.server.server_warmup import warm_embedding_model
+    from trace_search.indexing.embedding_warmup import warm_embedding_model
 
     from tools.eval.provenance import build_manifest
 
