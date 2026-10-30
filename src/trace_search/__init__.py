@@ -1,10 +1,35 @@
 """Trace - semantic, keyword, and hybrid search over local knowledge bases."""
 
-from typing import Any
+from importlib.metadata import PackageNotFoundError, version
 
-__version__ = "0.3.0"
+from trace_search.collections.collection_registry import (
+    CollectionRegistry as CollectionRegistry,
+)
+from trace_search.config import settings as settings
+from trace_search.indexing.wiki_indexer import WikiIndexer as WikiIndexer
+from trace_search.retrieval.formatting import (
+    format_results as format_results,
+    format_search_context as format_search_context,
+)
+from trace_search.retrieval.search import (
+    AdaptiveSearch as AdaptiveSearch,
+    HybridSearch as HybridSearch,
+    KeywordSearch as KeywordSearch,
+    SemanticSearch as SemanticSearch,
+)
+from trace_search.retrieval.search_types import (
+    AdaptiveSearchResult as AdaptiveSearchResult,
+    ChunkRef as ChunkRef,
+    DocumentRef as DocumentRef,
+    SearchHit as SearchHit,
+    SearchResponse as SearchResponse,
+    SearchFilters as SearchFilters,
+)
 
-from trace_search.config import settings  # noqa: F401
+try:
+    __version__ = version("trace")
+except PackageNotFoundError:
+    __version__ = "0+unknown"
 
 __all__ = [
     "settings",
@@ -17,29 +42,9 @@ __all__ = [
     "format_results",
     "format_search_context",
     "CollectionRegistry",
+    "DocumentRef",
+    "ChunkRef",
+    "SearchHit",
+    "SearchResponse",
+    "SearchFilters",
 ]
-
-
-def __getattr__(name: str) -> Any:
-    """Lazily expose runtime classes without making package import heavy."""
-    if name == "WikiIndexer":
-        from trace_search.indexing.wiki_indexer import WikiIndexer
-
-        return WikiIndexer
-    if name in {
-        "SemanticSearch",
-        "KeywordSearch",
-        "HybridSearch",
-        "AdaptiveSearch",
-        "AdaptiveSearchResult",
-        "format_results",
-        "format_search_context",
-    }:
-        from trace_search.retrieval import search
-
-        return getattr(search, name)
-    if name == "CollectionRegistry":
-        from trace_search.collections.collection_registry import CollectionRegistry
-
-        return CollectionRegistry
-    raise AttributeError(f"module 'trace_search' has no attribute {name!r}")

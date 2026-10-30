@@ -5,10 +5,6 @@ import pytest
 from trace_search.config import settings
 from trace_search.extraction.extractors import (
     SUPPORTED_EXTENSIONS,
-    extract_csv_content,
-    extract_docx_content,
-    extract_pdf_content,
-    extract_pptx_content,
 )
 from trace_search.server.mcp_tools import build_multi_mcp
 
@@ -137,72 +133,30 @@ class TestServerImports:
         assert CollectionRegistry is not None
 
 
-@pytest.mark.slow
-class TestGetDocumentLogic:
-    def test_md_file_extraction(self, wiki_path):
-        md_files = list(wiki_path.rglob("*.md"))
-        if not md_files:
-            pytest.skip("No MD files found in KB")
-        content = md_files[0].read_text(encoding="utf-8")
-        assert isinstance(content, str)
-        assert len(content) > 0
+class TestGetDocumentFormats:
+    @pytest.mark.parametrize(
+        "filename", ["intro.md", "rows.csv", "report.pdf", "report.docx", "report.pptx"]
+    )
+    def test_get_document_extracts_generated_formats(self, document_kb, filename):
+        _, tools = build_multi_mcp("formats", {"documents": document_kb})
 
-    def test_pptx_file_extraction(self, wiki_path):
-        pptx_files = list(wiki_path.rglob("*.pptx"))
-        if not pptx_files:
-            pytest.skip("No PPTX files found in KB")
-        content = extract_pptx_content(pptx_files[0])
-        assert isinstance(content, str)
-        assert "[Slide" in content
+        content = tools["get_document"](filename)
 
-    def test_pdf_file_extraction(self, wiki_path):
-        pdf_files = list(wiki_path.rglob("*.pdf"))
-        if not pdf_files:
-            pytest.skip("No PDF files found in KB")
-        content = extract_pdf_content(pdf_files[0])
-        assert isinstance(content, str)
+        assert "Format fixture" in content
 
-    def test_docx_file_extraction(self, wiki_path):
-        docx_files = list(wiki_path.rglob("*.docx"))
-        if not docx_files:
-            pytest.skip("No DOCX files found in KB")
-        content = extract_docx_content(docx_files[0])
-        assert isinstance(content, str)
+    def test_list_documents_includes_every_generated_format(self, document_kb):
+        _, tools = build_multi_mcp("formats", {"documents": document_kb})
 
-    def test_csv_file_extraction(self, wiki_path):
-        csv_files = list(wiki_path.rglob("*.csv"))
-        if not csv_files:
-            pytest.skip("No CSV files found in KB")
-        try:
-            content = extract_csv_content(csv_files[0])
-            assert isinstance(content, str)
-        except Exception:
-            pytest.skip(f"Could not parse CSV: {csv_files[0]}")
+        content = tools["list_documents"]()
 
-
-@pytest.mark.slow
-class TestListDocumentsLogic:
-    def test_finds_all_formats(self, wiki_path):
-        found_extensions = set()
-        for ext in SUPPORTED_EXTENSIONS:
-            if list(wiki_path.rglob(f"*{ext}")):
-                found_extensions.add(ext)
-        assert ".md" in found_extensions
-
-    def test_list_documents_includes_all_extensions(self, wiki_path):
-        found_exts = set()
-        for ext in SUPPORTED_EXTENSIONS:
-            files = [
-                f
-                for f in wiki_path.rglob(f"*{ext}")
-                if not any(part.startswith(".") for part in f.parts)
-            ]
-            if files:
-                found_exts.add(ext)
-        assert len(found_exts) >= 3, (
-            f"Should find at least 3 file types, found: {found_exts}"
-        )
-        assert ".md" in found_exts
+        for filename in [
+            "intro.md",
+            "rows.csv",
+            "report.pdf",
+            "report.docx",
+            "report.pptx",
+        ]:
+            assert filename in content
 
 
 class TestGetDocumentCodeFiles:
@@ -212,16 +166,14 @@ class TestGetDocumentCodeFiles:
 
 
 class TestGetDocumentErrorEnvelope:
-    def test_unsupported_extension_returns_error_prefix(self, tmp_path):
+    def test_unsupported_extension_raises_tool_error(self, tmp_path):
         (tmp_path / "notes.psd").write_bytes(b"\x00fake")
         _, tools = build_multi_mcp("env-test", {"docs": tmp_path})
 
-        result = tools["get_document"]("notes.psd")
+        from fastmcp.exceptions import ToolError
 
-        assert result.startswith("Error: "), (
-            f"Expected 'Error: ' prefix, got: {result!r}"
-        )
-        assert "Supported" in result
+        with pytest.raises(ToolError, match="Unsupported"):
+            tools["get_document"]("notes.psd")
 
     def test_multi_collection_response_includes_collection_tag(self, tmp_path):
         docs = tmp_path / "docs"
@@ -254,10 +206,10 @@ class TestGetDocumentErrorEnvelope:
 
         _, tools = build_multi_mcp("excluded-doc-test", {"docs": tmp_path})
 
-        result = tools["get_document"]("node_modules/secret.md")
+        from fastmcp.exceptions import ToolError
 
-        assert result == "Document not found: node_modules/secret.md"
-        assert "Should not be readable" not in result
+        with pytest.raises(ToolError, match="Document not found"):
+            tools["get_document"]("node_modules/secret.md")
 
 
 class TestCollectionRebuild:

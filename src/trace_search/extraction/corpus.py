@@ -13,6 +13,7 @@ def iter_kb_files(
     kb_path: Path,
     *,
     root: Path | None = None,
+    exclude_patterns: list[str] | None = None,
 ) -> Iterator[Path]:
     """Yield supported, non-excluded files under a knowledge base.
 
@@ -31,6 +32,6 @@ def iter_kb_files(
         ext = file_path.suffix.lower()
         if ext not in SUPPORTED_EXTENSIONS:
             continue
-        if should_exclude_path(file_path, kb_resolved):
+        if should_exclude_path(file_path, kb_resolved, exclude_patterns):
             continue
         yield file_path

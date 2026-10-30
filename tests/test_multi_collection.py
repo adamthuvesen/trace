@@ -266,12 +266,12 @@ class TestGetDocumentWarning:
 
         reg = CollectionRegistry({"docs": kb})
         with caplog.at_level(
-            logging.WARNING, logger="trace_search.collections.collection_registry"
+            logging.WARNING, logger="trace_search.collections.operations"
         ):
-            result = reg.get_document("../../etc/passwd", "docs")
+            with pytest.raises(RuntimeError, match="Document not found"):
+                reg.get_document("../../etc/passwd", "docs")
 
         assert "rejected traversal" in caplog.text
-        assert "Document not found" in result
 
     def test_extraction_failure_emits_warning(self, tmp_path, caplog):
         import logging
@@ -286,19 +286,18 @@ class TestGetDocumentWarning:
 
         reg = CollectionRegistry({"docs": kb})
         with caplog.at_level(
-            logging.WARNING, logger="trace_search.collections.collection_registry"
+            logging.WARNING, logger="trace_search.collections.operations"
         ):
             with patch(
-                "trace_search.collections.collection_registry.extract_content",
+                "trace_search.collections.operations.extract_content",
                 side_effect=RuntimeError("disk read failed"),
             ):
-                result = reg.get_document("broken.md", "docs")
+                with pytest.raises(RuntimeError, match="disk read failed"):
+                    reg.get_document("broken.md", "docs")
 
         assert "extraction failed" in caplog.text
         assert "broken.md" in caplog.text
         assert "disk read failed" in caplog.text
-        assert result == "Error reading document: broken.md"
-        assert "disk read failed" not in result
 
 
 class TestBuildMultiMcp:

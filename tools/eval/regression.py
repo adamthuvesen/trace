@@ -7,6 +7,7 @@ from pathlib import Path
 
 from tools.eval import load_thresholds
 from tools.eval.models import EvaluationReport, QueryRegression, RegressionReport
+from tools.eval.provenance import comparison_differences
 
 EVAL_DIR = Path(__file__).parent
 BASELINES_DIR = EVAL_DIR / "results" / "baselines"
@@ -21,8 +22,6 @@ def load_baseline(baseline_path: Path) -> EvaluationReport:
 
 def get_latest_baseline(search_mode: str | None = None) -> Path | None:
     """Get the most recent baseline file, optionally filtered by search mode."""
-    BASELINES_DIR.mkdir(parents=True, exist_ok=True)
-
     baselines = list(BASELINES_DIR.glob("*.json"))
     if not baselines:
         return None
@@ -40,8 +39,15 @@ def get_latest_baseline(search_mode: str | None = None) -> Path | None:
 def compare_results(
     current: EvaluationReport,
     baseline: EvaluationReport,
+    *,
+    compare_latency: bool = True,
 ) -> RegressionReport:
     """Compare current results against baseline and detect regressions."""
+    current = EvaluationReport.from_dict(current.to_dict())
+    baseline = EvaluationReport.from_dict(baseline.to_dict())
+    experiment_differences = comparison_differences(
+        current.manifest, baseline.manifest, compare_latency=compare_latency
+    )
     thresholds = load_thresholds()
     reg_thresh = thresholds["regression"]
 
@@ -61,7 +67,7 @@ def compare_results(
     regressed_queries = []
     improved_queries = []
 
-    for query_id in set(current_results.keys()) & set(baseline_results.keys()):
+    for query_id in sorted(current_results):
         curr = current_results[query_id]
         base = baseline_results[query_id]
 
@@ -92,7 +98,10 @@ def compare_results(
     has_regression = (
         top_1_delta < -reg_thresh["top_1_drop_threshold"]
         or top_5_delta < -reg_thresh["top_5_drop_threshold"]
-        or latency_delta_pct > reg_thresh["latency_increase_threshold"]
+        or (
+            compare_latency
+            and latency_delta_pct > reg_thresh["latency_increase_threshold"]
+        )
         or len(regressed_queries) >= reg_thresh["min_regressed_queries"]
     )
 
@@ -111,6 +120,8 @@ def compare_results(
         has_regression=has_regression,
         regressed_queries=regressed_queries,
         improved_queries=improved_queries,
+        experiment_differences=experiment_differences,
+        latency_compared=compare_latency,
     )
 
 
@@ -126,6 +137,11 @@ def check_ci_thresholds(
     Returns:
         Tuple of (passed, list of failure reasons)
     """
+    report = EvaluationReport.from_dict(report.to_dict())
+    if report.manifest is None:
+        raise ValueError(
+            "CI checks require evaluation provenance. Historical reports are readable only."
+        )
     thresholds = load_thresholds()
     stress_cfg = thresholds.get("stress") if stress_subset else None
     if isinstance(stress_cfg, dict):
@@ -198,6 +214,12 @@ def promote_to_baseline(
     report: EvaluationReport, output_path: Path | None = None
 ) -> Path:
     """Promote an evaluation report to be the new baseline."""
+    EvaluationReport.from_dict(report.to_dict())
+    if report.manifest is None:
+        raise ValueError("Cannot promote a report without evaluation provenance")
+    passed, failures = check_ci_thresholds(report, stress_subset=report.stress_only)
+    if not passed:
+        raise ValueError("Cannot promote failed evaluation: " + "; ".join(failures))
     BASELINES_DIR.mkdir(parents=True, exist_ok=True)
 
     if output_path is None:

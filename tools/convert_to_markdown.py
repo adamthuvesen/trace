@@ -1,68 +1,78 @@
 #!/usr/bin/env python3
-"""Convert source documents to a markdown-only mirror.
+"""Convert source documents to a verified markdown mirror.
 
-Creates a clean markdown copy of your knowledge base at .markdown/,
-converting PDFs, Office docs, and spreadsheets while copying existing
-markdown files.
-
-Usage:
-    uv pip install -e ".[convert]"
-    uv run python tools/convert_to_markdown.py --dry-run
-    uv run python tools/convert_to_markdown.py
+Install conversion dependencies with ``uv sync --extra convert``.
+Run with ``uv run python tools/convert_to_markdown.py --help``.
 """
 
 from __future__ import annotations
 
-from collections import Counter
-import logging
+import csv
+import hashlib
 import os
 import shutil
-import sys
+from collections import Counter
+from collections.abc import Callable
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from tempfile import TemporaryDirectory
+from typing import Literal
 
 import click
+from pydantic import BaseModel, ConfigDict, ValidationError
 from rich.console import Console
-from rich.progress import (
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-    BarColumn,
-    TaskProgressColumn,
-)
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-logger = logging.getLogger(__name__)
 console = Console()
+CONVERTER_VERSION = 1
+ConversionStatus = Literal["converted", "copied", "unchanged", "unverified", "failed"]
 
 
 @dataclass
 class ConversionStats:
     converted: int = 0
     copied: int = 0
-    skipped: int = 0
+    unchanged: int = 0
+    unverified: int = 0
     failed: int = 0
     errors: list[tuple[Path, str]] = field(default_factory=list)
 
     @property
     def total(self) -> int:
-        return self.converted + self.copied + self.skipped + self.failed
+        return (
+            self.converted
+            + self.copied
+            + self.unchanged
+            + self.unverified
+            + self.failed
+        )
+
+
+@dataclass(frozen=True)
+class PlannedConversion:
+    source_path: Path
+    destination_path: Path
+    source_sha256: str
+    extension: str
+
+
+@dataclass(frozen=True)
+class ConversionPlan:
+    source_root: Path
+    output_root: Path
+    files: tuple[PlannedConversion, ...]
+
+
+class ConversionProvenance(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    version: int
+    source_path: str
+    source_sha256: str
+    output_sha256: str
 
 
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".csv", ".xlsx", ".md", ".txt"}
-SKIP_EXTENSIONS = {
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".gif",
-    ".svg",
-    ".webp",
-    ".avif",
-    ".mov",
-    ".mp4",
-}
-
 EXCLUDE_PATTERNS = {
     "node_modules",
     ".venv",
@@ -79,29 +89,37 @@ EXCLUDE_PATTERNS = {
 def convert_with_markitdown(input_path: Path, output_path: Path) -> None:
     from markitdown import MarkItDown
 
-    md = MarkItDown()
-    result = md.convert(str(input_path))
+    result = MarkItDown().convert(str(input_path))
     output_path.write_text(result.text_content, encoding="utf-8")
 
 
 def convert_csv_to_markdown(input_path: Path, output_path: Path) -> None:
     import pandas as pd
 
-    df = pd.read_csv(input_path, encoding="utf-8", on_bad_lines="skip")
-    markdown = f"# {input_path.stem}\n\n{df.to_markdown(index=False)}"
+    # Pandas can infer an index from excess fields, silently discarding their meaning.
+    with input_path.open(encoding="utf-8", newline="") as source:
+        rows = csv.reader(source, strict=True)
+        header = next(rows, None)
+        if not header:
+            raise ValueError("CSV must contain a nonempty header")
+        for row in rows:
+            if row and len(row) != len(header):
+                raise ValueError(
+                    f"Malformed CSV at line {rows.line_num}: expected "
+                    f"{len(header)} fields, found {len(row)}"
+                )
+    frame = pd.read_csv(input_path, encoding="utf-8", on_bad_lines="error")
+    markdown = f"# {input_path.stem}\n\n{frame.to_markdown(index=False)}"
     output_path.write_text(markdown, encoding="utf-8")
 
 
 def convert_excel_to_markdown(input_path: Path, output_path: Path) -> None:
-    """One section per sheet."""
     import pandas as pd
 
     sheets = pd.read_excel(input_path, sheet_name=None)
     parts = [f"# {input_path.stem}\n"]
-
-    for sheet_name, df in sheets.items():
-        parts.append(f"\n## {sheet_name}\n\n{df.to_markdown(index=False)}")
-
+    for sheet_name, frame in sheets.items():
+        parts.append(f"\n## {sheet_name}\n\n{frame.to_markdown(index=False)}")
     output_path.write_text("\n".join(parts), encoding="utf-8")
 
 
@@ -110,8 +128,7 @@ def copy_file(input_path: Path, output_path: Path) -> None:
 
 
 def copy_as_markdown(input_path: Path, output_path: Path) -> None:
-    content = input_path.read_text(encoding="utf-8", errors="replace")
-    output_path.write_text(content, encoding="utf-8")
+    output_path.write_text(input_path.read_text(encoding="utf-8"), encoding="utf-8")
 
 
 CONVERTERS: dict[str, Callable[[Path, Path], None]] = {
@@ -139,67 +156,243 @@ def collect_files(
     wiki_path: Path,
     types_filter: set[str] | None = None,
 ) -> list[Path]:
-    files = []
-
+    files: list[Path] = []
     for path in wiki_path.rglob("*"):
-        if not path.is_file():
+        if not path.is_file() or should_exclude(path, wiki_path):
             continue
-
-        if should_exclude(path, wiki_path):
+        extension = path.suffix.lower()
+        if extension not in SUPPORTED_EXTENSIONS:
             continue
-
-        ext = path.suffix.lower()
-        if ext not in SUPPORTED_EXTENSIONS:
+        if types_filter and extension.lstrip(".") not in types_filter:
             continue
-
-        if types_filter and ext.lstrip(".") not in types_filter:
-            continue
-
         files.append(path)
-
     return sorted(files)
 
 
 def get_output_path(input_path: Path, wiki_path: Path, output_dir: Path) -> Path:
-    """Preserve directory structure under output_dir."""
     relative = input_path.relative_to(wiki_path)
     output_path = output_dir / relative
-
     if output_path.suffix.lower() != ".md":
         output_path = output_path.with_suffix(".md")
-
     return output_path
 
 
-def convert_file(
-    input_path: Path,
-    output_path: Path,
-    force: bool = False,
-) -> tuple[str, str | None]:
-    """
-    Convert a single file.
+def fingerprint(path: Path) -> str:
+    with path.open("rb") as source:
+        return hashlib.file_digest(source, "sha256").hexdigest()
 
-    Returns:
-        Tuple of (status, error_message).
-        Status is one of: "converted", "copied", "skipped", "failed"
-    """
-    ext = input_path.suffix.lower()
 
-    if output_path.exists() and not force:
-        return "skipped", None
+def provenance_path(destination: Path) -> Path:
+    return destination.with_name(f".{destination.name}.trace-conversion.json")
 
-    converter = CONVERTERS.get(ext)
-    if not converter:
-        return "skipped", f"No converter for {ext}"
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+def validate_destination(destination: Path, output_root: Path) -> None:
+    if not destination.is_relative_to(output_root):
+        raise ValueError(f"Destination is outside the output directory: {destination}")
+    if not destination.resolve().is_relative_to(output_root):
+        raise ValueError(
+            f"Destination symlink escapes the output directory: {destination}"
+        )
+    for path in (destination, *destination.parents):
+        if path == output_root:
+            break
+        if path.is_symlink():
+            raise ValueError(f"Destination contains a symlink: {path}")
+        if path.exists() and (
+            path.is_dir() if path == destination else not path.is_dir()
+        ):
+            raise ValueError(f"Destination has an incompatible existing path: {path}")
 
+
+def build_conversion_plan(
+    files: list[Path], source_root: Path, output_root: Path
+) -> ConversionPlan:
+    source_root = source_root.expanduser().resolve()
+    output_root = output_root.expanduser().resolve()
+    if not source_root.is_dir():
+        raise ValueError(f"Source path must be a directory: {source_root}")
+    source_inside_output = output_root.exists() and any(
+        path.samefile(output_root) for path in (source_root, *source_root.parents)
+    )
+    output_inside_source = any(
+        path.exists() and path.samefile(source_root)
+        for path in (output_root, *output_root.parents)
+    )
+    if source_inside_output or output_inside_source:
+        raise ValueError("Source and output directories must not overlap")
+    if output_root.exists() and not output_root.is_dir():
+        raise ValueError(f"Output path must be a directory: {output_root}")
+
+    planned: list[PlannedConversion] = []
+    destinations: dict[Path, Path] = {}
+    for input_path in files:
+        lexical_source = input_path.absolute()
+        resolved_source = input_path.resolve(strict=True)
+        if not resolved_source.is_relative_to(source_root):
+            raise ValueError(
+                f"Source symlink escapes the source directory: {input_path}"
+            )
+        destination = get_output_path(lexical_source, source_root, output_root)
+        validate_destination(destination, output_root)
+        validate_destination(provenance_path(destination), output_root)
+        if destination in destinations:
+            raise ValueError(
+                f"Destination collision: {destinations[destination]} and {input_path} "
+                f"both map to {destination}"
+            )
+        destinations[destination] = input_path
+        extension = input_path.suffix.lower()
+        if extension not in CONVERTERS:
+            raise ValueError(f"No converter for {input_path}")
+        planned.append(
+            PlannedConversion(
+                resolved_source, destination, fingerprint(resolved_source), extension
+            )
+        )
+    for destination in destinations:
+        if any(parent in destinations for parent in destination.parents):
+            raise ValueError(
+                f"Destination file conflicts with a directory: {destination}"
+            )
+    validate_filesystem_destinations(planned)
+    return ConversionPlan(source_root, output_root, tuple(planned))
+
+
+def validate_filesystem_destinations(entries: list[PlannedConversion]) -> None:
+    """Check aliases with the destination filesystem's actual naming rules."""
+    # A scratch mirror detects case and Unicode aliases without creating outputs.
+    with ExitStack() as stack:
+        mirrors: dict[tuple[int, int], Path] = {}
+        claimed: dict[tuple[int, int], Path] = {}
+        for entry in entries:
+            for destination in (
+                entry.destination_path,
+                provenance_path(entry.destination_path),
+            ):
+                ancestor = destination.parent
+                while not ancestor.exists():
+                    ancestor = ancestor.parent
+                ancestor_stat = ancestor.stat()
+                directory_identity = (ancestor_stat.st_dev, ancestor_stat.st_ino)
+                mirror = mirrors.get(directory_identity)
+                if mirror is None:
+                    mirror = Path(
+                        stack.enter_context(
+                            TemporaryDirectory(prefix=".trace-plan-", dir=ancestor)
+                        )
+                    )
+                    mirrors[directory_identity] = mirror
+                probe = mirror / destination.relative_to(ancestor)
+                try:
+                    probe.parent.mkdir(parents=True, exist_ok=True)
+                except (FileExistsError, NotADirectoryError) as error:
+                    raise ValueError(
+                        f"Destination file conflicts with a directory: {destination}"
+                    ) from error
+                if probe.exists():
+                    if probe.is_dir():
+                        raise ValueError(
+                            f"Destination file conflicts with a directory: {destination}"
+                        )
+                    identity = probe.stat()
+                    previous = claimed[(identity.st_dev, identity.st_ino)]
+                    raise ValueError(
+                        f"Destination collision: {previous} and {entry.source_path} "
+                        f"both map to {destination} on this filesystem"
+                    )
+                with probe.open("xb"):
+                    pass
+                identity = probe.stat()
+                claimed[(identity.st_dev, identity.st_ino)] = entry.source_path
+
+
+def existing_status(entry: PlannedConversion, force: bool) -> ConversionStatus | None:
+    if force or not entry.destination_path.exists():
+        return None
     try:
-        converter(input_path, output_path)
-        status = "copied" if ext == ".md" else "converted"
-        return status, None
-    except Exception as e:
-        return "failed", str(e)
+        provenance = ConversionProvenance.model_validate_json(
+            provenance_path(entry.destination_path).read_text(encoding="utf-8")
+        )
+    except (OSError, UnicodeError, ValidationError):
+        return "unverified"
+    if provenance.source_path != str(
+        entry.source_path
+    ) or provenance.output_sha256 != fingerprint(entry.destination_path):
+        return "unverified"
+    if (
+        provenance.version == CONVERTER_VERSION
+        and provenance.source_sha256 == entry.source_sha256
+    ):
+        return "unchanged"
+    return None
+
+
+def convert_file(
+    entry: PlannedConversion,
+    plan: ConversionPlan,
+    force: bool = False,
+    dry_run: bool = False,
+) -> tuple[ConversionStatus, str | None]:
+    destination = entry.destination_path
+    try:
+        validate_destination(destination, plan.output_root)
+        validate_destination(provenance_path(destination), plan.output_root)
+        status = existing_status(entry, force)
+        if status == "unverified":
+            return (
+                status,
+                f"Unverified output: {destination}. Use --force to regenerate.",
+            )
+        if status == "unchanged":
+            return status, None
+        success: ConversionStatus = (
+            "copied" if entry.extension == ".md" else "converted"
+        )
+        if dry_run:
+            return success, None
+        if not entry.source_path.resolve(strict=True).is_relative_to(plan.source_root):
+            raise ValueError(
+                f"Source escapes the source directory: {entry.source_path}"
+            )
+        if fingerprint(entry.source_path) != entry.source_sha256:
+            raise ValueError("Source changed after planning. Run the conversion again.")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with TemporaryDirectory(
+            prefix=".trace-convert-", dir=destination.parent
+        ) as name:
+            staging = Path(name)
+            temporary_output = staging / destination.name
+            CONVERTERS[entry.extension](entry.source_path, temporary_output)
+            if fingerprint(entry.source_path) != entry.source_sha256:
+                raise ValueError("Source changed during conversion. Run it again.")
+            provenance = ConversionProvenance(
+                version=CONVERTER_VERSION,
+                source_path=str(entry.source_path),
+                source_sha256=entry.source_sha256,
+                output_sha256=fingerprint(temporary_output),
+            )
+            temporary_provenance = staging / "provenance.json"
+            temporary_provenance.write_text(
+                provenance.model_dump_json(), encoding="utf-8"
+            )
+            validate_destination(destination, plan.output_root)
+            validate_destination(provenance_path(destination), plan.output_root)
+            backup = staging / "previous-output"
+            had_output = destination.exists()
+            if had_output:
+                shutil.copy2(destination, backup)
+            os.replace(temporary_output, destination)
+            try:
+                os.replace(temporary_provenance, provenance_path(destination))
+            except OSError:
+                if had_output:
+                    os.replace(backup, destination)
+                else:
+                    destination.unlink()
+                raise
+        return success, None
+    except Exception as error:
+        return "failed", str(error)
 
 
 def process_files(
@@ -209,67 +402,23 @@ def process_files(
     force: bool,
     dry_run: bool,
 ) -> ConversionStats:
+    plan = build_conversion_plan(files, wiki_path, output_dir)
     stats = ConversionStats()
-
-    if dry_run:
-        for input_path in files:
-            output_path = get_output_path(input_path, wiki_path, output_dir)
-            ext = input_path.suffix.lower()
-
-            if output_path.exists() and not force:
-                stats.skipped += 1
-            elif ext == ".md":
-                stats.copied += 1
-            else:
-                stats.converted += 1
-
-        return stats
-
-    # Process files sequentially (parallel causes recursion issues with marker/markitdown)
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        TextColumn("[progress.percentage]{task.fields[current_file]}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task(
-            "Converting files...", total=len(files), current_file=""
-        )
-
-        for input_path in files:
-            output_path = get_output_path(input_path, wiki_path, output_dir)
-            display_name = (
-                input_path.name[:40] + "..."
-                if len(input_path.name) > 40
-                else input_path.name
-            )
-            progress.update(task, current_file=display_name)
-
-            status, error = convert_file(input_path, output_path, force)
-
-            if status == "converted":
-                stats.converted += 1
-            elif status == "copied":
-                stats.copied += 1
-            elif status == "skipped":
-                stats.skipped += 1
-            elif status == "failed":
-                stats.failed += 1
-                stats.errors.append((input_path, error or "Unknown error"))
-
-            progress.advance(task)
-
+    for entry in plan.files:
+        status, error = convert_file(entry, plan, force, dry_run)
+        if status == "converted":
+            stats.converted += 1
+        elif status == "copied":
+            stats.copied += 1
+        elif status == "unchanged":
+            stats.unchanged += 1
+        elif status == "unverified":
+            stats.unverified += 1
+        else:
+            stats.failed += 1
+        if error:
+            stats.errors.append((entry.source_path, error))
     return stats
-
-
-def write_error_log(output_dir: Path, errors: list[tuple[Path, str]]) -> None:
-    log_path = output_dir / ".errors.log"
-    with log_path.open("w", encoding="utf-8") as f:
-        f.write("# Conversion Errors\n\n")
-        for path, error in errors:
-            f.write(f"## {path}\n{error}\n\n")
 
 
 @click.command()
@@ -285,21 +434,12 @@ def write_error_log(output_dir: Path, errors: list[tuple[Path, str]]) -> None:
     default=None,
     help="Output directory (default: CONVERT_MARKDOWN_OUT or ./markdown-out)",
 )
+@click.option("--dry-run", is_flag=True, help="Preview without converting")
 @click.option(
-    "--dry-run",
-    is_flag=True,
-    help="Preview without converting",
+    "--force", is_flag=True, help="Regenerate outputs, including unverified files"
 )
 @click.option(
-    "--force",
-    is_flag=True,
-    help="Reconvert existing files",
-)
-@click.option(
-    "--types",
-    type=str,
-    default=None,
-    help="Comma-separated file types (e.g., pdf,docx)",
+    "--types", type=str, default=None, help="Comma-separated types (e.g., pdf,docx)"
 )
 def main(
     source_path: Path | None,
@@ -308,65 +448,53 @@ def main(
     force: bool,
     types: str | None,
 ) -> None:
-    """Convert source documents to a markdown-only mirror."""
+    """Convert source documents to a verified markdown mirror."""
     source_path = (
-        source_path
-        or Path(os.environ.get("CONVERT_SOURCE_PATH", "docs-source")).expanduser()
-    ).resolve()
+        (source_path or Path(os.environ.get("CONVERT_SOURCE_PATH", "docs-source")))
+        .expanduser()
+        .resolve()
+    )
     output_dir = (
-        output_dir
-        or Path(os.environ.get("CONVERT_MARKDOWN_OUT", "markdown-out")).expanduser()
-    ).resolve()
-    if not source_path.exists():
-        raise click.UsageError(f"Source path does not exist: {source_path}")
-
+        (output_dir or Path(os.environ.get("CONVERT_MARKDOWN_OUT", "markdown-out")))
+        .expanduser()
+        .resolve()
+    )
+    if not source_path.is_dir():
+        raise click.UsageError(f"Source path must be a directory: {source_path}")
     types_filter = None
     if types:
-        types_filter = {t.strip().lower().lstrip(".") for t in types.split(",")}
-
-    console.print(f"\n[bold]Source path:[/bold] {source_path}")
-    console.print(f"[bold]Output dir:[/bold] {output_dir}")
-
-    if types_filter:
-        console.print(f"[bold]Types:[/bold] {', '.join(sorted(types_filter))}")
-
+        types_filter = {item.strip().lower().lstrip(".") for item in types.split(",")}
+        invalid = types_filter - {
+            extension.lstrip(".") for extension in SUPPORTED_EXTENSIONS
+        }
+        if invalid:
+            raise click.UsageError(
+                f"Unsupported file types: {', '.join(sorted(invalid))}"
+            )
+    console.print(f"Source path: {source_path}", markup=False)
+    console.print(f"Output dir: {output_dir}", markup=False)
     if dry_run:
-        console.print("[yellow]DRY RUN - no files will be modified[/yellow]\n")
-
-    console.print("\nScanning for files...")
-    files = collect_files(source_path, types_filter)
-
-    if not files:
-        console.print("[yellow]No files found to convert.[/yellow]")
-        sys.exit(0)
-
-    by_ext = Counter(path.suffix.lower() for path in files)
-
-    console.print(f"\n[bold]Found {len(files)} files:[/bold]")
-    for ext, count in by_ext.most_common():
-        console.print(f"  {ext}: {count}")
-
-    console.print()
-
-    stats = process_files(files, source_path, output_dir, force, dry_run)
-
-    console.print("\n[bold]Summary:[/bold]")
-    console.print(f"  Converted: {stats.converted}")
-    console.print(f"  Copied:    {stats.copied}")
-    console.print(f"  Skipped:   {stats.skipped}")
-    if stats.failed:
-        console.print(f"  [red]Failed:    {stats.failed}[/red]")
-
-    if stats.errors and not dry_run:
-        write_error_log(output_dir, stats.errors)
-        console.print(f"\n[yellow]Errors logged to: {output_dir}/.errors.log[/yellow]")
-
-    if not dry_run and stats.converted + stats.copied > 0:
-        console.print(
-            f"\n[green]Done![/green] Markdown mirror created at: {output_dir}"
+        console.print("DRY RUN: no files will be modified")
+    try:
+        files = collect_files(source_path, types_filter)
+        stats = process_files(files, source_path, output_dir, force, dry_run)
+    except (OSError, ValueError) as planning_error:
+        raise click.ClickException(str(planning_error)) from planning_error
+    by_extension = Counter(path.suffix.lower() for path in files)
+    console.print(f"Found {len(files)} files: {dict(by_extension)}", markup=False)
+    console.print("Summary:")
+    console.print(f"  Converted:  {stats.converted}")
+    console.print(f"  Copied:     {stats.copied}")
+    console.print(f"  Unchanged:  {stats.unchanged}")
+    console.print(f"  Unverified: {stats.unverified}")
+    console.print(f"  Failed:     {stats.failed}")
+    for path, error in stats.errors:
+        click.echo(f"{path}: {error}", err=True)
+    if stats.failed or stats.unverified:
+        raise click.ClickException(
+            f"Conversion incomplete: {stats.failed} failed, {stats.unverified} unverified. "
+            "Resolve the errors above and retry."
         )
-        console.print("\nTo use with search, set:")
-        console.print(f"  KB_PATH={output_dir}")
 
 
 if __name__ == "__main__":

@@ -13,11 +13,13 @@ from tools.eval.models import (
     RegressionReport,
 )
 
+from tools.eval.thresholds import THRESHOLDS_ADAPTER, Thresholds
+
 EVAL_DIR = Path(__file__).parent
 THRESHOLDS_PATH = EVAL_DIR / "thresholds.yaml"
 
 
-def load_thresholds() -> dict:
+def load_thresholds() -> Thresholds:
     """Load evaluation thresholds from YAML."""
     try:
         with open(THRESHOLDS_PATH) as f:
@@ -30,7 +32,7 @@ def load_thresholds() -> dict:
     if not isinstance(data, dict):
         raise ValueError("thresholds.yaml must contain a dictionary")
 
-    return data
+    return THRESHOLDS_ADAPTER.validate_python(data)
 
 
 __all__ = [

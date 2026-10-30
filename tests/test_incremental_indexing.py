@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from tests.test_runtime_hardening import FakeBackend
-from trace_search.config import settings
+from trace_search.config import get_settings
 from trace_search.indexing.index_metadata import INDEX_METADATA_VERSION
 from trace_search.indexing.index_store import read_current, read_current_metadata
 from trace_search.indexing.wiki_indexer import WikiIndexer
@@ -215,7 +215,8 @@ def test_embedding_model_mismatch_promotes_to_full_rebuild(kb_paths):
 
     meta = read_current_metadata(index_root)
     assert meta is not None
-    assert meta.embedding_model == settings.embedding_model
+    assert meta.embedding_model == "fake"
+    assert meta.embedding_dims == 3
 
 
 def test_chunk_size_change_rechunks_unchanged_files(kb_paths, monkeypatch):
@@ -226,8 +227,12 @@ def test_chunk_size_change_rechunks_unchanged_files(kb_paths, monkeypatch):
     _make_indexer(kb, index_root).build_index(force=True)
     coarse = len(_make_indexer(kb, index_root).snapshot())
 
-    monkeypatch.setattr(settings, "char_chunk_size", 400, raising=False)
-    fresh = _make_indexer(kb, index_root)
+    fresh = WikiIndexer(
+        kb,
+        index_root,
+        backend=FakeBackend(),
+        config=get_settings().model_copy(update={"char_chunk_size": 400}),
+    )
     fresh.build_index()
 
     assert len(fresh.snapshot()) > coarse

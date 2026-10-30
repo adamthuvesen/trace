@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from tools.eval import load_thresholds
+from tools.eval.thresholds import AccuracyThresholds, LatencyThresholds
 
 if TYPE_CHECKING:
     from tools.eval.models import EvaluationReport
@@ -38,6 +39,18 @@ def get_latency_status(
         return "!"
     else:
         return "✗"
+
+
+def _report_thresholds(
+    report: EvaluationReport,
+) -> tuple[AccuracyThresholds, AccuracyThresholds, LatencyThresholds]:
+    thresholds = load_thresholds()
+    stress = thresholds.get("stress", {}) if report.stress_only else {}
+    return (
+        stress.get("path_accuracy", thresholds["path_accuracy"]),
+        stress.get("keyword_accuracy", thresholds["keyword_accuracy"]),
+        stress.get("latency", thresholds["latency"]),
+    )
 
 
 def generate_json_report(report: EvaluationReport) -> str:
@@ -80,8 +93,8 @@ def _append_markdown_run_flags(lines: list[str], report: EvaluationReport) -> No
 def _append_markdown_overall_metrics(
     lines: list[str],
     report: EvaluationReport,
-    path_thresh: dict,
-    keyword_thresh: dict,
+    path_thresh: AccuracyThresholds,
+    keyword_thresh: AccuracyThresholds,
 ) -> None:
     t1_path_status = get_status_indicator(
         report.top_1_path_accuracy,
@@ -128,7 +141,7 @@ def _append_markdown_overall_metrics(
 def _append_markdown_latency(
     lines: list[str],
     report: EvaluationReport,
-    latency_thresh: dict,
+    latency_thresh: LatencyThresholds,
 ) -> None:
     lines.extend(
         [
@@ -201,6 +214,8 @@ def _append_markdown_regression(lines: list[str], report: EvaluationReport) -> N
                 "",
                 f"**Baseline:** {reg.baseline_timestamp}",
                 f"**Has Regression:** {'Yes' if reg.has_regression else 'No'}",
+                f"**Latency regression gate:** {'enabled' if reg.latency_compared else 'disabled (quality-only comparison)'}",
+                f"**Experiment differences:** {', '.join(reg.experiment_differences) or 'none'}",
                 "",
                 "| Metric | Baseline | Current | Delta |",
                 "|--------|----------|---------|-------|",
@@ -264,7 +279,7 @@ def _append_markdown_failures(lines: list[str], report: EvaluationReport) -> Non
 
 def generate_markdown_report(report: EvaluationReport) -> str:
     """Generate markdown report for human review."""
-    thresholds = load_thresholds()
+    path_thresholds, keyword_thresholds, latency_thresholds = _report_thresholds(report)
     lines: list[str] = []
 
     _append_markdown_header(lines, report)
@@ -272,10 +287,10 @@ def generate_markdown_report(report: EvaluationReport) -> str:
     _append_markdown_overall_metrics(
         lines,
         report,
-        thresholds["path_accuracy"],
-        thresholds["keyword_accuracy"],
+        path_thresholds,
+        keyword_thresholds,
     )
-    _append_markdown_latency(lines, report, thresholds["latency"])
+    _append_markdown_latency(lines, report, latency_thresholds)
     _append_markdown_category_metrics(lines, report)
     _append_markdown_file_type_metrics(lines, report)
     _append_markdown_regression(lines, report)
@@ -327,8 +342,8 @@ def _console_status_str(
 def _append_console_accuracy(
     lines: list[str],
     report: EvaluationReport,
-    path_thresh: dict,
-    keyword_thresh: dict,
+    path_thresh: AccuracyThresholds,
+    keyword_thresh: AccuracyThresholds,
 ) -> None:
     lines.extend(
         [
@@ -419,7 +434,9 @@ def _append_console_regression(lines: list[str], report: EvaluationReport) -> No
                 f"Status:   {'REGRESSION DETECTED' if reg.has_regression else 'OK'}",
                 f"Top-1 Delta: {reg.top_1_delta:+.1%}",
                 f"Top-5 Delta: {reg.top_5_delta:+.1%}",
-                f"Latency Delta: {reg.latency_delta_pct:+.0%}",
+                f"Latency Delta: {reg.latency_delta_pct:+.0%}"
+                + ("" if reg.latency_compared else " (reported only)"),
+                f"Experiment differences: {', '.join(reg.experiment_differences) or 'none'}",
             ]
         )
 
@@ -436,15 +453,15 @@ def _append_console_regression(lines: list[str], report: EvaluationReport) -> No
 
 def generate_console_report(report: EvaluationReport) -> str:
     """Generate colored console report."""
-    thresholds = load_thresholds()
+    path_thresholds, keyword_thresholds, _ = _report_thresholds(report)
     lines: list[str] = []
 
     _append_console_header(lines, report)
     _append_console_accuracy(
         lines,
         report,
-        thresholds["path_accuracy"],
-        thresholds["keyword_accuracy"],
+        path_thresholds,
+        keyword_thresholds,
     )
     _append_console_latency(lines, report)
     _append_console_category_metrics(lines, report)

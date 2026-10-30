@@ -10,7 +10,7 @@ from typing import Protocol, TypeAlias, runtime_checkable
 import numpy as np
 from numpy.typing import NDArray
 
-from trace_search.config import settings
+from trace_search.config import MODEL_SPECS, Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -57,13 +57,6 @@ class EmbeddingBackend(Protocol):
     def encode_one(self, text: str) -> EmbeddingArray: ...
 
 
-# fastembed uses HF-prefixed names; map our canonical keys to its identifiers.
-_FASTEMBED_MODEL_MAP: dict[str, str] = {
-    "all-MiniLM-L6-v2": "sentence-transformers/all-MiniLM-L6-v2",
-    "BAAI/bge-base-en-v1.5": "BAAI/bge-base-en-v1.5",
-}
-
-
 # ONNX Runtime keeps the arena it grows for the largest batch, so a big batch
 # during a full rebuild pins memory in a long-lived server: embedding a 3,200-chunk wiki
 # peaked at 2.4 GB with fastembed's default of 256 and 0.4 GB with 16, at the
@@ -80,14 +73,14 @@ class OnnxBackend:
         os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
         from fastembed import TextEmbedding
 
-        if model_name not in _FASTEMBED_MODEL_MAP:
+        if model_name not in MODEL_SPECS:
             raise ValueError(
                 f"Model '{model_name}' is not supported. "
-                f"Supported: {list(_FASTEMBED_MODEL_MAP)}."
+                f"Supported: {list(MODEL_SPECS)}."
             )
         self.model_name = model_name
         self._model = TextEmbedding(
-            model_name=_FASTEMBED_MODEL_MAP[model_name],
+            model_name=MODEL_SPECS[model_name].runtime_identifier,
             cache_dir=str(model_cache_dir()),
         )
         probe = next(iter(self._model.embed(["probe"])))
@@ -103,8 +96,8 @@ class OnnxBackend:
         return np.asarray(self.encode([text])[0], dtype=np.float32)
 
 
-def build_embedding_backend() -> EmbeddingBackend:
+def build_embedding_backend(config: Settings | None = None) -> EmbeddingBackend:
     """Construct the ONNX embedding backend for `settings.embedding_model`."""
-    impl = OnnxBackend(settings.embedding_model)
+    impl = OnnxBackend((config or get_settings()).embedding_model)
     logger.info("Embedding backend: onnx (model=%s, dim=%d)", impl.model_name, impl.dim)
     return impl

@@ -4,11 +4,29 @@ from __future__ import annotations
 
 from pathlib import Path
 from collections.abc import Callable
+from functools import wraps
+from typing import ParamSpec
 
 from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
 
 from trace_search.collections.collection_registry import CollectionRegistry
+from trace_search.collections.errors import OperationError
 from trace_search.collections.operations import TraceOperations
+from trace_search.config import Settings
+
+P = ParamSpec("P")
+
+
+def _tool_errors(operation: Callable[P, str]) -> Callable[P, str]:
+    @wraps(operation)
+    def call(*args: P.args, **kwargs: P.kwargs) -> str:
+        try:
+            return operation(*args, **kwargs)
+        except (OperationError, ValueError) as error:
+            raise ToolError(str(error)) from error
+
+    return call
 
 
 def _build_multi_instructions(collection_names: list[str]) -> str:
@@ -38,17 +56,20 @@ def build_multi_mcp(
     collections: dict[str, Path],
     index_root: Path | None = None,
     instructions: str | None = None,
+    *,
+    config: Settings | None = None,
 ) -> tuple[FastMCP, dict[str, Callable[..., str]]]:
     """Build a server and return its registered tool functions for direct use."""
-    registry = CollectionRegistry(collections, index_root)
+    registry = CollectionRegistry(collections, index_root, config=config)
     operations = TraceOperations(registry)
 
     if instructions is None:
         instructions = _build_multi_instructions(registry.collection_names)
 
-    mcp = FastMCP(server_name, instructions=instructions)
+    mcp = FastMCP(server_name, instructions=instructions, strict_input_validation=True)
 
     @mcp.tool()
+    @_tool_errors
     def search(
         query: str,
         top_k: int = 10,
@@ -72,6 +93,7 @@ def build_multi_mcp(
         )
 
     @mcp.tool()
+    @_tool_errors
     def semantic_search(
         query: str,
         top_k: int = 10,
@@ -91,6 +113,7 @@ def build_multi_mcp(
         )
 
     @mcp.tool()
+    @_tool_errors
     def keyword_search(
         keyword: str,
         max_results: int = 20,
@@ -110,6 +133,7 @@ def build_multi_mcp(
         )
 
     @mcp.tool()
+    @_tool_errors
     def search_hybrid(
         query: str,
         top_k: int = 10,
@@ -129,11 +153,13 @@ def build_multi_mcp(
         )
 
     @mcp.tool()
+    @_tool_errors
     def get_document(path: str, collection: str | None = None) -> str:
         """Retrieve full content of a document. Set `collection` to disambiguate."""
         return operations.get_document(path, collection)
 
     @mcp.tool()
+    @_tool_errors
     def list_documents(
         folder: str | None = None,
         limit: int = 50,
@@ -153,16 +179,19 @@ def build_multi_mcp(
         )
 
     @mcp.tool()
+    @_tool_errors
     def index_stats(collection: str | None = None) -> str:
         """Get statistics about search indexes. Set `collection` for a specific one."""
         return operations.index_stats(collection)
 
     @mcp.tool()
+    @_tool_errors
     def reindex(collection: str | None = None, force: bool = False) -> str:
         """Update search indexes after adding or changing documents."""
         return operations.reindex(collection, force=force)
 
     @mcp.tool()
+    @_tool_errors
     def doctor(
         sample_query: str | None = None,
         collection: str | None = None,

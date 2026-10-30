@@ -1,5 +1,6 @@
 """Tests for Trace doctor diagnostics."""
 
+from dataclasses import replace
 import json
 from pathlib import Path
 
@@ -29,11 +30,12 @@ from trace_search.indexing.kb_paths import get_default_index_root
 
 def _publish_metadata(index_root: Path, metadata: IndexMetadata) -> Path:
     """Publish an empty generation carrying `metadata`; return its metadata file."""
+    metadata = replace(metadata, chunk_count=0, document_count=0)
     snapshot = IndexSnapshot.build(
         chunk_ids=[],
         texts=[],
         chunks=[],
-        embeddings=np.empty((0, 3), dtype=np.float32),
+        embeddings=np.empty((0, metadata.embedding_dims), dtype=np.float32),
         k1=settings.bm25_k1,
         b=settings.bm25_b,
         metadata=metadata,
@@ -285,7 +287,7 @@ def test_diagnose_collections_runs_sample_query_probe(tmp_path):
     )
     rendered = render_doctor_report(report)
 
-    assert report.ok
+    assert not report.ok  # The missing index still requires reindex.
     assert report.probe is not None
     assert report.probe.status == "ok"
     assert "Top result" in rendered
@@ -315,7 +317,7 @@ def test_registry_probe_skips_missing_indexes(tmp_path):
     kb.mkdir()
     registry = CollectionRegistry({"docs": kb})
 
-    with pytest.raises(ValueError, match="indexes are missing"):
+    with pytest.raises(RuntimeError, match="indexes are missing"):
         registry.probe_search("intro", 5, None)
 
 
@@ -343,7 +345,11 @@ def test_registry_probe_skips_incompatible_indexes(tmp_path):
     )
     _publish_metadata(col.index_path, mismatched)
 
-    with pytest.raises(ValueError, match="indexes are incompatible"):
+    from tests.test_runtime_hardening import FakeBackend
+
+    registry._backend = FakeBackend()
+    registry._warmed = True
+    with pytest.raises(RuntimeError, match="indexes are incompatible"):
         registry.probe_search("intro", 5, "docs")
 
 

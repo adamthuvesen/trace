@@ -6,7 +6,7 @@ import re
 from collections import defaultdict
 from typing import Any
 
-from trace_search.retrieval.search_types import SearchRoute
+from trace_search.retrieval.search_types import SearchRoute, SearchResponse
 
 
 def _query_terms(query: str) -> list[str]:
@@ -123,11 +123,14 @@ def _group_hits_by_document(
     sorted_hits: list[dict[str, Any]],
     *,
     max_documents: int,
+    preserve_order: bool = False,
 ) -> list[list[dict[str, Any]]]:
     grouped: dict[tuple[str | None, str], list[dict[str, Any]]] = defaultdict(list)
     for hit in sorted_hits:
         grouped[(hit.get("collection"), str(hit.get("path", "")))].append(hit)
 
+    if preserve_order:
+        return list(grouped.values())[:max_documents]
     return sorted(
         grouped.values(),
         key=lambda group: max(_score_for_sort(hit) for hit in group),
@@ -231,7 +234,7 @@ def _append_document_group(
 
 
 def format_search_context(
-    hits: list[dict[str, Any]],
+    hits: list[dict[str, Any]] | SearchResponse,
     *,
     query: str,
     route: SearchRoute | None = None,
@@ -239,16 +242,23 @@ def format_search_context(
     max_snippets_per_document: int = 2,
 ) -> str:
     """Render grouped search context for agents."""
+    preserve_order = isinstance(hits, SearchResponse)
+    if isinstance(hits, SearchResponse):
+        route = hits.route
+        hits = hits.legacy_hits()
     if not hits:
         return _format_empty_results(route)
 
-    sorted_hits = sorted(hits, key=_score_for_sort, reverse=True)
+    sorted_hits = (
+        hits if preserve_order else sorted(hits, key=_score_for_sort, reverse=True)
+    )
     lines = [f"Found {len(hits)} results"]
     _append_route_summary(lines, route)
 
     document_groups = _group_hits_by_document(
         sorted_hits,
         max_documents=max_documents,
+        preserve_order=preserve_order,
     )
     lines.extend(["", "## Context"])
     global_seen: set[tuple[str | None, str]] = set()

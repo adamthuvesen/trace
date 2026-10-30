@@ -8,18 +8,18 @@ import math
 import re
 import threading
 from collections import OrderedDict, defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
-from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 from numpy.typing import NDArray
 
 from trace_search.retrieval.bm25_tokenize import tokenize_keywords
-from trace_search.config import settings
 from trace_search.indexing.index_store import ChunkMetadata, IndexSnapshot
-from trace_search.retrieval.hit_builders import chunk_hit
+from trace_search.indexing.index_metadata import metadata_query_compatible
+from trace_search.indexing.embeddings import EmbeddingBackend
+from trace_search.retrieval.hit_builders import typed_chunk_hit
 from trace_search.retrieval.formatting import (  # noqa: F401 - package re-exports
     _query_terms,
     format_results,
@@ -31,9 +31,14 @@ from trace_search.retrieval.query_profile import (
     is_keywordish_query,
 )
 from trace_search.retrieval.search_types import (
-    AdaptiveSearchResult,
+    AdaptiveSearchResult as AdaptiveSearchResult,
     SearchResult,
-    SearchRoute,
+    SearchRoute as SearchRoute,
+    SearchFilters as SearchFilters,
+    SearchHit,
+    SearchResponse,
+    DocumentRef,
+    parse_filters as parse_filters,
 )
 
 if TYPE_CHECKING:
@@ -86,138 +91,6 @@ def _clamp_top_k(top_k: int, default: int = 10, max_val: int = 100) -> int:
     return min(top_k, max_val)
 
 
-@dataclass(frozen=True)
-class SearchFilters:
-    """Optional scope filters applied across all search modes.
-
-    Filters are evaluated before ranking as a row mask over the index snapshot:
-    BM25 receives it as a weight mask and vector search skips masked rows. The
-    empty `SearchFilters()` is a no-op.
-    """
-
-    path_prefix: tuple[str, ...] = ()
-    extensions: tuple[str, ...] = ()
-    since: datetime | None = None
-
-    @property
-    def is_empty(self) -> bool:
-        return not self.path_prefix and not self.extensions and self.since is None
-
-    def describe(self) -> str:
-        """Human-readable summary of active filters; empty string if none."""
-        parts: list[str] = []
-        if self.path_prefix:
-            joined = ", ".join(self.path_prefix)
-            parts.append(f"path_prefix={joined}")
-        if self.extensions:
-            parts.append(f"extensions={', '.join(self.extensions)}")
-        if self.since is not None:
-            parts.append(f"since={self.since.isoformat()}")
-        return "; ".join(parts)
-
-    def matches_record(
-        self,
-        rel_path: str,
-        extension: str,
-        mtime: float | None,
-    ) -> bool:
-        """Return whether a file or hit record satisfies all active filters."""
-        if self.is_empty:
-            return True
-        if self.path_prefix and not any(
-            rel_path.startswith(prefix) for prefix in self.path_prefix
-        ):
-            return False
-        if self.extensions and extension not in self.extensions:
-            return False
-        if self.since is not None:
-            since_epoch = self.since.timestamp()
-            if mtime is None or mtime < since_epoch:
-                return False
-        return True
-
-
-def _normalize_extension(value: str) -> str:
-    """Lowercase and ensure leading dot. Raises ValueError on empty input."""
-    cleaned = value.strip().lower()
-    if not cleaned:
-        raise ValueError("Extension must be non-empty, e.g. '.md'")
-    return cleaned if cleaned.startswith(".") else f".{cleaned}"
-
-
-def _split_extensions(values: list[str] | tuple[str, ...]) -> tuple[str, ...]:
-    """Normalize extension lists, allowing comma-separated entries per item."""
-    normalized: list[str] = []
-    for value in values:
-        normalized.extend(_normalize_extension(item) for item in value.split(","))
-    return tuple(normalized)
-
-
-def _parse_path_prefixes(
-    path_prefix: str | list[str] | tuple[str, ...] | None,
-) -> tuple[str, ...]:
-    if path_prefix is None or path_prefix == "":
-        return ()
-    if isinstance(path_prefix, str):
-        return (path_prefix,)
-    return tuple(prefix for prefix in path_prefix if prefix)
-
-
-def _parse_extensions(
-    extensions: str | list[str] | tuple[str, ...] | None,
-) -> tuple[str, ...]:
-    if extensions is None or extensions == "":
-        return ()
-    if isinstance(extensions, str):
-        return _split_extensions((extensions,))
-    return _split_extensions(extensions)
-
-
-def _parse_since(since: str | datetime | None) -> datetime | None:
-    if since is None or since == "":
-        return None
-
-    if isinstance(since, datetime):
-        parsed_since = since
-    elif isinstance(since, str):
-        try:
-            parsed_since = datetime.fromisoformat(since)
-        except ValueError as exc:
-            raise ValueError(
-                f"Invalid `since` value {since!r}: expected ISO 8601 "
-                "datetime (e.g. 2026-01-01T00:00:00Z)"
-            ) from exc
-    else:
-        raise ValueError(
-            f"Invalid `since` value: expected ISO 8601 string or datetime, "
-            f"got {type(since).__name__}"
-        )
-
-    if parsed_since.tzinfo is None:
-        return parsed_since.replace(tzinfo=UTC)
-    return parsed_since
-
-
-def parse_filters(
-    path_prefix: str | list[str] | tuple[str, ...] | None = None,
-    extensions: str | list[str] | tuple[str, ...] | None = None,
-    since: str | datetime | None = None,
-) -> SearchFilters:
-    """Normalize and validate filter inputs.
-
-    - `path_prefix` accepts a string or a list/tuple of strings.
-    - `extensions` accepts a list/tuple, or a comma-separated string for CLI use.
-      Entries are lowercased and gain a leading dot if missing.
-    - `since` accepts an ISO 8601 datetime string or a `datetime`. Naive
-      datetimes are assumed to be UTC. Invalid input raises ``ValueError``.
-    """
-    return SearchFilters(
-        path_prefix=_parse_path_prefixes(path_prefix),
-        extensions=_parse_extensions(extensions),
-        since=_parse_since(since),
-    )
-
-
 def _normalize_rank_term(term: str) -> str:
     term = term.lower()
     return term[:-1] if len(term) > 3 and term.endswith("s") else term
@@ -246,14 +119,15 @@ def _rank_terms(text: str, *, remove_stopwords: bool = False) -> frozenset[str]:
 
 
 def _semantic_lexical_boost(
-    query: str, hit: dict[str, Any], content_terms: frozenset[str]
+    query: str, hit: SearchHit | SearchResult, content_terms: frozenset[str]
 ) -> float:
     """Small deterministic boost for exact lexical anchors in semantic results."""
+    hit = SearchHit.from_dict(hit) if isinstance(hit, dict) else hit
     query_terms = _rank_terms(query, remove_stopwords=True)
     if not query_terms:
         return 0.0
 
-    path_terms = _rank_terms(str(hit.get("path", "")))
+    path_terms = _rank_terms(hit.path)
 
     # A page's aliases are names just like its title.
     boost = max(
@@ -281,30 +155,30 @@ def _semantic_lexical_boost(
     return min(boost, 0.30)
 
 
-def _metadata_overlap(query_terms: frozenset[str], hit: dict[str, Any]) -> float:
+def _metadata_overlap(query_terms: frozenset[str], hit: SearchHit) -> float:
     if not query_terms:
         return 0.0
     metadata_terms = (
-        _rank_terms(str(hit.get("title", "")))
-        | _rank_terms(str(hit.get("path", "")))
-        | _rank_terms(str(hit.get("breadcrumb", "")))
-        | _rank_terms(str(hit.get("folder", "")))
-        | _rank_terms(str(hit.get("aliases", "")))
+        _rank_terms(hit.metadata["title"])
+        | _rank_terms(hit.path)
+        | _rank_terms(hit.metadata["breadcrumb"])
+        | _rank_terms(hit.metadata["folder"])
+        | _rank_terms(hit.metadata.get("aliases", ""))
     )
     if not metadata_terms:
         return 0.0
     return len(query_terms & metadata_terms) / len(query_terms)
 
 
-def _page_names(hit: dict[str, Any]) -> list[frozenset[str]]:
+def _page_names(hit: SearchHit) -> list[frozenset[str]]:
     """Term sets of a page's title and each of its aliases."""
-    names = [str(hit.get("title", "")), *str(hit.get("aliases", "")).split(";")]
+    names = [hit.metadata["title"], *hit.metadata.get("aliases", "").split(";")]
     return [
         terms for name in names if (terms := _rank_terms(name, remove_stopwords=True))
     ]
 
 
-def _query_names_page(query_terms: frozenset[str], hit: dict[str, Any]) -> bool:
+def _query_names_page(query_terms: frozenset[str], hit: SearchHit) -> bool:
     """Whether the query is essentially one of the page's names.
 
     A navigational query ("internal tools overview", an alias like "hobby
@@ -319,9 +193,11 @@ def _query_names_page(query_terms: frozenset[str], hit: dict[str, Any]) -> bool:
     )
 
 
-def _status_factor(hit: dict[str, Any]) -> float:
+def _status_factor(hit: SearchHit) -> float:
     """Demotion factor for pages marked as replaced by a newer page."""
-    return _REPLACED_DEMOTION if hit.get("status") in _REPLACED_STATUSES else 1.0
+    return (
+        _REPLACED_DEMOTION if hit.metadata.get("status") in _REPLACED_STATUSES else 1.0
+    )
 
 
 def _keyword_fetch_size(max_results: int) -> int:
@@ -358,7 +234,7 @@ def _is_navigational_hub(path: str) -> bool:
 
 @dataclass
 class _KeywordHitGroup:
-    best_hit: dict[str, Any]
+    best_hit: SearchHit
     best_score: float
     metadata_overlap: float
     names_query: bool = False
@@ -366,7 +242,7 @@ class _KeywordHitGroup:
 
     def add_hit(
         self,
-        hit: dict[str, Any],
+        hit: SearchHit,
         *,
         score: float,
         metadata_overlap: float,
@@ -396,28 +272,32 @@ class _KeywordHitGroup:
 
         if self.names_query:
             score += best * _NAME_MATCH_GAIN
-        elif _is_navigational_hub(str(self.best_hit.get("path", ""))):
+        elif _is_navigational_hub(self.best_hit.path):
             score *= _HUB_DEMOTION
         return score * _status_factor(self.best_hit)
 
-    def to_hit(self, file_score: float) -> dict[str, Any]:
-        hit = dict(self.best_hit)
-        hit["bm25_chunk_score"] = self.best_score
-        hit["bm25_file_score"] = file_score
-        hit["bm25_file_support"] = len(self.chunk_scores)
-        hit["bm25_metadata_overlap"] = self.metadata_overlap
-        hit["score"] = file_score
-        return hit
+    def to_hit(self, file_score: float) -> SearchHit:
+        return replace(
+            self.best_hit,
+            evidence=replace(
+                self.best_hit.evidence,
+                score=file_score,
+                bm25_chunk_score=self.best_score,
+                bm25_file_score=file_score,
+                bm25_file_support=len(self.chunk_scores),
+                bm25_metadata_overlap=self.metadata_overlap,
+            ),
+        )
 
 
 def _aggregate_keyword_hits(
     query: str,
-    hits: list[dict[str, Any]],
+    hits: list[SearchHit],
     max_results: int,
     *,
     corpus_size: int,
     require_anchor_for_weak_hits: bool = True,
-) -> list[dict[str, Any]]:
+) -> list[SearchHit]:
     """Promote files with multiple good chunks while returning one hit per file."""
     if not hits:
         return []
@@ -425,10 +305,10 @@ def _aggregate_keyword_hits(
     query_terms = _rank_terms(query, remove_stopwords=True)
     grouped: dict[str, _KeywordHitGroup] = {}
     for hit in hits:
-        path = str(hit.get("path", ""))
+        path = hit.path
         if not path:
             continue
-        score = float(hit.get("score", 0.0) or 0.0)
+        score = hit.evidence.score
         overlap = _metadata_overlap(query_terms, hit)
         group = grouped.get(path)
         if group is None:
@@ -442,7 +322,7 @@ def _aggregate_keyword_hits(
         group.add_hit(hit, score=score, metadata_overlap=overlap)
 
     weak_score = _weak_file_score(corpus_size)
-    ranked: list[tuple[float, int, dict[str, Any]]] = []
+    ranked: list[tuple[float, int, SearchHit]] = []
     for order, group in enumerate(grouped.values()):
         file_score = group.file_score()
 
@@ -462,10 +342,10 @@ def _aggregate_keyword_hits(
 class SemanticSearch:
     """Exact cosine search over the snapshot's normalized embedding matrix."""
 
-    # Class-level LRU cache keyed by (model_slug, query) to prevent cross-model collisions
-    _embedding_cache: ClassVar[OrderedDict[tuple[str, str], NDArray[np.float32]]] = (
-        OrderedDict()
-    )
+    # Backend ownership prevents injected runtimes from sharing incompatible vectors.
+    _embedding_cache: ClassVar[
+        OrderedDict[tuple[int, str], tuple[EmbeddingBackend, NDArray[np.float32]]]
+    ] = OrderedDict()
     _cache_hits: ClassVar[int] = 0
     _cache_misses: ClassVar[int] = 0
     _cache_maxsize: ClassVar[int] = 1000
@@ -476,27 +356,29 @@ class SemanticSearch:
     def __init__(self, indexer: WikiIndexer):
         """Initialize semantic search over an indexer's current snapshot."""
         self.indexer = indexer
-        self._model_slug = settings.model_slug
 
     def _get_query_embedding(self, query: str) -> NDArray[np.float32]:
-        """Get the normalized query embedding, cached by (model_slug, query)."""
-        cache_key = (self._model_slug, query)
+        """Get the normalized query embedding, cached by backend ownership and query."""
+        backend = self.indexer.backend
+        cache_key = (id(backend), query)
         with self._cache_lock:
             cached = self._embedding_cache.get(cache_key)
             if cached is not None:
                 SemanticSearch._cache_hits += 1
                 self._embedding_cache.move_to_end(cache_key)
-                return cached
+                return cached[1]
             SemanticSearch._cache_misses += 1
 
-        vector = np.asarray(self.indexer.backend.encode_one(query), dtype=np.float32)
+        vector = np.asarray(backend.encode_one(query), dtype=np.float32)
+        if vector.ndim != 1 or not np.isfinite(vector).all():
+            raise ValueError("Embedding backend returned an invalid query vector")
         norm = float(np.linalg.norm(vector))
         embedding = vector / norm if norm else vector
 
         with self._cache_lock:
             if len(self._embedding_cache) >= self._cache_maxsize:
                 self._embedding_cache.popitem(last=False)
-            self._embedding_cache[cache_key] = embedding
+            self._embedding_cache[cache_key] = (backend, embedding)
         return embedding
 
     @classmethod
@@ -519,6 +401,15 @@ class SemanticSearch:
         filters: SearchFilters | None = None,
         snapshot: IndexSnapshot | None = None,
     ) -> list[SearchResult]:
+        return [hit.to_dict() for hit in self.rank(query, top_k, filters, snapshot)]
+
+    def rank(
+        self,
+        query: str,
+        top_k: int = 10,
+        filters: SearchFilters | None = None,
+        snapshot: IndexSnapshot | None = None,
+    ) -> list[SearchHit]:
         """Search by semantic similarity, optionally scoped by filters."""
         if not query or not query.strip():
             return []
@@ -529,7 +420,18 @@ class SemanticSearch:
         if not len(snapshot):
             return []
 
-        scores = snapshot.embeddings @ self._get_query_embedding(query)
+        if snapshot.metadata is not None and not metadata_query_compatible(
+            snapshot.metadata, self.indexer.config, self.indexer.backend
+        ):
+            raise ValueError(
+                "Index embedding backend is incompatible. Run `reindex` before semantic search."
+            )
+        query_vector = self._get_query_embedding(query)
+        if query_vector.shape != (snapshot.embeddings.shape[1],):
+            raise ValueError(
+                "Query embedding dimensions differ from index. Run `reindex`."
+            )
+        scores = snapshot.embeddings @ query_vector
         mask = _filter_mask(snapshot, filters)
         pool = min(max(top_k, _SEMANTIC_CANDIDATE_POOL), len(snapshot))
         if mask is not None:
@@ -540,21 +442,28 @@ class SemanticSearch:
         rows = np.argpartition(-scores, pool - 1)[:pool]
         rows = rows[np.argsort(-scores[rows], kind="stable")]
 
-        ranked_hits: list[tuple[float, dict[str, Any]]] = []
+        ranked_hits: list[tuple[float, SearchHit]] = []
         for row in rows:
-            hit = chunk_hit(
+            hit = typed_chunk_hit(
                 snapshot.chunks[row],
                 snapshot.texts[row],
                 float(scores[row]),
                 "semantic",
+                snapshot.generation,
             )
             content_terms = snapshot.row_terms(int(row), _extract_rank_terms)
             boost = _semantic_lexical_boost(query, hit, content_terms)
             if boost:
-                hit["semantic_score"] = hit["score"]
-                hit["lexical_boost"] = boost
+                hit = replace(
+                    hit,
+                    evidence=replace(
+                        hit.evidence,
+                        semantic_score=hit.evidence.score,
+                        lexical_boost=boost,
+                    ),
+                )
             ranked_hits.append(
-                ((float(hit.get("score", 0.0)) + boost) * _status_factor(hit), hit)
+                ((hit.evidence.score + boost) * _status_factor(hit), hit)
             )
         ranked_hits.sort(key=lambda item: item[0], reverse=True)
         return [hit for _, hit in ranked_hits[:top_k]]
@@ -574,6 +483,17 @@ class KeywordSearch:
         filters: SearchFilters | None = None,
         snapshot: IndexSnapshot | None = None,
     ) -> list[SearchResult]:
+        return [
+            hit.to_dict() for hit in self.rank(keyword, max_results, filters, snapshot)
+        ]
+
+    def rank(
+        self,
+        keyword: str,
+        max_results: int = 20,
+        filters: SearchFilters | None = None,
+        snapshot: IndexSnapshot | None = None,
+    ) -> list[SearchHit]:
         """Search using BM25 for fast keyword matching, optionally filtered."""
         if not keyword or not keyword.strip():
             return []
@@ -598,7 +518,7 @@ class KeywordSearch:
             weight_mask=mask.astype(np.float32) if mask is not None else None,
         )
 
-        hits: list[SearchResult] = []
+        hits: list[SearchHit] = []
         for i, result in enumerate(results[0]):
             score = float(scores[0][i])
             if score <= 0:
@@ -607,7 +527,13 @@ class KeywordSearch:
             if row < 0 or row >= len(snapshot):
                 continue
             hits.append(
-                chunk_hit(snapshot.chunks[row], snapshot.texts[row], score, "keyword")
+                typed_chunk_hit(
+                    snapshot.chunks[row],
+                    snapshot.texts[row],
+                    score,
+                    "keyword",
+                    snapshot.generation,
+                )
             )
 
         return _aggregate_keyword_hits(
@@ -628,6 +554,21 @@ _SEMANTIC_FUSION_WEIGHT = 0.4
 def _fuse_by_document(
     weighted_lists: list[tuple[float, list[SearchResult]]], limit: int
 ) -> list[SearchResult]:
+    return [
+        hit.to_dict()
+        for hit in _fuse_typed(
+            [
+                (weight, [SearchHit.from_dict(hit) for hit in hits])
+                for weight, hits in weighted_lists
+            ],
+            limit,
+        )
+    ]
+
+
+def _fuse_typed(
+    weighted_lists: list[tuple[float, list[SearchHit]]], limit: int
+) -> list[SearchHit]:
     """Reciprocal-rank fusion at document level.
 
     Each list contributes its best-ranked chunk per document, so a page that
@@ -635,12 +576,12 @@ def _fuse_by_document(
     chunk ids. The representative hit comes from the first list that has the
     document.
     """
-    fused: dict[str, float] = defaultdict(float)
-    representative: dict[str, SearchResult] = {}
+    fused: dict[DocumentRef, float] = defaultdict(float)
+    representative: dict[DocumentRef, SearchHit] = {}
     for weight, hits in weighted_lists:
-        seen: set[str] = set()
+        seen: set[DocumentRef] = set()
         for hit in hits:
-            path = str(hit["path"])
+            path = hit.ref.document
             if path in seen:
                 continue
             fused[path] += weight / (_RRF_K + len(seen) + 1)
@@ -648,7 +589,11 @@ def _fuse_by_document(
             representative.setdefault(path, hit)
     ranked = heapq.nlargest(limit, fused, key=fused.__getitem__)
     return [
-        {**representative[path], "rrf_score": fused[path], "source": "hybrid"}
+        replace(
+            representative[path],
+            evidence=replace(representative[path].evidence, rrf_score=fused[path]),
+            source="hybrid",
+        )
         for path in ranked
     ]
 
@@ -667,7 +612,21 @@ class HybridSearch:
         top_k: int = 10,
         semantic_weight: float = _SEMANTIC_FUSION_WEIGHT,
         filters: SearchFilters | None = None,
+        snapshot: IndexSnapshot | None = None,
     ) -> list[SearchResult]:
+        return [
+            hit.to_dict()
+            for hit in self.rank(query, top_k, semantic_weight, filters, snapshot)
+        ]
+
+    def rank(
+        self,
+        query: str,
+        top_k: int = 10,
+        semantic_weight: float = _SEMANTIC_FUSION_WEIGHT,
+        filters: SearchFilters | None = None,
+        snapshot: IndexSnapshot | None = None,
+    ) -> list[SearchHit]:
         """Hybrid search: BM25 files and semantic chunks fused per document.
 
         Args:
@@ -684,17 +643,17 @@ class HybridSearch:
         n_candidates = top_k * 2
         # Both rankings read one generation, so a reindex published mid-query
         # cannot fuse chunks from two different index states.
-        snapshot = self.keyword.indexer.snapshot()
+        snapshot = snapshot if snapshot is not None else self.keyword.indexer.snapshot()
 
         # Semantic hits are chunks and several can share a file; fetch deeper
         # so fusion still sees enough distinct documents.
-        semantic_results = self.semantic.search(
+        semantic_results = self.semantic.rank(
             query, top_k=n_candidates * 2, filters=filters, snapshot=snapshot
         )
-        keyword_results = self.keyword.search(
+        keyword_results = self.keyword.rank(
             query, max_results=n_candidates, filters=filters, snapshot=snapshot
         )
-        candidates = _fuse_by_document(
+        candidates = _fuse_typed(
             [
                 (1 - semantic_weight, keyword_results),
                 (semantic_weight, semantic_results),
@@ -705,43 +664,37 @@ class HybridSearch:
         return candidates[:top_k]
 
 
-def _lexical_match_hints(query: str, hit: dict[str, Any]) -> list[str]:
-    """Return grounded lexical hints for a hit."""
+def add_match_hints(query: str, hits: list[SearchResult]) -> list[SearchResult]:
+    """Compatibility wrapper around typed match evidence."""
+    return [
+        hit.to_dict()
+        for hit in _typed_match_hints(query, [SearchHit.from_dict(hit) for hit in hits])
+    ]
+
+
+def _typed_match_hints(query: str, hits: list[SearchHit]) -> tuple[SearchHit, ...]:
     terms = _query_terms(query)
-    if not terms:
-        return []
-
-    fields = {
-        "title": str(hit.get("title", "")),
-        "path": str(hit.get("path", "")),
-        "breadcrumb": str(hit.get("breadcrumb", "")),
-        "content": str(hit.get("content", "")),
-    }
-    hints: list[str] = []
-    for label, value in fields.items():
-        value_lower = value.lower()
-        matched = sorted({term for term in terms if term in value_lower})
-        if matched:
-            hints.append(f"{label} matches: {', '.join(matched[:5])}")
-    return hints
-
-
-def add_match_hints(query: str, hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Attach grounded match hints to hits."""
-    hinted: list[dict[str, Any]] = []
+    output: list[SearchHit] = []
     for hit in hits:
-        item = hit.copy()
-        hints = _lexical_match_hints(query, item)
-        if not hints and item.get("source") in {"semantic", "hybrid"}:
-            score = item.get("rrf_score", item.get("score"))
-            if isinstance(score, float):
-                hints.append(f"{item.get('source')} retrieval score: {score:.3f}")
-            else:
-                hints.append(f"{item.get('source')} retrieval match")
-        if hints:
-            item["match_hints"] = hints
-        hinted.append(item)
-    return hinted
+        hints: list[str] = []
+        for label, value in (
+            ("title", hit.metadata["title"]),
+            ("path", hit.path),
+            ("breadcrumb", hit.metadata["breadcrumb"]),
+            ("content", hit.content),
+        ):
+            matched = sorted({term for term in terms if term in value.lower()})
+            if matched:
+                hints.append(f"{label} matches: {', '.join(matched[:5])}")
+        if not hints and hit.source in {"semantic", "hybrid"}:
+            score = (
+                hit.evidence.rrf_score
+                if hit.evidence.rrf_score is not None
+                else hit.evidence.score
+            )
+            hints.append(f"{hit.source} retrieval score: {score:.3f}")
+        output.append(replace(hit, match_hints=tuple(hints)))
+    return tuple(output)
 
 
 class AdaptiveSearch:
@@ -752,14 +705,14 @@ class AdaptiveSearch:
         self.hybrid = HybridSearch(indexer)
 
     @staticmethod
-    def _fallback_confident(hits: list[dict[str, Any]]) -> bool:
+    def _fallback_confident(hits: list[SearchHit]) -> bool:
         if not hits:
             return False
-        best_score = float(hits[0].get("score", 0) or 0)
+        best_score = hits[0].evidence.score
         return best_score >= _ADAPTIVE_MIN_FALLBACK_SEMANTIC_SCORE
 
     @staticmethod
-    def _keyword_strength(hits: list[dict[str, Any]]) -> tuple[bool, str]:
+    def _keyword_strength(hits: list[SearchHit]) -> tuple[bool, str]:
         """Trust BM25 alone only when its top document clearly leads.
 
         A near-tie at the top means the lexical evidence does not single out a
@@ -773,24 +726,25 @@ class AdaptiveSearch:
             # shares one word with some page) as a precise hit; fusion keeps it
             # on top when semantic ranking agrees.
             return False, "BM25 matched only one document"
-        best = float(hits[0].get("score", 0) or 0)
-        runner_up = float(hits[1].get("score", 0) or 0)
+        best = hits[0].evidence.score
+        runner_up = hits[1].evidence.score
         margin = best / runner_up if runner_up > 0 else float("inf")
         if margin >= BM25_DOMINANCE_MARGIN:
             return True, f"BM25 top hit leads the runner-up {margin:.2f}x"
         return False, f"no dominant BM25 hit (top leads runner-up {margin:.2f}x)"
 
-    def search(
+    def response(
         self,
         query: str,
         top_k: int = 10,
         filters: SearchFilters | None = None,
-    ) -> AdaptiveSearchResult:
+        snapshot: IndexSnapshot | None = None,
+    ) -> SearchResponse:
         """Run BM25 first, then fall back to hybrid retrieval when needed."""
         filters = filters or SearchFilters()
         if not query or not query.strip():
-            return AdaptiveSearchResult(
-                hits=[],
+            return SearchResponse(
+                hits=(),
                 route=SearchRoute(
                     strategy="keyword",
                     reason="empty query",
@@ -800,14 +754,15 @@ class AdaptiveSearch:
             )
 
         top_k = _clamp_top_k(top_k)
+        snapshot = snapshot if snapshot is not None else self.keyword.indexer.snapshot()
         # The confidence gate compares the top hit with the runner-up, so fetch
         # at least two even when the caller asked for one.
-        keyword_hits = self.keyword.search(
-            query, max_results=max(top_k, 2), filters=filters
+        keyword_hits = self.keyword.rank(
+            query, max_results=max(top_k, 2), filters=filters, snapshot=snapshot
         )
         if not keyword_hits and is_keywordish_query(query):
-            return AdaptiveSearchResult(
-                hits=[],
+            return SearchResponse(
+                hits=(),
                 route=SearchRoute(
                     strategy="keyword",
                     reason="keyword query had no meaningful BM25 hits",
@@ -819,8 +774,8 @@ class AdaptiveSearch:
         strong, reason = self._keyword_strength(keyword_hits)
 
         if strong:
-            return AdaptiveSearchResult(
-                hits=add_match_hints(query, keyword_hits[:top_k]),
+            return SearchResponse(
+                hits=_typed_match_hints(query, keyword_hits[:top_k]),
                 route=SearchRoute(
                     strategy="keyword",
                     reason=reason,
@@ -829,14 +784,16 @@ class AdaptiveSearch:
                 ),
             )
 
-        hybrid_hits = self.hybrid.search(query, top_k=top_k, filters=filters)
+        hybrid_hits = self.hybrid.rank(
+            query, top_k=top_k, filters=filters, snapshot=snapshot
+        )
         if (
             not keyword_hits
             and filters.is_empty
             and not self._fallback_confident(hybrid_hits)
         ):
-            return AdaptiveSearchResult(
-                hits=[],
+            return SearchResponse(
+                hits=(),
                 route=SearchRoute(
                     strategy="hybrid",
                     reason="hybrid fallback confidence was too low",
@@ -844,8 +801,8 @@ class AdaptiveSearch:
                     filters=filters,
                 ),
             )
-        return AdaptiveSearchResult(
-            hits=add_match_hints(query, hybrid_hits),
+        return SearchResponse(
+            hits=_typed_match_hints(query, hybrid_hits),
             route=SearchRoute(
                 strategy="hybrid",
                 reason=reason,
@@ -853,3 +810,14 @@ class AdaptiveSearch:
                 filters=filters,
             ),
         )
+
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        filters: SearchFilters | None = None,
+        snapshot: IndexSnapshot | None = None,
+    ) -> AdaptiveSearchResult:
+        response = self.response(query, top_k, filters, snapshot)
+        assert response.route is not None
+        return AdaptiveSearchResult(response.legacy_hits(), response.route)

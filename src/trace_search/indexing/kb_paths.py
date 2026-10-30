@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pathspec import GitIgnoreSpec
 
-from trace_search.config import settings
+from trace_search.config import get_settings
 
 TRACEIGNORE_FILENAME = ".traceignore"
 
@@ -64,7 +64,7 @@ def should_exclude_path(
     exclude = set(
         exclude_patterns
         if exclude_patterns is not None
-        else settings.exclude_patterns_list
+        else get_settings().exclude_patterns_list
     )
     if any(
         part.startswith(".") or part in exclude

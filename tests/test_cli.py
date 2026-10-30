@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from trace_search.collections.diagnostics import DoctorReport
 from trace_search.server.cli import run_cli
 
 
@@ -105,13 +106,15 @@ class FakeOperations:
         self.calls.append(("reindex", (collection, force)))
         return "Reindex complete."
 
-    def doctor(
+    def doctor_report(
         self,
         sample_query: str | None = None,
         collection: str | None = None,
-    ) -> str:
+    ) -> DoctorReport:
         self.calls.append(("doctor", (sample_query, collection)))
-        return "# Trace Doctor"
+        return DoctorReport(
+            config_valid=True, config_message="Configured", collections=[]
+        )
 
 
 @pytest.fixture()
@@ -308,7 +311,7 @@ def test_doctor_config_errors_keep_doctor_report(capsys):
     assert code == 1
     assert "# Trace Doctor" in captured.out
     assert "Set KB_COLLECTIONS or KB_PATH" in captured.out
-    assert captured.err == ""
+    assert "Set KB_COLLECTIONS or KB_PATH" in captured.err
 
 
 def test_invalid_numeric_argument_exits_nonzero():
@@ -316,3 +319,89 @@ def test_invalid_numeric_argument_exits_nonzero():
         run_cli(["search", "anything", "--top-k", "0"], serve=lambda *_: None)
 
     assert exc_info.value.code != 0
+
+
+@pytest.mark.parametrize("argv", [[], ["serve"], ["serve", "--transport", "http"]])
+def test_serve_initialization_errors_return_nonzero_without_traceback(argv, capsys):
+    def failing_server(*_):
+        raise ValueError("Set KB_COLLECTIONS or KB_PATH")
+
+    code = run_cli(argv, serve=failing_server)
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.out == ""
+    assert "Set KB_COLLECTIONS or KB_PATH" in captured.err
+    assert "Traceback" not in captured.err
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "192.168.1.1", "example.com", "::"])
+def test_http_rejects_nonloopback_hosts_before_server_creation(host, capsys):
+    called = []
+
+    code = run_cli(
+        ["serve", "--transport", "http", "--host", host],
+        serve=lambda *_: called.append(True),
+    )
+
+    assert code == 1
+    assert not called
+    assert "loopback" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("port", ["0", "65536", "-1", "not-a-port"])
+def test_http_rejects_invalid_ports(port, capsys):
+    called = []
+    try:
+        code = run_cli(
+            ["serve", "--transport", "http", "--port", port],
+            serve=lambda *_: called.append(True),
+        )
+    except SystemExit as error:
+        code = error.code
+
+    assert code != 0
+    assert not called
+    assert "Traceback" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "argv", [["get-document", "missing.md"], ["list-documents", "--limit", "501"]]
+)
+def test_real_operation_failure_has_no_success_stdout(tmp_path, capsys, argv):
+    from trace_search.collections.collection_registry import CollectionRegistry
+    from trace_search.collections.operations import TraceOperations
+    from trace_search.config import Settings
+
+    config = Settings(_env_file=None, kb_path=tmp_path)
+    operations = TraceOperations(
+        CollectionRegistry({"documents": tmp_path}, config=config)
+    )
+
+    code = run_cli(argv, operations_factory=lambda: operations)
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.out == ""
+    assert "Error:" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_doctor_unbuilt_index_returns_nonzero_with_report(tmp_path, capsys):
+    from trace_search.collections.collection_registry import CollectionRegistry
+    from trace_search.collections.operations import TraceOperations
+    from trace_search.config import Settings
+
+    (tmp_path / "hello.md").write_text("# Hello\n\nFixture")
+    config = Settings(_env_file=None, kb_path=tmp_path)
+    operations = TraceOperations(
+        CollectionRegistry({"documents": tmp_path}, config=config)
+    )
+
+    code = run_cli(["doctor"], operations_factory=lambda: operations)
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "# Trace Doctor" in captured.out
+    assert "missing" in captured.out.lower()
+    assert "Trace doctor found problems" in captured.err

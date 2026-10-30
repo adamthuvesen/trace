@@ -2,6 +2,7 @@
 
 import logging
 import re
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -10,9 +11,18 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+@dataclass(frozen=True)
+class ModelSpec:
+    dimensions: int
+    runtime_identifier: str
+
+
+MODEL_SPECS = {
+    "all-MiniLM-L6-v2": ModelSpec(384, "sentence-transformers/all-MiniLM-L6-v2"),
+    "BAAI/bge-base-en-v1.5": ModelSpec(768, "BAAI/bge-base-en-v1.5"),
+}
 SUPPORTED_MODELS = {
-    "all-MiniLM-L6-v2": {"dims": 384},
-    "BAAI/bge-base-en-v1.5": {"dims": 768},
+    name: {"dims": spec.dimensions} for name, spec in MODEL_SPECS.items()
 }
 COLLECTION_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 VALID_LOG_LEVELS = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"}
@@ -20,6 +30,10 @@ VALID_LOG_LEVELS = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"}
 
 def validate_collection_name(name: str) -> str:
     """Validate a collection name before using it as a selector and path segment."""
+    if name.lower() == "all":
+        raise ValueError(
+            "Collection name 'all' is reserved for selecting every collection. Choose another collection name."
+        )
     if not COLLECTION_NAME_PATTERN.fullmatch(name):
         raise ValueError(
             f"Invalid collection name '{name}'. "
@@ -38,6 +52,8 @@ def _parse_collection_entry(entry: str) -> tuple[str, Path]:
 
     name, path_str = entry.split(":", 1)
     name = validate_collection_name(name.strip())
+    if not path_str.strip():
+        raise ValueError(f"Collection '{name}' path must not be empty")
     path = Path(path_str.strip()).expanduser()
     if not path.exists():
         raise ValueError(f"Collection '{name}' path does not exist: {path}")
@@ -107,6 +123,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(
+        extra="forbid",
         env_prefix="",
         case_sensitive=False,
         env_file=".env",
@@ -168,7 +185,7 @@ class Settings(BaseSettings):
 
     @property
     def embedding_dims(self) -> int:
-        return SUPPORTED_MODELS[self.embedding_model]["dims"]
+        return MODEL_SPECS[self.embedding_model].dimensions
 
     @property
     def model_slug(self) -> str:
@@ -204,7 +221,8 @@ class Settings(BaseSettings):
         if self.kb_collections:
             return parse_kb_collections(self.kb_collections)
         if self.kb_path:
-            return {self.kb_path.name: self.kb_path}
+            name = self.kb_path.name
+            return {"default" if name.lower() == "all" else name: self.kb_path}
         raise ValueError(
             "Set KB_COLLECTIONS or KB_PATH. "
             "KB_COLLECTIONS format: 'name:/path,name:/path'"

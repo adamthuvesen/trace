@@ -31,9 +31,13 @@ ENV/
 !.env.example
 
 # Repo docs (root only; not tests/fixtures/**/docs/)
-# Benchmarks are a published artifact; everything else under /docs/ stays local.
+# Publish architecture guides and benchmark artifacts. Other documents stay local.
 /docs/*
 !/docs/benchmarks/
+!/docs/architecture.md
+!/docs/development.md
+!/docs/evaluation.md
+!/docs/retrieval-modes.md
 
 # Index data (stored in content repos, not here)
 .chroma_db*/
@@ -44,6 +48,7 @@ ENV/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.import_linter_cache/
 .coverage
 .coverage.*
 htmlcov/

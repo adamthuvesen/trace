@@ -209,7 +209,7 @@ def test_generation_missing_its_bm25_files_is_not_served_silently(kb, tmp_path):
     shutil.rmtree(index_root / read_current(index_root) / "bm25")
 
     # Keyword search would quietly return nothing if this loaded with no BM25.
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(IndexCorruptError, match="reindex"):
         load_snapshot(index_root)
 
 

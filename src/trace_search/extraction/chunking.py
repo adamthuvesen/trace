@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from trace_search.config import settings
+from trace_search.config import get_settings
 
 
 @dataclass(frozen=True)
@@ -159,10 +159,10 @@ def _resolve_chunking_params(
 ) -> ChunkingParams:
     """Resolve chunking parameters with defaults from settings (overlap 0 = off)."""
     return ChunkingParams(
-        max_size=settings.char_chunk_size
+        max_size=get_settings().char_chunk_size
         if max_chunk_chars is None
         else max_chunk_chars,
-        overlap_size=settings.char_overlap_size
+        overlap_size=get_settings().char_overlap_size
         if overlap_chars is None
         else overlap_chars,
     )

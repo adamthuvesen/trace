@@ -38,7 +38,7 @@ def test_registry_warms_backend_on_first_load(tmp_path: Path, monkeypatch):
     backend = RecordingBackend()
     monkeypatch.setattr(
         "trace_search.collections.collection_registry.build_embedding_backend",
-        lambda: backend,
+        lambda config: backend,
     )
     registry = CollectionRegistry({"fixture": tmp_path})
 
@@ -50,7 +50,7 @@ def test_registry_warms_backend_exactly_once(tmp_path: Path, monkeypatch):
     backend = RecordingBackend()
     monkeypatch.setattr(
         "trace_search.collections.collection_registry.build_embedding_backend",
-        lambda: backend,
+        lambda config: backend,
     )
     registry = CollectionRegistry({"fixture": tmp_path})
 

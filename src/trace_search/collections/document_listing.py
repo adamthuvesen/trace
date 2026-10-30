@@ -8,7 +8,8 @@ from pathlib import Path
 
 from trace_search.extraction.corpus import iter_kb_files
 from trace_search.extraction.extractors import extract_title
-from trace_search.retrieval.search import SearchFilters
+from trace_search.config import Settings, get_settings
+from trace_search.retrieval.search_types import SearchFilters
 
 DEFAULT_LIST_LIMIT = 50
 MAX_LIST_LIMIT = 500
@@ -74,13 +75,16 @@ def _list_collection_documents(
     folder: str | None,
     filters: SearchFilters,
     include_collection: bool,
+    config: Settings,
 ) -> list[ListedDocument]:
     search_path = _resolve_folder_root(kb_path, folder)
     if search_path is None:
         return []
 
     documents: list[ListedDocument] = []
-    for file_path in iter_kb_files(kb_path, root=search_path):
+    for file_path in iter_kb_files(
+        kb_path, root=search_path, exclude_patterns=config.exclude_patterns_list
+    ):
         ext = file_path.suffix.lower()
         rel_path = str(file_path.relative_to(kb_path))
         try:
@@ -138,6 +142,7 @@ def list_documents_for_collections(
     folder: str | None,
     limit: int,
     filters: SearchFilters,
+    config: Settings | None = None,
 ) -> str:
     """List documents across one or more collections."""
     include_collection = len(collections) > 1
@@ -150,6 +155,7 @@ def list_documents_for_collections(
                 folder=folder,
                 filters=filters,
                 include_collection=include_collection,
+                config=config or get_settings(),
             )
         )
 

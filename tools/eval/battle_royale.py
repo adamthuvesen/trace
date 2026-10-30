@@ -3,18 +3,28 @@
 
 from __future__ import annotations
 
-import json
 import statistics
 import tempfile
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated, Literal, NotRequired, Self, TypedDict
+
+from pydantic import Field, TypeAdapter, model_validator
+
+from tools.eval.models import (
+    EvalModel,
+    EvaluationManifest,
+    EvaluationReport,
+    SearchMode,
+)
 
 import click
 import yaml
 
 from tools.eval.evaluator import (
     SEARCH_MODES,
+    load_golden_queries,
     percentile,
     run_evaluation,
 )
@@ -35,50 +45,108 @@ class BattleKnowledgeBase:
     include_stress: bool
 
 
+class SuiteKnowledgeBase(EvalModel):
+    id: Annotated[str, Field(pattern=r"^[a-zA-Z0-9_-]+$")]
+    name: str = ""
+    kb_path: str
+    golden_queries: str
+    include_stress: bool = False
+
+
+class BattleSuite(EvalModel):
+    version: Literal["1.0"] = "1.0"
+    description: str = ""
+    modes: list[SearchMode] = Field(default_factory=lambda: list(SEARCH_MODES))
+    knowledge_bases: list[SuiteKnowledgeBase] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def unique_entries(self) -> Self:
+        ids = [kb.id for kb in self.knowledge_bases]
+        if len(ids) != len(set(ids)):
+            raise ValueError("knowledge base IDs must be unique")
+        if not self.modes or len(self.modes) != len(set(self.modes)):
+            raise ValueError("suite modes must be nonempty and unique")
+        return self
+
+
+class ModeSummary(TypedDict):
+    mode: str
+    knowledge_bases: int
+    queries: int
+    hit_at_1: float
+    hit_at_5: float
+    mrr: float
+    p50_ms: float
+    p95_ms: float
+    failure_buckets: dict[str, int]
+    adaptive_fallback_rate: float | None
+
+
+class KnowledgeBaseSummary(TypedDict):
+    kb_id: str
+    kb_name: str
+    mode: str
+    queries: int
+    hit_at_1: float
+    hit_at_5: float
+    mrr: float
+    p50_ms: float
+    p95_ms: float
+    adaptive_fallback_rate: float | None
+
+
+class KnowledgeBaseInfo(TypedDict):
+    id: str
+    name: str
+    kb_path: str
+    golden_queries: str
+    include_stress: bool
+
+
+class BattleSummary(TypedDict):
+    label: str
+    suite: str
+    description: str
+    judging: str
+    modes: list[str]
+    knowledge_bases: list[KnowledgeBaseInfo]
+    aggregate_by_mode: dict[str, ModeSummary]
+    by_kb: list[KnowledgeBaseSummary]
+    manifests: dict[str, dict[str, EvaluationManifest]]
+    reports: NotRequired[dict[str, dict[str, dict[str, str]]]]
+
+
 def load_suite(path: Path) -> tuple[str, list[BattleKnowledgeBase], tuple[str, ...]]:
-    """Load the battle suite YAML, resolving fixture paths relative to the file."""
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise click.ClickException(f"{path} must contain a YAML mapping")
-
-    suite_root = path.parent
-    raw_kbs = data.get("knowledge_bases")
-    if not isinstance(raw_kbs, list) or not raw_kbs:
-        raise click.ClickException(f"{path} must define at least one knowledge base")
-
-    kbs: list[BattleKnowledgeBase] = []
-    for item in raw_kbs:
-        kb_path = (suite_root / item["kb_path"]).resolve()
-        golden_path = (suite_root / item["golden_queries"]).resolve()
-        if not kb_path.is_dir():
-            raise click.ClickException(f"KB path does not exist: {kb_path}")
-        if not golden_path.is_file():
-            raise click.ClickException(
-                f"Golden queries file does not exist: {golden_path}"
-            )
-        kbs.append(
-            BattleKnowledgeBase(
-                kb_id=str(item["id"]),
-                name=str(item.get("name", item["id"])),
-                kb_path=kb_path,
-                golden_queries_path=golden_path,
-                include_stress=bool(item.get("include_stress", False)),
-            )
+    """Validate the whole suite before loading any index or model."""
+    try:
+        suite = BattleSuite.model_validate(
+            yaml.safe_load(path.read_text(encoding="utf-8"))
         )
-
-    raw_modes = data.get("modes", SEARCH_MODES)
-    modes = tuple(str(mode) for mode in raw_modes)
-    unknown = sorted(set(modes) - set(SEARCH_MODES))
-    if unknown:
-        raise click.ClickException(
-            f"Unknown search modes in {path}: {', '.join(unknown)}"
-        )
-
-    return str(data.get("description", "")), kbs, modes
+        kbs: list[BattleKnowledgeBase] = []
+        for item in suite.knowledge_bases:
+            kb_path = (path.parent / item.kb_path).resolve()
+            golden_path = (path.parent / item.golden_queries).resolve()
+            if not kb_path.is_dir():
+                raise ValueError(f"KB path does not exist: {kb_path}")
+            load_golden_queries(
+                golden_queries_path=golden_path, include_stress=item.include_stress
+            )
+            kbs.append(
+                BattleKnowledgeBase(
+                    kb_id=item.id,
+                    name=item.name or item.id,
+                    kb_path=kb_path,
+                    golden_queries_path=golden_path,
+                    include_stress=item.include_stress,
+                )
+            )
+        return suite.description, kbs, tuple(suite.modes)
+    except (ValueError, OSError, yaml.YAMLError) as error:
+        raise click.ClickException(str(error)) from error
 
 
 def _write_mode_report(
-    report, output_dir: Path, kb_id: str, mode: str
+    report: EvaluationReport, output_dir: Path, kb_id: str, mode: str
 ) -> dict[str, str]:
     output_dir.mkdir(parents=True, exist_ok=True)
     base = f"{kb_id}_{mode}"
@@ -86,7 +154,7 @@ def _write_mode_report(
     md_path = output_dir / f"{base}.md"
     json_path.write_text(generate_json_report(report), encoding="utf-8")
     md_path.write_text(generate_markdown_report(report), encoding="utf-8")
-    return {"json": str(json_path), "md": str(md_path)}
+    return {"json": _display_path(json_path), "md": _display_path(md_path)}
 
 
 def _display_path(path: Path) -> str:
@@ -95,10 +163,10 @@ def _display_path(path: Path) -> str:
     try:
         return str(resolved.relative_to(Path.cwd().resolve()))
     except ValueError:
-        return str(resolved)
+        return resolved.name
 
 
-def _failure_buckets(reports) -> dict[str, int]:
+def _failure_buckets(reports: list[EvaluationReport]) -> dict[str, int]:
     buckets: Counter[str] = Counter()
     for report in reports:
         for result in report.results:
@@ -108,7 +176,7 @@ def _failure_buckets(reports) -> dict[str, int]:
     return dict(sorted(buckets.items()))
 
 
-def _aggregate_mode(mode: str, reports) -> dict[str, object]:
+def _aggregate_mode(mode: str, reports: list[EvaluationReport]) -> ModeSummary:
     results = [result for report in reports for result in report.results]
     total = len(results)
     latencies = sorted(result.latency_ms for result in results)
@@ -152,17 +220,17 @@ def _summary_json(
     suite_path: Path,
     description: str,
     label: str,
-    reports_by_kb_mode: dict[tuple[str, str], object],
+    reports_by_kb_mode: dict[tuple[str, str], EvaluationReport],
     saved_reports: dict[str, dict[str, dict[str, str]]],
     modes: tuple[str, ...],
     kbs: list[BattleKnowledgeBase],
-) -> dict[str, object]:
+) -> BattleSummary:
     by_mode = {}
     for mode in modes:
         reports = [reports_by_kb_mode[(kb.kb_id, mode)] for kb in kbs]
         by_mode[mode] = _aggregate_mode(mode, reports)
 
-    by_kb = []
+    by_kb: list[KnowledgeBaseSummary] = []
     for kb in kbs:
         for mode in modes:
             report = reports_by_kb_mode[(kb.kb_id, mode)]
@@ -181,9 +249,18 @@ def _summary_json(
                 }
             )
 
-    summary: dict[str, object] = {
+    manifests: dict[str, dict[str, EvaluationManifest]] = {}
+    for kb in kbs:
+        manifests[kb.kb_id] = {}
+        for mode in modes:
+            manifest = reports_by_kb_mode[(kb.kb_id, mode)].manifest
+            if manifest is None:
+                raise ValueError("Battle reports require evaluation provenance")
+            manifests[kb.kb_id][mode] = manifest
+
+    summary: BattleSummary = {
         "label": label,
-        "suite": str(suite_path),
+        "suite": _display_path(suite_path),
         "description": description,
         "judging": "deterministic expected-path metrics only; no LLM judges",
         "modes": list(modes),
@@ -199,6 +276,7 @@ def _summary_json(
         ],
         "aggregate_by_mode": by_mode,
         "by_kb": by_kb,
+        "manifests": manifests,
     }
     if saved_reports:
         summary["reports"] = saved_reports
@@ -209,7 +287,7 @@ def _pct(value: float) -> str:
     return f"{value:.1%}"
 
 
-def _summary_markdown(summary: dict[str, object]) -> str:
+def _summary_markdown(summary: BattleSummary) -> str:
     mode_rows = []
     by_mode = summary["aggregate_by_mode"]
     for mode in summary["modes"]:
@@ -234,20 +312,20 @@ def _summary_markdown(summary: dict[str, object]) -> str:
         )
 
     kb_rows = []
-    for row in summary["by_kb"]:
-        fallback = row.get("adaptive_fallback_rate")
+    for kb_row in summary["by_kb"]:
+        fallback = kb_row.get("adaptive_fallback_rate")
         fallback_text = "-" if fallback is None else _pct(float(fallback))
         kb_rows.append(
             "| {kb} | {mode} | {queries} | {hit1} | {hit5} | {mrr:.3f} | "
             "{p50:.1f} | {p95:.1f} | {fallback} |".format(
-                kb=row["kb_id"],
-                mode=row["mode"],
-                queries=row["queries"],
-                hit1=_pct(float(row["hit_at_1"])),
-                hit5=_pct(float(row["hit_at_5"])),
-                mrr=float(row["mrr"]),
-                p50=float(row["p50_ms"]),
-                p95=float(row["p95_ms"]),
+                kb=kb_row["kb_id"],
+                mode=kb_row["mode"],
+                queries=kb_row["queries"],
+                hit1=_pct(float(kb_row["hit_at_1"])),
+                hit5=_pct(float(kb_row["hit_at_5"])),
+                mrr=float(kb_row["mrr"]),
+                p50=float(kb_row["p50_ms"]),
+                p95=float(kb_row["p95_ms"]),
                 fallback=fallback_text,
             )
         )
@@ -310,7 +388,13 @@ def _summary_markdown(summary: dict[str, object]) -> str:
     type=click.Choice(SEARCH_MODES),
     help="Limit to one or more modes. Defaults to suite modes.",
 )
-@click.option("--top-k", default=5, show_default=True, help="Results per query.")
+@click.option(
+    "--top-k",
+    type=click.IntRange(min=1),
+    default=5,
+    show_default=True,
+    help="Results per query.",
+)
 @click.option(
     "--detail-reports",
     is_flag=True,
@@ -325,6 +409,24 @@ def main(
     detail_reports: bool,
 ) -> None:
     """Run the committed multi-KB retrieval battle suite."""
+    try:
+        _run(suite, output_dir, label, requested_modes, top_k, detail_reports)
+    except (ValueError, OSError) as error:
+        raise click.ClickException(str(error)) from error
+
+
+def _run(
+    suite: Path,
+    output_dir: Path,
+    label: str,
+    requested_modes: tuple[str, ...],
+    top_k: int,
+    detail_reports: bool,
+) -> None:
+    if Path(label).name != label or label in (".", ".."):
+        raise click.BadParameter(
+            "label must be a single directory name", param_hint="--label"
+        )
     description, kbs, suite_modes = load_suite(suite)
     modes = requested_modes or suite_modes
     run_dir = output_dir / label
@@ -381,7 +483,10 @@ def main(
     run_dir.mkdir(parents=True, exist_ok=True)
     summary_json = run_dir / "summary.json"
     summary_md = run_dir / "summary.md"
-    summary_json.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    summary_json.write_text(
+        TypeAdapter(BattleSummary).dump_json(summary, indent=2).decode(),
+        encoding="utf-8",
+    )
     summary_md.write_text(_summary_markdown(summary), encoding="utf-8")
     click.echo(f"Summary: {summary_md}")
 

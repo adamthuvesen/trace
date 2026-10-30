@@ -154,19 +154,27 @@ def extract_code_content(path: Path) -> str:
 
 def extract_notebook_content(path: Path) -> str:
     """Extract Jupyter notebook content (code + markdown cells)."""
-    try:
-        nb = json.loads(path.read_text(encoding="utf-8"))
-        cells = nb.get("cells", [])
-        content_parts = []
-        for i, cell in enumerate(cells):
-            cell_type = cell.get("cell_type", "code")
-            source = "".join(cell.get("source", []))
-            if source.strip():
-                content_parts.append(f"[{cell_type.upper()} CELL {i + 1}]\n{source}")
-        return "\n\n".join(content_parts)
-    except Exception as e:
-        logger.warning("Failed to parse notebook %s: %s", path, e)
-        return ""
+    nb = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(nb, dict) or not isinstance(nb.get("cells"), list):
+        raise ValueError(f"Malformed notebook: {path.name} must contain a cells array")
+    content_parts = []
+    for i, cell in enumerate(nb["cells"]):
+        if not isinstance(cell, dict) or cell.get("cell_type") not in {
+            "code",
+            "markdown",
+            "raw",
+        }:
+            raise ValueError(f"Malformed notebook cell {i + 1}: {path.name}")
+        source = cell.get("source")
+        if isinstance(source, list) and all(isinstance(line, str) for line in source):
+            source = "".join(source)
+        if not isinstance(source, str):
+            raise ValueError(f"Malformed notebook source in cell {i + 1}: {path.name}")
+        if source.strip():
+            content_parts.append(
+                f"[{cell['cell_type'].upper()} CELL {i + 1}]\n{source}"
+            )
+    return "\n\n".join(content_parts)
 
 
 def extract_content(path: Path) -> str:

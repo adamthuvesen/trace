@@ -3,22 +3,23 @@
 from __future__ import annotations
 
 import logging
-import math
 import os
-import statistics
 import time
-from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import yaml
 
+from trace_search.retrieval.search_types import SearchResult
+
+from tools.eval.metrics import percentile as percentile
 from tools.eval.models import (
-    CategoryMetrics,
     EvaluationReport,
-    FileTypeMetrics,
     GoldenQuery,
+    GoldenQueries,
+    EvaluationScope,
+    SearchMode,
     QueryResult,
 )
 
@@ -40,7 +41,7 @@ logger = logging.getLogger(__name__)
 EVAL_DIR = Path(__file__).parent
 DEFAULT_GOLDEN_QUERIES_PATH = EVAL_DIR / "golden_queries.yaml"
 EXAMPLE_GOLDEN_QUERIES_PATH = EVAL_DIR / "golden_queries.example.yaml"
-SEARCH_MODES = ("semantic", "bm25", "hybrid", "adaptive")
+SEARCH_MODES: tuple[SearchMode, ...] = ("semantic", "bm25", "hybrid", "adaptive")
 
 
 def get_golden_queries_path() -> Path:
@@ -48,13 +49,11 @@ def get_golden_queries_path() -> Path:
     override = (os.environ.get("EVAL_GOLDEN_QUERIES") or "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    try:
-        from trace_search.config import settings
+    from trace_search.config import get_settings
 
-        if settings.eval_golden_queries is not None:
-            return settings.eval_golden_queries.expanduser().resolve()
-    except Exception:
-        pass
+    configured = get_settings().eval_golden_queries
+    if configured is not None:
+        return configured.expanduser().resolve()
     return DEFAULT_GOLDEN_QUERIES_PATH.resolve()
 
 
@@ -95,34 +94,23 @@ def load_golden_queries(
     except yaml.YAMLError as e:
         raise ValueError(f"Invalid YAML in {path}: {e}") from e
 
-    if not isinstance(data, dict) or not isinstance(data.get("queries"), list):
-        raise ValueError(f"{path} must contain a top-level 'queries' list")
-
+    validated = GoldenQueries.model_validate(data)
     queries = []
-    for i, q in enumerate(data.get("queries", [])):
-        try:
-            query = GoldenQuery.from_dict(q)
-        except KeyError as e:
-            raise ValueError(f"Query at index {i} missing required field: {e}") from e
-        except TypeError as e:
-            raise ValueError(f"Query at index {i} has invalid data: {e}") from e
-
+    for query in validated.queries:
         if stress_only:
             if not query.stress_set:
                 continue
         elif not include_stress and query.stress_set:
             continue
-
-        # Apply filters
         if quick_only and not query.quick_set:
             continue
         if categories and query.category not in categories:
             continue
         if file_types and query.file_type not in file_types:
             continue
-
         queries.append(query)
-
+    if not queries:
+        raise ValueError("No queries match the specified filters")
     return queries
 
 
@@ -161,7 +149,7 @@ def _effective_min_keywords(
 
 
 def _keyword_scope_content(
-    hits: list[dict],
+    hits: list[SearchResult],
     *,
     top_k: int,
     strict_keywords_top1: bool,
@@ -172,21 +160,6 @@ def _keyword_scope_content(
         return top_1, top_1
     scope = " ".join(h["content"].lower() for h in hits[:top_k])
     return top_1, scope
-
-
-def percentile(sorted_values: list[float], pct: float) -> float:
-    """Inclusive linear percentile bounded by observed min/max."""
-    if not sorted_values:
-        return 0.0
-    if len(sorted_values) == 1:
-        return sorted_values[0]
-    rank = (len(sorted_values) - 1) * (pct / 100)
-    lower = math.floor(rank)
-    upper = math.ceil(rank)
-    if lower == upper:
-        return sorted_values[lower]
-    weight = rank - lower
-    return sorted_values[lower] * (1 - weight) + sorted_values[upper] * weight
 
 
 def evaluate_query(
@@ -221,15 +194,19 @@ def evaluate_query(
     if search_mode == "adaptive":
         from trace_search.retrieval.search_types import AdaptiveSearchResult
 
-        adaptive_result = searcher.search(query.query, top_k=top_k)
+        adaptive_result = cast("AdaptiveSearch", searcher).search(
+            query.query, top_k=top_k
+        )
         assert isinstance(adaptive_result, AdaptiveSearchResult)
         hits = adaptive_result.hits
         adaptive_strategy = adaptive_result.route.strategy
         adaptive_fallback_used = adaptive_result.route.fallback_used
     elif search_mode == "bm25":
-        hits = searcher.search(query.query, max_results=top_k)
+        hits = cast("KeywordSearch", searcher).search(query.query, max_results=top_k)
     else:
-        hits = searcher.search(query.query, top_k=top_k)
+        hits = cast("SemanticSearch | HybridSearch", searcher).search(
+            query.query, top_k=top_k
+        )
     latency_ms = (time.perf_counter() - start) * 1000
 
     if not hits:
@@ -251,6 +228,7 @@ def evaluate_query(
             adaptive_strategy=adaptive_strategy,
             adaptive_fallback_used=adaptive_fallback_used,
             category=query.category,
+            file_type=query.file_type,
         )
 
     path_first_hit_rank: int | None = None
@@ -299,73 +277,8 @@ def evaluate_query(
         adaptive_strategy=adaptive_strategy,
         adaptive_fallback_used=adaptive_fallback_used,
         category=query.category,
+        file_type=query.file_type,
     )
-
-
-def compute_category_metrics(
-    queries: list[GoldenQuery],
-    results: list[QueryResult],
-) -> dict[str, CategoryMetrics]:
-    """Compute metrics grouped by category."""
-    by_category: dict[str, list[tuple[GoldenQuery, QueryResult]]] = defaultdict(list)
-    query_map = {q.id: q for q in queries}
-
-    for result in results:
-        query = query_map.get(result.query_id)
-        if query:
-            by_category[query.category].append((query, result))
-
-    metrics = {}
-    for category, items in by_category.items():
-        query_count = len(items)
-        top_1_path_hits = sum(1 for _, r in items if r.top_1_path_hit)
-        top_5_path_hits = sum(1 for _, r in items if r.top_5_path_hit)
-        top_1_keyword_hits = sum(1 for _, r in items if r.top_1_keyword_hit)
-        top_5_keyword_hits = sum(1 for _, r in items if r.top_5_keyword_hit)
-        avg_latency = statistics.mean(r.latency_ms for _, r in items) if items else 0.0
-
-        metrics[category] = CategoryMetrics(
-            category=category,
-            query_count=query_count,
-            top_1_path_hits=top_1_path_hits,
-            top_5_path_hits=top_5_path_hits,
-            top_1_keyword_hits=top_1_keyword_hits,
-            top_5_keyword_hits=top_5_keyword_hits,
-            avg_latency_ms=avg_latency,
-        )
-
-    return metrics
-
-
-def compute_file_type_metrics(
-    queries: list[GoldenQuery],
-    results: list[QueryResult],
-) -> dict[str, FileTypeMetrics]:
-    """Compute metrics grouped by file type."""
-    by_type: dict[str, list[tuple[GoldenQuery, QueryResult]]] = defaultdict(list)
-    query_map = {q.id: q for q in queries}
-
-    for result in results:
-        query = query_map.get(result.query_id)
-        if query:
-            by_type[query.file_type].append((query, result))
-
-    metrics = {}
-    for file_type, items in by_type.items():
-        query_count = len(items)
-        top_1_path_hits = sum(1 for _, r in items if r.top_1_path_hit)
-        top_5_path_hits = sum(1 for _, r in items if r.top_5_path_hit)
-        avg_latency = statistics.mean(r.latency_ms for _, r in items) if items else 0.0
-
-        metrics[file_type] = FileTypeMetrics(
-            file_type=file_type,
-            query_count=query_count,
-            top_1_path_hits=top_1_path_hits,
-            top_5_path_hits=top_5_path_hits,
-            avg_latency_ms=avg_latency,
-        )
-
-    return metrics
 
 
 def run_evaluation(
@@ -382,13 +295,21 @@ def run_evaluation(
     golden_queries_path: Path | None = None,
 ) -> EvaluationReport:
     """Run the full evaluation and return a report."""
-    from trace_search.config import settings
     from trace_search.retrieval.search import SemanticSearch
+    from trace_search.server.server_warmup import warm_embedding_model
+
+    from tools.eval.provenance import build_manifest
 
     from tools.eval import load_thresholds
 
     thresholds = load_thresholds()
-    min_keywords = thresholds.get("keyword_match", {}).get("min_keywords", 2)
+    min_keywords = thresholds["keyword_match"]["min_keywords"]
+    if search_mode not in SEARCH_MODES:
+        raise ValueError(f"Unknown search mode: {search_mode}")
+    if type(top_k) is not int or top_k < 1:
+        raise ValueError("top_k must be a positive integer")
+    if strict_keywords_top1 and not strict_keywords:
+        raise ValueError("strict_keywords_top1 requires strict_keywords")
 
     queries = load_golden_queries(
         quick_only=quick_only,
@@ -406,7 +327,24 @@ def run_evaluation(
         "Running evaluation with %d queries (mode: %s)", len(queries), search_mode
     )
 
+    manifest = build_manifest(
+        indexer,
+        queries,
+        scope=EvaluationScope(
+            quick_only=quick_only,
+            categories=sorted(categories or []),
+            file_types=sorted(file_types or []),
+            stress_only=stress_only,
+            include_stress=include_stress,
+        ),
+        search_mode=search_mode,
+        top_k=top_k,
+        min_keywords=min_keywords,
+        strict_keywords=strict_keywords,
+        strict_keywords_top1=strict_keywords_top1,
+    )
     searcher = create_searcher(indexer, search_mode)
+    warm_embedding_model(indexer.backend)
 
     # Clear embedding cache for consistent per-query timing
     SemanticSearch._embedding_cache.clear()
@@ -438,63 +376,8 @@ def run_evaluation(
             result.retrieved_path[:50],
         )
 
-    total = len(results)
-    top_1_path_hits = sum(1 for r in results if r.top_1_path_hit)
-    top_5_path_hits = sum(1 for r in results if r.top_5_path_hit)
-    top_1_keyword_hits = sum(1 for r in results if r.top_1_keyword_hit)
-    top_5_keyword_hits = sum(1 for r in results if r.top_5_keyword_hit)
-    mean_rr = (
-        statistics.mean(r.path_reciprocal_rank for r in results) if results else 0.0
-    )
-    within_max = sum(1 for r in results if r.path_hit_within_max_rank)
-    within_max_acc = within_max / total if total > 0 else 0.0
-
-    # Compute latency percentiles bounded by observed values, even for tiny samples.
-    latencies = sorted(r.latency_ms for r in results)
-    p50 = percentile(latencies, 50)
-    p95 = percentile(latencies, 95)
-    p99 = percentile(latencies, 99)
-
-    by_category = compute_category_metrics(queries, results)
-    by_file_type = compute_file_type_metrics(queries, results)
-
-    adaptive_fallback_rate: float | None = None
-    if search_mode == "adaptive":
-        fallback_flags = [
-            r.adaptive_fallback_used
-            for r in results
-            if r.adaptive_fallback_used is not None
-        ]
-        if fallback_flags:
-            adaptive_fallback_rate = sum(1 for flag in fallback_flags if flag) / len(
-                fallback_flags
-            )
-
-    return EvaluationReport(
+    return EvaluationReport.from_results(
         timestamp=datetime.now(timezone.utc).isoformat(),
-        search_mode=search_mode,
-        embedding_model=settings.embedding_model,
-        total_queries=total,
-        quick_set_only=quick_only,
-        top_1_path_accuracy=top_1_path_hits / total if total > 0 else 0.0,
-        top_5_path_accuracy=top_5_path_hits / total if total > 0 else 0.0,
-        top_1_keyword_accuracy=top_1_keyword_hits / total if total > 0 else 0.0,
-        top_5_keyword_accuracy=top_5_keyword_hits / total if total > 0 else 0.0,
-        latency_p50_ms=p50,
-        latency_p95_ms=p95,
-        latency_p99_ms=p99,
-        latency_mean_ms=statistics.mean(latencies) if latencies else 0.0,
-        by_category=by_category,
-        by_file_type=by_file_type,
+        manifest=manifest,
         results=results,
-        regression=None,
-        mean_reciprocal_rank=mean_rr,
-        within_max_rank_path_accuracy=within_max_acc,
-        include_stress=(
-            stress_only or (include_stress and any(q.stress_set for q in queries))
-        ),
-        stress_only=stress_only,
-        strict_keywords=strict_keywords,
-        strict_keywords_top1=strict_keywords_top1,
-        adaptive_fallback_rate=adaptive_fallback_rate,
     )

@@ -246,7 +246,7 @@ class TestHybridSearchFusion:
         hybrid = HybridSearch.__new__(HybridSearch)
         hybrid.semantic = MagicMock()
         hybrid.keyword = MagicMock()
-        hybrid.semantic.search.return_value = [
+        hybrid.semantic.rank.return_value = [
             {
                 "id": "semantic.md::0",
                 "path": "semantic.md",
@@ -257,7 +257,7 @@ class TestHybridSearchFusion:
                 "source": "semantic",
             }
         ]
-        hybrid.keyword.search.return_value = [
+        hybrid.keyword.rank.return_value = [
             {
                 "id": "keyword.md::0",
                 "path": "keyword.md",
@@ -269,10 +269,18 @@ class TestHybridSearchFusion:
             }
         ]
 
+        from trace_search.retrieval.search_types import SearchHit
+
+        hybrid.semantic.rank.return_value = [
+            SearchHit.from_dict(hit) for hit in hybrid.semantic.rank.return_value
+        ]
+        hybrid.keyword.rank.return_value = [
+            SearchHit.from_dict(hit) for hit in hybrid.keyword.rank.return_value
+        ]
         results = hybrid.search("RRF", top_k=2)
 
-        hybrid.semantic.search.assert_called_once()
-        hybrid.keyword.search.assert_called_once()
+        hybrid.semantic.rank.assert_called_once()
+        hybrid.keyword.rank.assert_called_once()
         assert {hit["path"] for hit in results} == {"semantic.md", "keyword.md"}
         assert all(hit["source"] == "hybrid" for hit in results)
 
@@ -461,8 +469,8 @@ class TestSemanticSearchCacheIsolation:
         search._model_slug = model_slug
         return search
 
-    def test_cache_key_includes_model_slug(self):
-        """Cache entries must be keyed by (model_slug, query), not just query."""
+    def test_cache_key_isolates_backend_instances(self):
+        """Backends with the same configured model must not share query vectors."""
         SemanticSearch._embedding_cache.clear()
 
         emb_a = self._search("model_a", [3.0, 4.0])._get_query_embedding("frontmatter")
@@ -470,8 +478,7 @@ class TestSemanticSearchCacheIsolation:
 
         np.testing.assert_allclose(emb_a, [0.6, 0.8])
         np.testing.assert_allclose(emb_b, [0.0, 1.0])
-        assert ("model_a", "frontmatter") in SemanticSearch._embedding_cache
-        assert ("model_b", "frontmatter") in SemanticSearch._embedding_cache
+        assert len(SemanticSearch._embedding_cache) == 2
 
     def test_same_model_reuses_cached_embedding(self):
         SemanticSearch._embedding_cache.clear()

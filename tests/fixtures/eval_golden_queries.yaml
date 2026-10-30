@@ -18,7 +18,7 @@
 #
 # Add --include-stress to include the paraphrase stress queries at the bottom.
 version: '1.0'
-description: Adversarial fixture golden set (17 core + 2 stress); lexical + paraphrase mix
+description: Adversarial fixture golden set (17 core + 12 stress); lexical + paraphrase mix
 queries:
 # --- Conceptual baseline -----------------------------------------------------
 - id: easy-bm25

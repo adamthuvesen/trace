@@ -1,26 +1,5 @@
-"""Shared BM25 tokenization helpers."""
+"""Public compatibility imports for the shared BM25 tokenizer."""
 
-from __future__ import annotations
+from trace_search.indexing.bm25_tokenize import english_stemmer, tokenize_keywords
 
-import bm25s
-import Stemmer
-
-_STEMMER: Stemmer.Stemmer | None = None
-
-
-def english_stemmer() -> Stemmer.Stemmer:
-    """Return a process-wide English stemmer for BM25 queries."""
-    global _STEMMER
-    if _STEMMER is None:
-        _STEMMER = Stemmer.Stemmer("english")
-    return _STEMMER
-
-
-def tokenize_keywords(text: str) -> object:
-    """Tokenize a keyword query for BM25 retrieval."""
-    return bm25s.tokenize(
-        [text],
-        stopwords="en",
-        stemmer=english_stemmer(),
-        show_progress=False,
-    )
+__all__ = ["english_stemmer", "tokenize_keywords"]

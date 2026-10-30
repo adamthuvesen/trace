@@ -144,18 +144,15 @@ class TestExtractTitle:
 
 
 class TestExtractCSVContent:
-    def test_basic_csv(self, tmp_path: Path):
-        csv_file = tmp_path / "test.csv"
-        csv_file.write_text("Name,Age,City\nJohn,30,New York\nJane,25,Boston\n")
-
-        content = extract_csv_content(csv_file)
+    def test_basic_csv(self, document_kb: Path):
+        content = extract_csv_content(document_kb / "rows.csv")
 
         assert "Row 1:" in content
-        assert "Name: John" in content
-        assert "Age: 30" in content
-        assert "City: New York" in content
+        assert "name: Format fixture" in content
+        assert "value: 42" in content
         assert "Row 2:" in content
-        assert "Name: Jane" in content
+        assert "name: Second row" in content
+        assert "value: 73" in content
 
     def test_csv_with_empty_values(self, tmp_path: Path):
         csv_file = tmp_path / "test.csv"
@@ -176,15 +173,37 @@ class TestExtractCSVContent:
 
 
 class TestExtractPDFContent:
-    """Test PDF content extraction (integration tests are in TestIntegrationWithRealFiles)."""
+    def test_pdf_preserves_text_page_order(self, document_kb: Path):
+        content = extract_pdf_content(document_kb / "report.pdf")
+
+        assert "Format fixture PDF content" in content
+        assert "Second PDF page" in content
+        assert content.index("Format fixture PDF content") < content.index(
+            "Second PDF page"
+        )
 
 
 class TestExtractDocxContent:
-    """Test DOCX content extraction (integration tests are in TestIntegrationWithRealFiles)."""
+    def test_docx_extracts_paragraphs_and_tables(self, document_kb: Path):
+        content = extract_docx_content(document_kb / "report.docx")
+
+        assert "Format fixture Word content" in content
+        assert "Item | Value" in content
+        assert "Widget | 42" in content
 
 
 class TestExtractPptxContent:
-    """Test PPTX content extraction (integration tests are in TestIntegrationWithRealFiles)."""
+    def test_pptx_extracts_slide_text_tables_and_notes(self, document_kb: Path):
+        content = extract_pptx_content(document_kb / "report.pptx")
+
+        assert "[Slide 1]" in content
+        assert "Format fixture PowerPoint content" in content
+        assert "Metric | Value" in content
+        assert "Active | 7" in content
+        assert "[Notes: Speaker note content]" in content
+        assert "[Slide 2]" in content
+        assert "Final slide text" in content
+        assert content.index("[Slide 1]") < content.index("[Slide 2]")
 
 
 class TestExtractCodeContent:
@@ -313,63 +332,8 @@ class TestExtractNotebookContent:
 
         assert content == ""
 
-    def test_invalid_notebook_returns_empty(self, tmp_path: Path):
+    def test_invalid_notebook_raises(self, tmp_path: Path):
         nb_file = tmp_path / "test.ipynb"
         nb_file.write_text("not valid json")
-
-        content = extract_notebook_content(nb_file)
-
-        assert content == ""
-
-
-@pytest.mark.slow
-class TestIntegrationWithRealFiles:
-    """Integration tests using actual KB files; skip when fixtures aren't available."""
-
-    def test_pdf_from_wiki(self, wiki_path):
-        pdfs = list(wiki_path.rglob("*.pdf"))
-        if not pdfs:
-            pytest.skip("No PDF files found in KB")
-
-        pdf_path = pdfs[0]
-        content = extract_pdf_content(pdf_path)
-
-        assert isinstance(content, str)
-        # Content should be non-trivial (some PDFs may be scanned/images)
-        if content.strip():
-            assert len(content) > 10
-
-    def test_docx_from_wiki(self, wiki_path):
-        docx_files = list(wiki_path.rglob("*.docx"))
-        if not docx_files:
-            pytest.skip("No DOCX files found in KB")
-
-        docx_path = docx_files[0]
-        content = extract_docx_content(docx_path)
-
-        assert isinstance(content, str)
-        assert len(content) > 0
-
-    def test_pptx_from_wiki(self, wiki_path):
-        pptx_files = list(wiki_path.rglob("*.pptx"))
-        if not pptx_files:
-            pytest.skip("No PPTX files found in KB")
-
-        pptx_path = pptx_files[0]
-        content = extract_pptx_content(pptx_path)
-
-        assert isinstance(content, str)
-        assert "[Slide" in content
-
-    def test_csv_from_wiki(self, wiki_path):
-        csv_files = list(wiki_path.rglob("*.csv"))
-        if not csv_files:
-            pytest.skip("No CSV files found in KB")
-
-        csv_path = csv_files[0]
-        try:
-            content = extract_csv_content(csv_path)
-            assert isinstance(content, str)
-        except Exception:
-            # Some CSVs may have encoding issues; skip rather than fail
-            pytest.skip(f"Could not parse CSV: {csv_path}")
+        with pytest.raises(ValueError):
+            extract_notebook_content(nb_file)

@@ -4,32 +4,33 @@ from __future__ import annotations
 
 from typing import Any
 
-from trace_search.indexing.index_paths import chunk_id
-from trace_search.indexing.index_store import ChunkMetadata
+from trace_search.retrieval.search_types import (
+    SearchHit,
+    ScoreEvidence,
+    SearchSource,
+)
 
-# Frontmatter-derived fields ride along only when the page set them.
-_OPTIONAL_FIELDS = ("aliases", "status", "as_of")
+from trace_search.indexing.index_store import ChunkMetadata
 
 
 def chunk_hit(
-    chunk: ChunkMetadata, content: str, score: float, source: str
+    chunk: ChunkMetadata, content: str, score: float, source: SearchSource
 ) -> dict[str, Any]:
-    """Return the hit dict that search modes, fusion, and formatting share."""
-    hit: dict[str, Any] = {
-        "id": chunk_id(chunk["path"], chunk["chunk_index"]),
-        "path": chunk["path"],
-        "title": chunk["title"],
-        "folder": chunk["folder"],
-        "content": content,
-        "score": score,
-        "source": source,
-        "chunk_index": chunk["chunk_index"],
-        "chunk_count": chunk["chunk_count"],
-        "breadcrumb": chunk["breadcrumb"],
-        "extension": chunk["extension"],
-        "source_mtime": chunk["source_mtime"],
-    }
-    for name in _OPTIONAL_FIELDS:
-        if value := chunk.get(name):
-            hit[name] = value
-    return hit
+    """Compatibility dictionary for a typed indexed hit."""
+    return typed_chunk_hit(chunk, content, score, source, None).to_dict()
+
+
+def typed_chunk_hit(
+    chunk: ChunkMetadata,
+    content: str,
+    score: float,
+    source: SearchSource,
+    generation: str | None,
+) -> SearchHit:
+    return SearchHit(
+        metadata=chunk,
+        content=content,
+        source=source,
+        evidence=ScoreEvidence(score),
+        generation=generation,
+    )

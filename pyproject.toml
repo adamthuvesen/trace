@@ -5,7 +5,7 @@ description = "Local document search for file-backed knowledge bases"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "fastmcp==4.0.0b2",
+    "fastmcp==4.1.6",
     "fastembed>=0.3.0",
     "bm25s>=0.2.0",
     "PyStemmer>=2.2.0",
@@ -16,6 +16,8 @@ dependencies = [
     "pymupdf>=1.24.0",       # PDF text extraction
     "python-docx>=1.0.0",    # Word document extraction
     "python-pptx>=0.6.0",    # PowerPoint extraction
+    "numpy>=1.26.0,<2.5",
+    "pydantic>=2.0.0",
 ]
 
 [project.scripts]
@@ -33,14 +35,14 @@ convert = [
 
 [dependency-groups]
 dev = [
-    "matplotlib>=3.8.0",
-    "numpy>=1.26.0,<2.5",
     "pytest>=8.0.0",
     "click>=8.0.0",
     "PyYAML>=6.0.0",
     "ruff>=0.15.13",
     "mypy>=2.2.0",
     "types-pyyaml>=6.0.12.20260906",
+    "import-linter>=2.15",
+    "pandas-stubs>=3.1.0.261029",
 ]
 
 [build-system]
@@ -59,10 +61,27 @@ markers = [
 
 [tool.mypy]
 python_version = "3.13"
-files = ["src/trace_search"]
+files = ["src/trace_search", "tools"]
+mypy_path = "src"
+explicit_package_bases = true
 strict = true
 warn_unused_configs = true
 
 [[tool.mypy.overrides]]
 module = ["bm25s", "Stemmer", "fitz"]
 ignore_missing_imports = true
+
+[tool.importlinter]
+root_package = "trace_search"
+
+[[tool.importlinter.contracts]]
+name = "Runtime code does not depend on server adapters"
+type = "forbidden"
+source_modules = ["trace_search.collections", "trace_search.retrieval", "trace_search.indexing", "trace_search.extraction"]
+forbidden_modules = ["trace_search.server"]
+
+[[tool.importlinter.contracts]]
+name = "Index construction does not depend on retrieval or collection operations"
+type = "forbidden"
+source_modules = ["trace_search.indexing", "trace_search.extraction"]
+forbidden_modules = ["trace_search.retrieval", "trace_search.collections"]

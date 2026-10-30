@@ -1,36 +1,86 @@
-# Retrieval Modes
+# Retrieval modes
 
-Trace has four retrieval modes. `adaptive` is what `search` runs.
+Trace exposes four retrieval modes.
+The `search` operation selects `adaptive`.
+All modes apply filters before ranking.
 
-| Mode | Best use | Avoid when |
+| Mode | Retrieval behavior | Useful for |
 | --- | --- | --- |
-| `bm25` | Exact identifiers, config keys, error codes, filenames, and known terms. Fastest by a wide margin. | The user paraphrases or doesn't know the document's vocabulary. |
-| `semantic` | Paraphrases and conceptual lookups when exact terms are missing. A lexical boost re-ranks the top 50 vector candidates so exact titles, aliases, and terms surface. | You need deterministic exact-token behavior. |
-| `hybrid` | BM25 and semantic ranking fused per document with reciprocal-rank fusion (semantic weight 0.4). | Latency matters more than the last few MRR points on keyword-dense queries. |
-| `adaptive` | Default. BM25 alone when its top document scores at least 1.3x the runner-up, otherwise `hybrid`. One BM25 match also fuses, since it is often a paraphrase sharing one word with some page. | You are debugging one method in isolation. |
+| `bm25` | Scores lexical chunks and aggregates evidence per file | Identifiers, configuration keys, error codes, known terms |
+| `semantic` | Scores normalized vectors and adds lexical evidence within the candidate pool | Paraphrases and conceptual lookups |
+| `hybrid` | Fuses BM25 and semantic ranks per document | Queries that need both signals |
+| `adaptive` | Uses BM25 when its leading document clearly wins, otherwise uses hybrid | Default application search |
 
-## How BM25 ranks a file
+## Adaptive routing
 
-BM25 scores chunks, then rolls them up per file:
+The confidence gate compares BM25's leading document with its runner-up.
+The leading score must be at least 1.3 times the runner-up score.
+A single BM25 match falls back to hybrid because it provides no runner-up comparison.
+The source is `BM25_DOMINANCE_MARGIN` in `retrieval/query_profile.py`.
 
-- best chunk score, plus a saturating bonus for several strong chunks;
-- a metadata boost when query terms appear in the title, aliases, path, or heading breadcrumb;
-- a larger boost when the query is essentially the page's title or one alias (every query term in that name, covering at least 60% of it). This also lifts the `index.md`/`log.md` hub demotion for that page;
-- 0.7x for frontmatter `status: superseded` or `deprecated`, so a replaced page ranks just below its replacement.
+The gate requests at least two BM25 documents, even for `top_k=1`.
+Hybrid retrieval keeps its separate candidate depths: `2 * top_k` BM25 documents and `4 * top_k` semantic chunks.
+Semantic retrieval can inspect a larger internal pool for its lexical scoring.
+The semantic fusion weight is 0.4, from `retrieval/search.py`.
 
-Frontmatter never reaches the ranking text as YAML. `title`, `aliases`, and `summary` become a card at the top of the first chunk.
+When BM25 finds nothing, exact-token queries can return an empty result directly.
+Other queries can use a hybrid fallback.
+An unfiltered fallback must also satisfy the existing confidence rule in `AdaptiveSearch._fallback_confident`.
+The response includes the selected strategy, reason, and fallback flag.
+
+## BM25 evidence
+
+BM25 scores chunks, then aggregates them per file.
+A file receives its best chunk score and a saturating bonus for supporting chunks.
+Title, alias, path, heading, and folder matches contribute metadata evidence.
+A query that names a page can lift that page above a generic hub demotion.
+`status: superseded` and `status: deprecated` apply the existing 0.7 multiplier.
+The ranking constants and implementation live in `retrieval/search.py`.
+
+Frontmatter YAML stays outside ranking text.
+`title`, `aliases`, and `summary` contribute a card to the first chunk.
+The card and chunk construction belong to `extraction/` and `indexing/index_builder.py`.
+
+## Identity, order, and source freshness
+
+`SearchHit` separates document identity, chunk identity, content, and score evidence.
+`SearchResponse` preserves final ranking order.
+Shared operations retain one generation per selected collection through routing, candidate retrieval, filtering, and neighbor lookup.
+Multi-collection merging compares rank contributions instead of unrelated raw scores.
+Typed response rendering preserves the supplied order when it groups snippets by document.
+Legacy list-based context formatting retains its score sorting.
+
+Public `.search()` methods preserve their dictionary result contracts.
+Typed ranking uses `.rank()`, and adaptive typed retrieval uses `.response()`.
+`TraceOperations.search_response()` composes collection retrieval and returns a typed response.
+See [architecture.md](architecture.md) for module ownership.
+
+Search uses indexed source metadata and captured text.
+`get_document` reads the current source file.
+`list_documents` scans current files.
+Reindex after source changes to align search with those live reads.
 
 ## Battle suites
 
-The committed no-secret fixtures (`tests/fixtures/eval_kb`, `tests/fixtures/battle_kbs/*`) are small and paraphrase-heavy, so semantic search does well on them. Treat them as regression signals, not corpus-scale claims.
+The committed fixtures are small public knowledge bases with lexical and paraphrase cases.
+They provide regression evidence, not corpus-scale performance claims.
 
 ```bash
-uv run python -m tools.eval.battle_royale --label <label>
-uv run python -m tools.eval.battle_royale \
-  --suite tests/fixtures/eval_battle_royale_challenge.yaml --label <label>
+uv run --locked python -m tools.eval.battle_royale \
+  --output-dir tools/eval/results/runs/battle --label local --detail-reports
+uv run --locked python -m tools.eval.battle_royale \
+  --suite tests/fixtures/eval_battle_royale_challenge.yaml \
+  --output-dir tools/eval/results/runs/battle --label local-challenge --detail-reports
 ```
 
-Challenge suite (61 queries), 2026-09-29. "Before" is commit `e979fc5` re-run the same day. The committed `challenge_current` summary predates it and is stale.
+Both commands use scratch indexes.
+See [evaluation.md](evaluation.md) for manifests, metric definitions, and baseline comparison rules.
+
+## Historical challenge results
+
+This table belongs to the 2026-09-29 investigation and its 61-query challenge population.
+The before run used commit `e979fc5` on the same day.
+The committed `challenge_current` summary predates that investigation and is stale.
 
 | Mode | MRR before | MRR after | p50 after |
 | --- | ---: | ---: | ---: |
@@ -39,4 +89,5 @@ Challenge suite (61 queries), 2026-09-29. "Before" is commit `e979fc5` re-run th
 | `hybrid` | 0.910 | 0.883 | 3.6 ms |
 | `adaptive` | 0.870 | 0.878 | 3.5 ms |
 
-Hybrid lost ground here while it gained 0.11 and 0.17 MRR on two private knowledge bases. Document-level fusion and the 0.4 weight favor BM25, and this suite rewards semantic search. See [benchmarks/2026-09-29-trace-overhaul.md](benchmarks/2026-09-29-trace-overhaul.md).
+These historical results use their original corpus, code, and measurement protocol.
+The [benchmark note](benchmarks/2026-09-29-trace-overhaul.md) explains those experiments and their limits.

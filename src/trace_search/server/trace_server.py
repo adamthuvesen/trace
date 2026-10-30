@@ -1,12 +1,35 @@
 """Trace console entrypoint."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from trace_search.server.cli import (
     DEFAULT_HTTP_HOST,
     DEFAULT_HTTP_PORT,
     ServeTransport,
     run_cli,
+    validate_http_endpoint,
 )
 from trace_search.config import configure_logging, get_settings
+
+if TYPE_CHECKING:
+    from fastmcp import FastMCP
+
+
+def create_mcp() -> FastMCP:
+    """Build the same configured server for serving and FastMCP inspection."""
+    import fastmcp
+
+    from trace_search.server.mcp_tools import build_multi_mcp
+
+    fastmcp.settings.check_for_updates = "off"
+    configure_logging()
+    config = get_settings()
+    mcp, _ = build_multi_mcp(
+        "trace", config.parsed_collections, index_root=config.index_path, config=config
+    )
+    return mcp
 
 
 def run_server(
@@ -15,11 +38,9 @@ def run_server(
     port: int = DEFAULT_HTTP_PORT,
 ) -> None:
     """Run the Trace MCP server over stdio or streamable HTTP."""
-    # FastMCP costs ~0.4 s to import; CLI subcommands never need it.
-    from trace_search.server.mcp_tools import build_multi_mcp
-
-    configure_logging()
-    mcp, _ = build_multi_mcp("trace", get_settings().parsed_collections)
+    if transport == "http":
+        validate_http_endpoint(host, port)
+    mcp = create_mcp()
     if transport == "stdio":
         mcp.run()
         return
