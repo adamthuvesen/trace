@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from tests.test_runtime_hardening import FakeBackend
+from tests.typed_fakes import fake_indexer
 from trace_search.collections.collection_registry import CollectionRegistry
 from trace_search.indexing.embedding_warmup import warm_embedding_model
 from trace_search.retrieval.search import SemanticSearch
@@ -69,7 +69,7 @@ def test_warmup_does_not_populate_query_cache():
 
 def test_warmup_input_still_cache_misses_as_user_query():
     backend = RecordingBackend()
-    semantic = SemanticSearch(SimpleNamespace(backend=backend))
+    semantic = SemanticSearch(fake_indexer(backend=backend))
     warm_embedding_model(backend)
 
     before_misses = SemanticSearch._cache_misses

@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from tests.typed_fakes import fake_operations_factory, settings_without_dotenv
 from trace_search.collections.diagnostics import DoctorReport
 from trace_search.server.cli import run_cli
 
@@ -14,7 +15,8 @@ _FILTER_KEYS = ("path_prefix", "extensions", "since")
 
 
 def _filter_tuple(kwargs: dict[str, Any]) -> tuple[Any, Any, Any]:
-    return tuple(kwargs.get(key) for key in _FILTER_KEYS)
+    path_prefix, extensions, since = (kwargs.get(key) for key in _FILTER_KEYS)
+    return path_prefix, extensions, since
 
 
 @dataclass
@@ -124,7 +126,7 @@ def run_with_fake(
 ) -> tuple[int, str, str]:
     code = run_cli(
         argv,
-        operations_factory=lambda: fake_operations,
+        operations_factory=fake_operations_factory(lambda: fake_operations),
         serve=lambda *_: None,
     )
     captured = capsys.readouterr()
@@ -149,7 +151,7 @@ def test_serve_starts_server(capsys, argv, expected_serve):
     def serve(transport: str, host: str, port: int) -> None:
         served.append((transport, host, port))
 
-    code = run_cli(argv, operations_factory=FakeOperations, serve=serve)
+    code = run_cli(argv, operations_factory=fake_operations_factory(FakeOperations), serve=serve)
 
     assert code == 0
     assert served == [expected_serve]
@@ -285,7 +287,7 @@ def test_operation_errors_return_nonzero(capsys):
 
     code = run_cli(
         ["search", "anything"],
-        operations_factory=failing_factory,
+        operations_factory=fake_operations_factory(failing_factory),
         serve=lambda *_: None,
     )
 
@@ -298,7 +300,11 @@ def test_doctor_config_errors_keep_doctor_report(capsys):
     def failing_factory() -> FakeOperations:
         raise ValueError("Set KB_COLLECTIONS or KB_PATH")
 
-    code = run_cli(["doctor"], operations_factory=failing_factory, serve=lambda *_: None)
+    code = run_cli(
+        ["doctor"],
+        operations_factory=fake_operations_factory(failing_factory),
+        serve=lambda *_: None,
+    )
 
     captured = capsys.readouterr()
     assert code == 1
@@ -364,9 +370,8 @@ def test_http_rejects_invalid_ports(port, capsys):
 def test_real_operation_failure_has_no_success_stdout(tmp_path, capsys, argv):
     from trace_search.collections.collection_registry import CollectionRegistry
     from trace_search.collections.operations import TraceOperations
-    from trace_search.config import Settings
 
-    config = Settings(_env_file=None, kb_path=tmp_path)
+    config = settings_without_dotenv(kb_path=tmp_path)
     operations = TraceOperations(CollectionRegistry({"documents": tmp_path}, config=config))
 
     code = run_cli(argv, operations_factory=lambda: operations)
@@ -381,10 +386,9 @@ def test_real_operation_failure_has_no_success_stdout(tmp_path, capsys, argv):
 def test_doctor_unbuilt_index_returns_nonzero_with_report(tmp_path, capsys):
     from trace_search.collections.collection_registry import CollectionRegistry
     from trace_search.collections.operations import TraceOperations
-    from trace_search.config import Settings
 
     (tmp_path / "hello.md").write_text("# Hello\n\nFixture")
-    config = Settings(_env_file=None, kb_path=tmp_path)
+    config = settings_without_dotenv(kb_path=tmp_path)
     operations = TraceOperations(CollectionRegistry({"documents": tmp_path}, config=config))
 
     code = run_cli(["doctor"], operations_factory=lambda: operations)

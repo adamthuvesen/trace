@@ -146,6 +146,7 @@ def test_invalid_settings_do_not_fall_back_to_query_file(monkeypatch):
 )
 def test_comparison_rejects_changed_inputs(field, value):
     current, baseline = report(), report()
+    assert current.manifest is not None
     setattr(current.manifest, field, value)
     current = EvaluationReport.from_results(
         timestamp=current.timestamp, manifest=current.manifest, results=current.results
@@ -217,6 +218,7 @@ def test_failed_evaluation_cannot_replace_baseline(tmp_path):
     failed.results[0].top_1_path_hit = False
     failed.results[0].path_first_hit_rank = 2
     failed.results[0].path_reciprocal_rank = 0.5
+    assert failed.manifest is not None
     failed = EvaluationReport.from_results(
         timestamp=failed.timestamp, manifest=failed.manifest, results=failed.results
     )
@@ -238,6 +240,7 @@ def test_ci_gate_fails_on_regression_and_passes_a_match():
     current.results[0].top_1_path_hit = False
     current.results[0].path_first_hit_rank = 2
     current.results[0].path_reciprocal_rank = 0.5
+    assert current.manifest is not None
     worse = EvaluationReport.from_results(
         timestamp=current.timestamp, manifest=current.manifest, results=current.results
     )
@@ -390,7 +393,9 @@ def test_current_group_metrics_require_counts_and_reject_conflicting_accuracy():
     with pytest.raises(ValueError, match="top_1_path_hits"):
         EvaluationReport.from_dict(current)
     current = report().to_dict()
-    current["by_category"][""]["top_1_path_accuracy"] = 0.0
+    by_category = current["by_category"]
+    assert isinstance(by_category, dict)
+    by_category[""]["top_1_path_accuracy"] = 0.0
     with pytest.raises(ValueError, match="contradicts its hit counts"):
         EvaluationReport.from_dict(current)
 
@@ -407,6 +412,7 @@ def test_current_result_rank_must_match_metrics_and_retrieval_scope(invalid):
     current = report()
     for name, value in invalid.items():
         setattr(current.results[0], name, value)
+    assert current.manifest is not None
     with pytest.raises(ValueError, match="rank"):
         EvaluationReport.from_results(
             timestamp=current.timestamp,

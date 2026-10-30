@@ -35,7 +35,7 @@ Composed application behavior belongs in `TraceOperations`; CLI and MCP adapters
 | Rule | Enforced by | Added |
 | --- | --- | --- |
 | Runtime code does not import `server/`; indexing does not import retrieval or collections | `pyproject.toml::tool.importlinter` | 2026-11-04 |
-| Runtime and tooling code type-checks strictly | `pyproject.toml::tool.basedpyright`, `justfile::ratchet` | 2026-11-04 |
+| Runtime and tooling code type-checks strictly | `pyproject.toml::typeCheckingMode` | 2026-11-04 |
 | Chunk text or metadata changes bump `INDEX_METADATA_VERSION` | `tests/test_chunk_transform_golden.py::test_chunk_transform_changes_bump_index_metadata_version` | 2026-11-06 |
 | MCP output text stays stable | `tests/test_mcp_output_golden.py::test_mcp_output_matches_golden` | 2026-11-06 |
 | MCP tool names stay stable | `tests/test_transports.py::test_fastmcp_inspector_loads_noarg_factory` | 2026-11-04 |

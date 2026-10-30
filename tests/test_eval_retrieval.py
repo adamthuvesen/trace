@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,7 +19,7 @@ FIXTURE_GOLDEN = Path(__file__).parent / "fixtures" / "eval_golden_queries.yaml"
 
 
 @pytest.fixture
-def eval_indexer(tmp_path: Path) -> WikiIndexer:
+def eval_indexer(tmp_path: Path) -> Iterator[WikiIndexer]:
     get_settings.cache_clear()
     SemanticSearch._embedding_cache.clear()
     indexer = WikiIndexer(

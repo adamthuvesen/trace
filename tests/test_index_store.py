@@ -5,12 +5,12 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from tests.test_runtime_hardening import FakeBackend
+from tests.typed_fakes import fake_indexer
 from trace_search.config import settings
 from trace_search.indexing.index_store import (
     ChunkMetadata,
@@ -23,6 +23,7 @@ from trace_search.indexing.index_store import (
 )
 from trace_search.indexing.wiki_indexer import WikiIndexer
 from trace_search.retrieval.search import KeywordSearch, SemanticSearch, parse_filters
+from trace_search.retrieval.search_types import SearchHit
 
 
 @pytest.fixture
@@ -39,7 +40,7 @@ def _indexer(kb: Path, index_root: Path) -> WikiIndexer:
     return WikiIndexer(kb, index_root=index_root, backend=FakeBackend())
 
 
-def _paths(hits: list[dict]) -> list[str]:
+def _paths(hits: list[SearchHit]) -> list[str]:
     return [hit.path for hit in hits]
 
 
@@ -129,21 +130,23 @@ def test_snapshot_rejects_inconsistent_row_counts():
         "extension": ".md",
         "source_mtime": 0.0,
     }
-    good = {
-        "chunk_ids": ["a.md::0"],
-        "texts": ["alpha"],
-        "chunks": [chunk],
-        "embeddings": np.ones((1, 3), dtype=np.float32),
-    }
-    bad_rows = [
-        {"chunk_ids": ["a.md::0", "b.md::0"]},
-        {"texts": []},
-        {"embeddings": np.ones((2, 3), dtype=np.float32)},
+    one_row = np.ones((1, 3), dtype=np.float32)
+    inconsistent = [
+        (["a.md::0", "b.md::0"], ["alpha"], one_row),
+        (["a.md::0"], [], one_row),
+        (["a.md::0"], ["alpha"], np.ones((2, 3), dtype=np.float32)),
     ]
 
-    for override in bad_rows:
+    for chunk_ids, texts, embeddings in inconsistent:
         with pytest.raises(ValueError, match="inconsistent"):
-            IndexSnapshot.build(**{**good, **override}, k1=1.2, b=0.5)
+            IndexSnapshot.build(
+                chunk_ids=chunk_ids,
+                texts=texts,
+                chunks=[chunk],
+                embeddings=embeddings,
+                k1=1.2,
+                b=0.5,
+            )
 
 
 class _QueryBackend:
@@ -156,7 +159,7 @@ class _QueryBackend:
         return np.asarray([1.0, 0.0, 0.0], dtype=np.float32)
 
 
-def _prefix_snapshot_indexer() -> SimpleNamespace:
+def _prefix_snapshot_indexer() -> WikiIndexer:
     # Enough out-of-prefix chunks outrank the one in-prefix chunk to fill every
     # candidate pool, so a filter applied after ranking would return nothing.
     outside = 600
@@ -184,7 +187,7 @@ def _prefix_snapshot_indexer() -> SimpleNamespace:
         k1=settings.bm25_k1,
         b=settings.bm25_b,
     )
-    return SimpleNamespace(snapshot=lambda: snapshot, backend=_QueryBackend())
+    return fake_indexer(snapshot=lambda: snapshot, backend=_QueryBackend())
 
 
 def test_path_prefix_filter_ranks_only_matching_rows():
@@ -231,7 +234,7 @@ def test_hybrid_ranks_both_lists_from_one_generation(kb, tmp_path):
     published = indexer.snapshot()
     # A reindex lands mid-query: every later snapshot() call sees an empty index.
     calls = iter([published])
-    indexer.snapshot = lambda: next(calls, IndexSnapshot.empty())  # type: ignore[method-assign]
+    indexer.snapshot = lambda: next(calls, IndexSnapshot.empty())
 
     hits = HybridSearch(indexer).search("welcome notes", top_k=3)
 

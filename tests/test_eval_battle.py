@@ -34,6 +34,7 @@ def collapsed_report(reference: EvaluationReport) -> EvaluationReport:
         )
         for result in reference.results
     ]
+    assert reference.manifest is not None
     return EvaluationReport.from_results(
         timestamp=reference.timestamp, manifest=reference.manifest, results=results
     )
@@ -206,6 +207,7 @@ def test_top5_only_regression_identifies_the_query(tmp_path):
             "path_hit_within_max_rank": False,
         }
     )
+    assert reference.manifest is not None
     current = EvaluationReport.from_results(
         timestamp=reference.timestamp,
         manifest=reference.manifest,

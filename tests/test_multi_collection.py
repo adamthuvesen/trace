@@ -1,7 +1,10 @@
 """Tests for multi-collection knowledge server."""
 
+from typing import Any
+
 import pytest
 
+from tests.typed_fakes import settings_without_dotenv
 from trace_search.collections.operations import TraceOperations
 from trace_search.config import Settings
 from trace_search.retrieval.search import KeywordSearch
@@ -35,7 +38,7 @@ class TestKBCollectionsParsing:
         kb.mkdir(parents=True)
         monkeypatch.setenv("HOME", str(home))
 
-        s = Settings(kb_path="~/docs")
+        s = settings_without_dotenv(kb_path="~/docs")
 
         assert s.parsed_collections == {"docs": kb}
 
@@ -447,11 +450,11 @@ class TestMergeResults:
         """Regression: raw BM25 scores from a large corpus (higher IDF) used to
         crowd out a small collection's genuinely relevant top hit."""
 
-        large = [
+        large: list[dict[str, Any]] = [
             {"path": f"large_{i}.md", "score": 12.0 - i * 0.5, "source": "keyword"}
             for i in range(5)
         ]
-        small = [
+        small: list[dict[str, Any]] = [
             {"path": "answer.md", "score": 3.2, "source": "keyword"},
             {"path": "other.md", "score": 1.1, "source": "keyword"},
         ]

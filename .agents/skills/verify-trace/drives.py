@@ -347,7 +347,7 @@ async def drive_mcp(ctx: Context) -> str:
 
 
 async def drive_package(ctx: Context) -> str:
-    result = ctx.run([sys.executable, "-m", "tools.verify_package"], cwd=ctx.root, timeout=600)
+    result = ctx.run([sys.executable, "-m", "tools.verify_package"], cwd=ctx.root, timeout=180)
     expect(
         result.returncode == 0 and "Package verification passed" in result.stdout,
         f"package: expected the wheel check to pass, got exit {result.returncode}: {(result.stderr or result.stdout)[-400:]}",

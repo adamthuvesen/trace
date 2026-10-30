@@ -90,8 +90,8 @@ def test_card_replaces_raw_yaml_in_the_indexed_text(tmp_path):
     assert "Also known as: Internal tools overview; internal tools; hobby builds" in first
     assert "Summary: The team's internal tools" in first
     assert "zebra-quagga-unique-token" not in " ".join(snapshot.texts)
-    assert snapshot.chunks[row]["status"] == "current"
-    assert snapshot.chunks[row]["as_of"] == "2026-08-04"
+    assert snapshot.chunks[row].get("status") == "current"
+    assert snapshot.chunks[row].get("as_of") == "2026-08-04"
     assert not KeywordSearch(indexer).search("zebra quagga")
 
 
@@ -120,7 +120,7 @@ def test_superseded_page_ranks_below_its_replacement_but_stays_findable(tmp_path
     hits = KeywordSearch(indexer).search("onboarding checklist", max_results=5)
 
     assert [hit.path for hit in hits] == ["new.md", "old.md"]
-    assert hits[1].metadata["status"] == "superseded"
+    assert hits[1].metadata.get("status") == "superseded"
 
 
 def test_aliases_without_a_frontmatter_title_have_no_empty_name(tmp_path):
@@ -129,4 +129,4 @@ def test_aliases_without_a_frontmatter_title_have_no_empty_name(tmp_path):
     snapshot = indexer.snapshot()
     row = snapshot.row_by_id["repos.md::0"]
 
-    assert snapshot.chunks[row]["aliases"] == "hobby builds"
+    assert snapshot.chunks[row].get("aliases") == "hobby builds"

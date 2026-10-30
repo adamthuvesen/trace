@@ -11,10 +11,10 @@ from pathlib import Path
 import pytest
 
 from tests.test_runtime_hardening import FakeBackend
+from tests.typed_fakes import settings_without_dotenv
 from trace_search.collections.collection_registry import CollectionRegistry
 from trace_search.collections.errors import DocumentNotFoundError
 from trace_search.collections.operations import TraceOperations
-from trace_search.config import Settings
 from trace_search.extraction.corpus import iter_kb_files
 from trace_search.indexing import index_store
 from trace_search.indexing.embeddings import OnnxBackend
@@ -140,7 +140,7 @@ def test_relative_kb_path_derives_resolved_collection_name(tmp_path, monkeypatch
     child = tmp_path / "child"
     child.mkdir()
     monkeypatch.chdir(child)
-    config = Settings(_env_file=None, kb_path=relative, kb_collections=None)
+    config = settings_without_dotenv(kb_path=relative, kb_collections=None)
     expected = Path(relative).resolve().name
     assert list(config.parsed_collections) == [expected]
     assert CollectionRegistry(config.parsed_collections, config=config).collection_names == [
@@ -184,7 +184,9 @@ def test_plugin_class_name_cannot_claim_builtin_backend_identity(indexed):
     writer = WikiIndexer(indexed.kb_path, indexed.index_root, first)
     writer.build_index(force=True)
     reader = WikiIndexer(indexed.kb_path, indexed.index_root, second)
-    assert not metadata_query_compatible(reader.snapshot().metadata, reader.config, second)
+    metadata = reader.snapshot().metadata
+    assert metadata is not None
+    assert not metadata_query_compatible(metadata, reader.config, second)
     with pytest.raises(ValueError, match="incompatible"):
         SemanticSearch(reader).search("Visible")
 
@@ -283,17 +285,17 @@ def test_synthetic_enospc_cleans_only_failed_attempt_artifacts(indexed, monkeypa
     before = {path.name for path in indexed.index_root.glob("gen-*")}
     if stage == "embedding":
 
-        def fail(path, *args, **kwargs):
+        def fail_save(path, *args, **kwargs):
             Path(path).write_bytes(b"synthetic partial embedding payload")
             raise OSError(errno.ENOSPC, "synthetic disk-full fault")
 
-        monkeypatch.setattr(index_store.np, "save", fail)
+        monkeypatch.setattr(index_store.np, "save", fail_save)
     else:
 
-        def fail(source, destination):
+        def fail_replace(source, destination):
             raise OSError(errno.ENOSPC, "synthetic disk-full pointer fault")
 
-        monkeypatch.setattr(index_store.os, "replace", fail)
+        monkeypatch.setattr(index_store.os, "replace", fail_replace)
     for _ in range(3):
         with pytest.raises(OSError, match="synthetic disk-full"):
             write_snapshot(indexed.index_root, snapshot)

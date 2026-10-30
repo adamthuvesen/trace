@@ -7,7 +7,6 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
@@ -15,10 +14,11 @@ import pytest
 
 from tests.search_hits import make_hit
 from tests.test_runtime_hardening import FakeBackend
+from tests.typed_fakes import fake_indexer, settings_without_dotenv
 from trace_search.collections.collection_registry import CollectionRegistry
 from trace_search.collections.errors import DocumentNotFoundError, ReindexError
 from trace_search.collections.operations import TraceOperations
-from trace_search.config import Settings, parse_kb_collections
+from trace_search.config import parse_kb_collections
 from trace_search.indexing.index_metadata import (
     INDEX_METADATA_VERSION,
     build_index_metadata,
@@ -156,7 +156,7 @@ def test_recipe_records_injected_backend_and_bm25_change_forces_rebuild(indexed)
 
 
 def test_v6_is_readable_and_query_compatible_but_requires_full_rebuild(tmp_path):
-    config = Settings(_env_file=None)
+    config = settings_without_dotenv()
     raw = build_index_metadata(
         kb_path=tmp_path,
         build_started_at="",
@@ -335,8 +335,8 @@ class _UnhashableBackend:
 
 
 def test_query_cache_isolates_same_name_unhashable_backends():
-    one = SemanticSearch(SimpleNamespace(backend=_UnhashableBackend((1.0, 0.0))))
-    two = SemanticSearch(SimpleNamespace(backend=_UnhashableBackend((0.0, 1.0))))
+    one = SemanticSearch(fake_indexer(backend=_UnhashableBackend((1.0, 0.0))))
+    two = SemanticSearch(fake_indexer(backend=_UnhashableBackend((0.0, 1.0))))
     assert one._get_query_embedding("same query").tolist() == [1.0, 0.0]
     assert two._get_query_embedding("same query").tolist() == [0.0, 1.0]
 
@@ -354,7 +354,7 @@ def test_implicit_collection_keeps_valid_filesystem_names(tmp_path, name):
     kb = tmp_path / name
     kb.mkdir()
     (kb / "intro.md").write_text("# Intro")
-    config = Settings(_env_file=None, kb_path=kb, kb_collections=None)
+    config = settings_without_dotenv(kb_path=kb, kb_collections=None)
     assert config.parsed_collections == {name: kb}
     registry = CollectionRegistry(config.parsed_collections, config=config)
     assert registry.collection_names == [name]
@@ -364,7 +364,7 @@ def test_implicit_collection_keeps_valid_filesystem_names(tmp_path, name):
 def test_implicit_all_directory_has_an_unambiguous_default_selector(tmp_path):
     kb = tmp_path / "all"
     kb.mkdir()
-    config = Settings(_env_file=None, kb_path=kb, kb_collections=None)
+    config = settings_without_dotenv(kb_path=kb, kb_collections=None)
     assert config.parsed_collections == {"default": kb}
     assert (
         CollectionRegistry(config.parsed_collections, config=config).resolve("default")[0].kb_path

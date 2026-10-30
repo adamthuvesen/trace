@@ -1,14 +1,15 @@
 """Tests for search module."""
 
-from types import SimpleNamespace
 from typing import get_type_hints
 from unittest.mock import MagicMock
 
 import numpy as np
 
 from tests.search_hits import make_hit
+from tests.typed_fakes import fake_indexer
 from trace_search.config import settings
-from trace_search.indexing.index_store import IndexSnapshot
+from trace_search.indexing.index_store import ChunkMetadata, IndexSnapshot
+from trace_search.indexing.wiki_indexer import WikiIndexer
 from trace_search.retrieval.formatting import format_results
 from trace_search.retrieval.query_profile import is_keywordish_query
 from trace_search.retrieval.search import (
@@ -59,7 +60,7 @@ class TestDocumentFusion:
 
 class TestEmptyCorpusSearch:
     def test_empty_corpus_returns_empty_list(self):
-        indexer = SimpleNamespace(snapshot=IndexSnapshot.empty)
+        indexer = fake_indexer(snapshot=IndexSnapshot.empty)
 
         assert KeywordSearch(indexer).search("anything") == []
         assert SemanticSearch(indexer).search("anything") == []
@@ -78,7 +79,7 @@ class TestKeywordSearchAggregation:
             return [list(range(len(self.scores)))], [self.scores]
 
     @staticmethod
-    def _indexer(bm25, chunks: list[dict]) -> SimpleNamespace:
+    def _indexer(bm25, chunks: list[ChunkMetadata]) -> WikiIndexer:
         snapshot = IndexSnapshot(
             generation=None,
             metadata=None,
@@ -88,10 +89,10 @@ class TestKeywordSearchAggregation:
             embeddings=np.zeros((len(chunks), 3), dtype=np.float32),
             bm25=bm25,
         )
-        return SimpleNamespace(snapshot=lambda: snapshot)
+        return fake_indexer(snapshot=lambda: snapshot)
 
     @staticmethod
-    def _metadata(path: str, title: str, chunk_index: int) -> dict:
+    def _metadata(path: str, title: str, chunk_index: int) -> ChunkMetadata:
         return {
             "path": path,
             "title": title,
@@ -104,7 +105,7 @@ class TestKeywordSearchAggregation:
         }
 
     @classmethod
-    def _large_corpus_with(cls, first: dict) -> list[dict]:
+    def _large_corpus_with(cls, first: ChunkMetadata) -> list[ChunkMetadata]:
         return [
             first,
             *[cls._metadata(f"filler/{index}.md", f"Filler {index}", 0) for index in range(4000)],
@@ -238,33 +239,24 @@ class TestHybridSearchFusion:
         hybrid.semantic = MagicMock()
         hybrid.keyword = MagicMock()
         hybrid.semantic.search.return_value = [
-            {
-                "id": "semantic.md::0",
-                "path": "semantic.md",
-                "title": "Semantic",
-                "folder": "",
-                "content": "semantic content",
-                "score": 0.9,
-                "source": "semantic",
-            }
+            make_hit(
+                "semantic.md",
+                title="Semantic",
+                folder="",
+                content="semantic content",
+                score=0.9,
+                source="semantic",
+            )
         ]
         hybrid.keyword.search.return_value = [
-            {
-                "id": "keyword.md::0",
-                "path": "keyword.md",
-                "title": "Keyword",
-                "folder": "",
-                "content": "keyword content",
-                "score": 2.0,
-                "source": "keyword",
-            }
-        ]
-
-        hybrid.semantic.search.return_value = [
-            make_hit(**hit) for hit in hybrid.semantic.search.return_value
-        ]
-        hybrid.keyword.search.return_value = [
-            make_hit(**hit) for hit in hybrid.keyword.search.return_value
+            make_hit(
+                "keyword.md",
+                title="Keyword",
+                folder="",
+                content="keyword content",
+                score=2.0,
+                source="keyword",
+            )
         ]
         results = hybrid.search("RRF", top_k=2)
 
@@ -282,12 +274,10 @@ class TestFormatResults:
     def test_format_results_minimal_hit(self):
         hits = [
             make_hit(
-                **{
-                    "title": "Test Doc",
-                    "path": "test.md",
-                    "folder": "",
-                    "content": "text",
-                }
+                title="Test Doc",
+                path="test.md",
+                folder="",
+                content="text",
             )
         ]
         result = format_results(hits)
@@ -297,14 +287,12 @@ class TestFormatResults:
     def test_format_results_with_score(self):
         hits = [
             make_hit(
-                **{
-                    "title": "Test",
-                    "path": "t.md",
-                    "folder": "Docs",
-                    "content": "content here",
-                    "score": 0.95,
-                    "source": "semantic",
-                }
+                title="Test",
+                path="t.md",
+                folder="Docs",
+                content="content here",
+                score=0.95,
+                source="semantic",
             )
         ]
         result = format_results(hits)
@@ -314,15 +302,13 @@ class TestFormatResults:
     def test_format_results_hybrid_with_rrf(self):
         hits = [
             make_hit(
-                **{
-                    "title": "Test",
-                    "path": "t.md",
-                    "folder": "Docs",
-                    "content": "content",
-                    "score": 0.85,
-                    "source": "hybrid",
-                    "rrf_score": 0.0123,
-                }
+                title="Test",
+                path="t.md",
+                folder="Docs",
+                content="content",
+                score=0.85,
+                source="hybrid",
+                rrf_score=0.0123,
             )
         ]
         result = format_results(hits)
@@ -331,13 +317,13 @@ class TestFormatResults:
 
     def test_format_results_truncates_long_content(self):
         long_content = "x" * 600
-        hits = [make_hit(**{"title": "T", "path": "t.md", "folder": "", "content": long_content})]
+        hits = [make_hit(title="T", path="t.md", folder="", content=long_content)]
         result = format_results(hits)
         assert "..." in result
         assert long_content not in result
 
     def test_format_results_without_content(self):
-        hits = [make_hit(**{"title": "T", "path": "t.md", "folder": "", "content": "secret"})]
+        hits = [make_hit(title="T", path="t.md", folder="", content="secret")]
         result = format_results(hits, include_content=False)
         assert "secret" not in result
 
@@ -368,18 +354,14 @@ class TestSemanticLexicalBoost:
     def test_exact_title_gets_larger_boost_than_partial_title(self):
         query = "What are embeddings?"
         exact = make_hit(
-            **{
-                "title": "Embeddings",
-                "path": "glossary/embeddings.md",
-                "content": "Embeddings turn text into vectors.",
-            }
+            title="Embeddings",
+            path="glossary/embeddings.md",
+            content="Embeddings turn text into vectors.",
         )
         partial = make_hit(
-            **{
-                "title": "Embedding backend",
-                "path": "config/embedding-backend.md",
-                "content": "EMBEDDING_BACKEND config chooses onnx or torch.",
-            }
+            title="Embedding backend",
+            path="config/embedding-backend.md",
+            content="EMBEDDING_BACKEND config chooses onnx or torch.",
         )
 
         assert _semantic_lexical_boost(
@@ -389,18 +371,14 @@ class TestSemanticLexicalBoost:
     def test_content_overlap_boosts_header_queries(self):
         query = "HTTP 429 Retry-After burst limit"
         rate_limit = make_hit(
-            **{
-                "title": "Rate limits",
-                "path": "api/rate-limits.md",
-                "content": "HTTP 429 Retry-After burst sustained request limit.",
-            }
+            title="Rate limits",
+            path="api/rate-limits.md",
+            content="HTTP 429 Retry-After burst sustained request limit.",
         )
         retryable = make_hit(
-            **{
-                "title": "Retryable errors",
-                "path": "errors/retryable-errors.md",
-                "content": "Retry HTTP 408, 429, and 503 with backoff.",
-            }
+            title="Retryable errors",
+            path="errors/retryable-errors.md",
+            content="Retry HTTP 408, 429, and 503 with backoff.",
         )
 
         assert _semantic_lexical_boost(
@@ -416,14 +394,12 @@ class TestFormatResultsPreviewTruncation:
         assert len(content) > 500
 
         hit = make_hit(
-            **{
-                "title": "Test",
-                "path": "test.md",
-                "folder": "",
-                "content": content,
-                "score": 1.0,
-                "source": "keyword",
-            }
+            title="Test",
+            path="test.md",
+            folder="",
+            content=content,
+            score=1.0,
+            source="keyword",
         )
         result = format_results([hit])
         preview_start = result.index("**Preview:**\n") + len("**Preview:**\n")
@@ -436,14 +412,12 @@ class TestFormatResultsPreviewTruncation:
     def test_content_under_500_not_truncated(self):
         content = "short content"
         hit = make_hit(
-            **{
-                "title": "Test",
-                "path": "test.md",
-                "folder": "",
-                "content": content,
-                "score": 1.0,
-                "source": "keyword",
-            }
+            title="Test",
+            path="test.md",
+            folder="",
+            content=content,
+            score=1.0,
+            source="keyword",
         )
         result = format_results([hit])
         assert "short content" in result
@@ -452,19 +426,18 @@ class TestFormatResultsPreviewTruncation:
 
 class TestSemanticSearchCacheIsolation:
     @staticmethod
-    def _search(model_slug: str, vector: list[float]) -> SemanticSearch:
+    def _search(vector: list[float]) -> SemanticSearch:
         backend = MagicMock()
         backend.encode_one.return_value = np.asarray(vector, dtype=np.float32)
-        search = SemanticSearch(SimpleNamespace(backend=backend))
-        search._model_slug = model_slug
+        search = SemanticSearch(fake_indexer(backend=backend))
         return search
 
     def test_cache_key_isolates_backend_instances(self):
         """Backends with the same configured model must not share query vectors."""
         SemanticSearch._embedding_cache.clear()
 
-        emb_a = self._search("model_a", [3.0, 4.0])._get_query_embedding("frontmatter")
-        emb_b = self._search("model_b", [0.0, 2.0])._get_query_embedding("frontmatter")
+        emb_a = self._search([3.0, 4.0])._get_query_embedding("frontmatter")
+        emb_b = self._search([0.0, 2.0])._get_query_embedding("frontmatter")
 
         np.testing.assert_allclose(emb_a, [0.6, 0.8])
         np.testing.assert_allclose(emb_b, [0.0, 1.0])
@@ -473,13 +446,15 @@ class TestSemanticSearchCacheIsolation:
     def test_same_model_reuses_cached_embedding(self):
         SemanticSearch._embedding_cache.clear()
         initial_hits = SemanticSearch._cache_hits
-        search = self._search("test_model", [0.5] * 4)
+        search = self._search([0.5] * 4)
 
         search._get_query_embedding("bm25 ranking")
         search._get_query_embedding("bm25 ranking")
 
         assert SemanticSearch._cache_hits == initial_hits + 1
-        assert search.indexer.backend.encode_one.call_count == 1
+        backend = search.indexer.backend
+        assert isinstance(backend, MagicMock)
+        assert backend.encode_one.call_count == 1
 
 
 class TestTopKBounds:
