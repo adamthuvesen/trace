@@ -32,6 +32,9 @@ Composed application behavior belongs in `TraceOperations`; CLI and MCP adapters
 
 ## Enforced Rules
 
+`just check` runs the import contracts, types, and the fast tests above.
+`just integration` runs slow and transport tests, the baselines, battle suites, and wheel check.
+
 | Rule | Enforced by | Added |
 | --- | --- | --- |
 | Runtime code does not import `server/`; indexing does not import retrieval or collections | `pyproject.toml::tool.importlinter` | 2026-11-04 |
@@ -51,9 +54,6 @@ Composed application behavior belongs in `TraceOperations`; CLI and MCP adapters
 | A verify run fails when it changes the checkout, ignored paths and git state included | `.agents/skills/verify-trace/verify::checkout_changes` | 2026-11-07 |
 | Every path cited in this table exists | `tests/test_agents_rules.py::test_enforced_rules_cite_real_files`, `tests/test_agents_rules.py::test_justfile_citations_match_whole_recipe_names` | 2026-11-06 |
 | No file downgrades strict type checking with a `# pyright:` mode comment | `tests/test_strict_mode.py::test_no_file_downgrades_type_checking_mode`, `tests/test_strict_mode.py::test_detector_finds_an_unstaged_downgrade` | 2026-11-07 |
-
-`just check` runs the import contracts, types, and the fast tests above.
-`just integration` runs slow and transport tests, the baselines, battle suites, and wheel check.
 
 ## Index and evaluation traps
 

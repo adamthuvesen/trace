@@ -287,6 +287,8 @@ async def drive_mcp(ctx: Context) -> str:
     from mcp.types import TextContent
 
     trace = str(Path(sys.executable).with_name("trace"))
+    # The in-process HTTP client reads proxy variables; loopback must bypass them.
+    os.environ["NO_PROXY"] = "127.0.0.1,localhost,::1"
 
     async def exercise(client: Client[Any], transport: str) -> None:
         names = {tool.name for tool in await client.list_tools()}
