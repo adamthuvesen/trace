@@ -9,7 +9,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _definition(path: Path, name: str) -> re.Pattern[str]:
-    if path.suffix == ".py":
+    is_script = not path.suffix and path.is_file() and path.read_text().startswith("#!")
+    if path.suffix == ".py" or (is_script and "python" in path.read_text().split("\n", 1)[0]):
         return re.compile(rf"^\s*(?:(?:async\s+)?def {name}\(|class {name}\b|{name} =)", re.M)
     if path.name == "justfile":
         return re.compile(rf"^{re.escape(name)}(?:\s[^\n]*)?:", re.M)

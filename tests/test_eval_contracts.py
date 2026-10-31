@@ -319,16 +319,31 @@ def test_queryset_fingerprint_contains_no_absolute_path_or_mtime():
     )
 
 
-def test_committed_benchmark_artifacts_contain_no_absolute_home_paths():
-    home_path = re.compile(r"/(?:Users|home)/[^/\s\"]+")
-    leaks = [
+HOME_PATH = re.compile(r"/(?:Users|home)/[^/\s\"]+")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def home_path_leaks(roots: tuple[Path, ...]) -> list[str]:
+    return [
         f"{path}: {match.group()}"
-        for root in (Path("docs/benchmarks"), Path("tools/eval/baselines"))
+        for root in roots
         for path in sorted(root.rglob("*"))
         if path.is_file()
-        for match in [home_path.search(path.read_text(errors="replace"))]
+        for match in [HOME_PATH.search(path.read_text(errors="replace"))]
         if match
     ]
+
+
+def test_home_path_scan_finds_a_planted_leak(tmp_path):
+    (tmp_path / "clean.json").write_text('{"kb": "tests/fixtures/eval_kb"}')
+    (tmp_path / "leak.json").write_text('{"kb": "/Users/someone/notes"}')
+    assert home_path_leaks((tmp_path,)) == [f"{tmp_path / 'leak.json'}: /Users/someone"]
+
+
+def test_committed_benchmark_artifacts_contain_no_absolute_home_paths():
+    roots = (REPO_ROOT / "docs/benchmarks", REPO_ROOT / "tools/eval/baselines")
+    assert all(root.is_dir() for root in roots)
+    leaks = home_path_leaks(roots)
     assert not leaks, (
         "Committed benchmark artifacts name a local home path. "
         "Rerun the evaluation against a public fixture or replace the path "

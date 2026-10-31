@@ -67,9 +67,54 @@ line-length = 100
 target-version = "py314"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PGH003", "PTH", "RUF"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PGH003", "PTH", "RUF", "TID251"]
 # The formatter owns line length; E501 only flags text it cannot wrap.
 ignore = ["E501"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"subprocess".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"pty".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"os.system".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"os.popen".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"asyncio.create_subprocess_exec".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"asyncio.create_subprocess_shell".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"socket".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (network client); tests/test_banned_api_owners.py pins them."
+"http.client".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (network client); tests/test_banned_api_owners.py pins them."
+"urllib.request".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (network client); tests/test_banned_api_owners.py pins them."
+"requests".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (network client); tests/test_banned_api_owners.py pins them."
+"httpx".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (network client); tests/test_banned_api_owners.py pins them."
+"aiohttp".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (network client); tests/test_banned_api_owners.py pins them."
+"openai".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (paid SDK); tests/test_banned_api_owners.py pins them."
+"anthropic".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (paid SDK); tests/test_banned_api_owners.py pins them."
+"cohere".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (paid SDK); tests/test_banned_api_owners.py pins them."
+"voyageai".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (paid SDK); tests/test_banned_api_owners.py pins them."
+"snowflake".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (warehouse driver); tests/test_banned_api_owners.py pins them."
+"os.execl".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"os.execle".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"os.execlp".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"os.execlpe".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"os.execv".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"os.execve".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"os.execvp".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"os.execvpe".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"os.spawnl".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"os.spawnle".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"os.spawnlp".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"os.spawnlpe".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"os.spawnv".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"os.spawnve".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"os.spawnvp".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+"os.spawnvpe".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls); tests/test_banned_api_owners.py pins them."
+
+[tool.ruff.lint.per-file-ignores]
+"tools/verify_package.py" = ["TID251"]
+"tools/eval/provenance.py" = ["TID251"]
+"tests/test_runtime_boundaries.py" = ["TID251"]
+"tests/test_runtime_hardening.py" = ["TID251"]
+"tests/test_strict_mode.py" = ["TID251"]
+"tests/test_transports.py" = ["TID251"]
+".agents/skills/verify-trace/drives.py" = ["TID251"]
+".agents/skills/verify-trace/verify" = ["TID251"]
 
 [tool.basedpyright]
 typeCheckingMode = "strict"

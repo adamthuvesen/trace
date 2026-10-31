@@ -35,6 +35,7 @@ Composed application behavior belongs in `TraceOperations`; CLI and MCP adapters
 | Rule | Enforced by | Added |
 | --- | --- | --- |
 | Runtime code does not import `server/`; indexing does not import retrieval or collections | `pyproject.toml::tool.importlinter` | 2026-11-04 |
+| Process calls, network clients, and paid SDKs stay in named owner files, each held to its own modules | `pyproject.toml::tool.ruff.lint.flake8-tidy-imports.banned-api`, `tests/test_banned_api_owners.py::test_each_owner_uses_only_its_own_banned_modules`, `tests/test_banned_api_owners.py::test_only_named_owners_ignore_tid251` | 2026-11-07 |
 | Runtime and tooling code type-checks strictly | `pyproject.toml::typeCheckingMode` | 2026-11-04 |
 | Chunk text or metadata changes bump `INDEX_METADATA_VERSION` | `tests/test_chunk_transform_golden.py::test_chunk_transform_changes_bump_index_metadata_version` | 2026-11-06 |
 | MCP output text stays stable | `tests/test_mcp_output_golden.py::test_mcp_output_matches_golden` | 2026-11-06 |
@@ -42,11 +43,12 @@ Composed application behavior belongs in `TraceOperations`; CLI and MCP adapters
 | Unregistered pytest markers fail; `transport` tests run only in `just integration` | `pyproject.toml::strict_markers`, `justfile::integration` | 2026-11-06 |
 | `KB_COLLECTIONS` format stays stable | `tests/test_multi_collection.py::TestKBCollectionsParsing` | 2026-11-04 |
 | Filesystem ownership and failed publication keep the last complete index | `tests/test_runtime_boundaries.py` | 2026-11-04 |
-| Committed benchmark artifacts hold no local home paths | `tests/test_eval_contracts.py::test_committed_benchmark_artifacts_contain_no_absolute_home_paths` | 2026-11-06 |
+| Committed benchmark artifacts hold no local home paths | `tests/test_eval_contracts.py::test_committed_benchmark_artifacts_contain_no_absolute_home_paths`, `tests/test_eval_contracts.py::test_home_path_scan_finds_a_planted_leak` | 2026-11-06 |
 | Fixture quality holds its committed baselines within tolerance | `justfile::eval`, `justfile::stress`, `tools/eval/regression.py::TOP_1_DROP_TOLERANCE` | 2026-11-04 |
 | Multi-KB quality holds per-mode baselines | `justfile::battle`, `justfile::battle-challenge` | 2026-11-04 |
 | The installed wheel exposes the public API | `tools/verify_package.py` | 2026-11-04 |
 | `just verify control` must observe FAIL before a verify pass counts | `.agents/skills/verify-trace/drives.py::control` | 2026-11-06 |
+| A verify run fails when it changes the checkout, ignored paths and git state included | `.agents/skills/verify-trace/verify::checkout_changes` | 2026-11-07 |
 | Every path cited in this table exists | `tests/test_agents_rules.py::test_enforced_rules_cite_real_files`, `tests/test_agents_rules.py::test_justfile_citations_match_whole_recipe_names` | 2026-11-06 |
 | No file downgrades strict type checking with a `# pyright:` mode comment | `tests/test_strict_mode.py::test_no_file_downgrades_type_checking_mode`, `tests/test_strict_mode.py::test_detector_finds_an_unstaged_downgrade` | 2026-11-07 |
 

@@ -29,6 +29,7 @@ The helper is `.agents/skills/verify-trace/verify`. It runs itself under `uv run
 - Embeddings are local ONNX models. The helper copies the cached model into the scratch directory and sets `HF_HUB_OFFLINE=1`. Nothing downloads, and the real cache is never written.
 - A `sitecustomize` audit hook (the same hook as `tests/test_transports.py`) refuses every non-loopback connection and logs it. A drive fails when that log is not empty.
 - Each drive runs its subprocesses in their own process group and stops that group when the drive ends.
+- The run fails when it changes this checkout: HEAD, the branch, the git index, local or worktree git config, or any file outside `.git`, `.venv`, `.verify`, and tool caches, ignored paths included. `summary.json` records `ok` and `checkout_changes`.
 
 ## Limits
 

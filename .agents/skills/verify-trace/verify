@@ -58,6 +58,49 @@ def git(*args: str) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
+# Paths a drive may change: evidence, the environment, and tool caches.
+UNWATCHED = {
+    ".git",
+    ".venv",
+    ".verify",
+    "__pycache__",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".mypy_cache",
+    ".import_linter_cache",
+}
+
+# Git state of this checkout only. Shared refs are left out: other worktrees move them.
+GIT_FACTS = {
+    "HEAD commit": ("rev-parse", "HEAD"),
+    "HEAD branch": ("symbolic-ref", "-q", "HEAD"),
+    "git index": ("ls-files", "--stage"),
+    "git index flags": ("ls-files", "-v"),
+    "git config": ("config", "--local", "--list"),
+    "git worktree config": ("config", "--worktree", "--list"),
+}
+CheckoutState = tuple[dict[str, str], dict[str, tuple[int, int]]]
+
+
+def checkout_state() -> CheckoutState:
+    """GIT_FACTS, and the size and mtime of every file outside UNWATCHED."""
+    facts = {fact: git(*args) for fact, args in GIT_FACTS.items()}
+    files: dict[str, tuple[int, int]] = {}
+    for directory, subdirs, names in os.walk(ROOT):
+        subdirs[:] = [d for d in subdirs if d not in UNWATCHED]
+        for name in names:
+            path = Path(directory) / name
+            stat = path.lstat()
+            files[str(path.relative_to(ROOT))] = (stat.st_size, stat.st_mtime_ns)
+    return facts, files
+
+
+def checkout_changes(before: CheckoutState, after: CheckoutState) -> list[str]:
+    changes = [f"{fact} changed" for fact in GIT_FACTS if before[0][fact] != after[0][fact]]
+    paths = before[1].keys() | after[1].keys()
+    return changes + sorted(p for p in paths if before[1].get(p) != after[1].get(p))
+
+
 def changed_files() -> set[str]:
     base = git("merge-base", "HEAD", "main") or git("merge-base", "HEAD", "origin/main")
     files = set(git("diff", "--name-only", base).splitlines()) if base else set()
@@ -137,7 +180,7 @@ def preflight(env: dict[str, str], scratch: Path) -> None:
 def run_dir() -> Path:
     sha = git("rev-parse", "--short=7", "HEAD") or "nogit"
     dirty = "-dirty" if git("status", "--porcelain") else ""
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     path = ROOT / ".verify" / "runs" / f"{stamp}-{sha}{dirty}"
     path.mkdir(parents=True, exist_ok=False)
     return path
@@ -190,6 +233,7 @@ def main(argv: list[str]) -> int:
     else:
         names = select(changed_files())
     evidence = run_dir()
+    before = checkout_state()
     with tempfile.TemporaryDirectory(prefix="trace-verify-") as temporary:
         scratch = Path(temporary)
         env = child_env(scratch)
@@ -226,25 +270,30 @@ def main(argv: list[str]) -> int:
             results = [drive(name) for name in names if name != "package"]
             if package is not None:
                 results.append(package.result())
-    summary = {
-        "sha": git("rev-parse", "HEAD"),
-        "dirty": bool(git("status", "--porcelain")),
-        "drives": results,
-    }
-    (evidence / "summary.json").write_text(json.dumps(summary, indent=2))
-    print(f"evidence: {evidence}")
-    failed = any(r["result"] == "FAIL" for r in results)
+    changed = checkout_changes(before, checkout_state())
+    if changed:
+        print(f"FAIL checkout: the run changed {changed[:10]}", flush=True)
     if command == "control":
         failures = [str(r["detail"]) for r in results if r["result"] == "FAIL"]
-        if len(failures) == 1 and failures[0].startswith(CONTROL_FAILURE):
+        ok = len(failures) == 1 and failures[0].startswith(CONTROL_FAILURE) and not changed
+        if ok:
             print("control: FAIL observed")
-            return 0
-        if failures:
+        elif failures:
             print(f"control: failed for another reason; expected {CONTROL_FAILURE!r}")
         else:
             print("control: the wrong expectation passed, so the drive asserts nothing")
-        return 1
-    return int(failed)
+    else:
+        ok = not changed and all(r["result"] == "PASS" for r in results)
+    summary = {
+        "ok": ok,
+        "sha": git("rev-parse", "HEAD"),
+        "dirty": bool(git("status", "--porcelain")),
+        "drives": results,
+        "checkout_changes": changed,
+    }
+    (evidence / "summary.json").write_text(json.dumps(summary, indent=2))
+    print(f"evidence: {evidence}")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
