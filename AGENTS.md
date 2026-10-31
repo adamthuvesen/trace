@@ -47,8 +47,8 @@ Composed application behavior belongs in `TraceOperations`; CLI and MCP adapters
 | Multi-KB quality holds per-mode baselines | `justfile::battle`, `justfile::battle-challenge` | 2026-11-04 |
 | The installed wheel exposes the public API | `tools/verify_package.py` | 2026-11-04 |
 | `just verify control` must observe FAIL before a verify pass counts | `.agents/skills/verify-trace/drives.py::control` | 2026-11-06 |
-| Every path cited in this table exists | `tests/test_agents_rules.py::test_enforced_rules_cite_real_files` | 2026-11-06 |
-| No file downgrades strict type checking with a `# pyright:` mode comment | `tests/test_strict_mode.py::test_no_file_downgrades_type_checking_mode` | 2026-11-07 |
+| Every path cited in this table exists | `tests/test_agents_rules.py::test_enforced_rules_cite_real_files`, `tests/test_agents_rules.py::test_justfile_citations_match_whole_recipe_names` | 2026-11-06 |
+| No file downgrades strict type checking with a `# pyright:` mode comment | `tests/test_strict_mode.py::test_no_file_downgrades_type_checking_mode`, `tests/test_strict_mode.py::test_detector_finds_an_unstaged_downgrade` | 2026-11-07 |
 
 `just check` runs the import contracts, types, and the fast tests above.
 `just integration` runs slow and transport tests, the baselines, battle suites, and wheel check.

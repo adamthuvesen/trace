@@ -12,7 +12,7 @@ def _definition(path: Path, name: str) -> re.Pattern[str]:
     if path.suffix == ".py":
         return re.compile(rf"^\s*(?:(?:async\s+)?def {name}\(|class {name}\b|{name} =)", re.M)
     if path.name == "justfile":
-        return re.compile(rf"^{re.escape(name)}\b[^\n]*:", re.M)
+        return re.compile(rf"^{re.escape(name)}(?:\s[^\n]*)?:", re.M)
     if path.suffix == ".toml":
         key = re.escape(name)
         return re.compile(rf"^(?:\[\[?{key}[\].]|{key}\s*=)", re.M)
@@ -46,3 +46,10 @@ def test_python_citations_match_async_and_sync_definitions():
     for name in ("control", "drive"):
         assert _definition(Path("drives.py"), name).search(source), name
     assert not _definition(Path("drives.py"), "missing").search(source)
+
+
+def test_justfile_citations_match_whole_recipe_names():
+    source = "check:\n    true\n\ntest-file path:\n    true\n"
+    assert _definition(Path("justfile"), "check").search(source)
+    assert _definition(Path("justfile"), "test-file").search(source)
+    assert not _definition(Path("justfile"), "test").search(source)

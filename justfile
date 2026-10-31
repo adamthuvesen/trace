@@ -9,8 +9,8 @@ bootstrap:
 
 # Run the same fast checks locally and in CI.
 check:
-    uv run --locked --extra convert ruff check .
-    uv run --locked --extra convert ruff format --check .
+    uv run --locked --extra convert ruff check . .agents/skills/verify-trace/verify
+    uv run --locked --extra convert ruff format --check . .agents/skills/verify-trace/verify
     uv run --locked --extra convert basedpyright
     uv run --locked --extra convert basedpyright --project .agents/skills/verify-trace
     uv run --locked --extra convert lint-imports --no-logo
@@ -18,8 +18,8 @@ check:
 
 # Apply every auto-fixer.
 fix:
-    uv run --locked --extra convert ruff check --fix .
-    uv run --locked --extra convert ruff format .
+    uv run --locked --extra convert ruff check --fix . .agents/skills/verify-trace/verify
+    uv run --locked --extra convert ruff format . .agents/skills/verify-trace/verify
 
 # Run one test file or pytest node.
 test-file path:

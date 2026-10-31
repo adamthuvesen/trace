@@ -230,6 +230,10 @@ async def drive_search(ctx: Context, keyword_expected: str = "config/reranker.md
     return "reindex 2 collections; keyword, adaptive, semantic, hybrid, scoped search; get-document; list 27 docs"
 
 
+# The control passes only when its drive fails on exactly this planted expectation.
+CONTROL_FAILURE = "keyword-search RERANKER_ENABLED: expected top hit docs/glossary/bm25.md, got "
+
+
 async def control(ctx: Context) -> str:
     """Re-drive search expecting a document keyword search does not rank first; passes only on FAIL."""
     return await drive_search(ctx, keyword_expected="glossary/bm25.md")
