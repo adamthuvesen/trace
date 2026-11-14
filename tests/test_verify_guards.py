@@ -48,6 +48,38 @@ def git_in(root: Path, *args: str) -> None:
     )
 
 
+def test_verify_reports_how_to_prepare_an_empty_model_cache(
+    verify: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache = tmp_path / "empty-model-cache"
+    monkeypatch.setenv("TRACE_MODEL_CACHE", str(cache))
+
+    with pytest.raises(SystemExit, match="Run just eval") as error:
+        verify.main(["search"])
+
+    assert str(cache) in str(error.value)
+    assert not cache.exists()
+
+
+@pytest.mark.parametrize(
+    "layout", ("models--qdrant--all-MiniLM-L6-v2-onnx", "fast-all-MiniLM-L6-v2")
+)
+def test_verify_copies_the_application_xdg_model_cache(
+    verify: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, layout: str
+) -> None:
+    monkeypatch.delenv("TRACE_MODEL_CACHE", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    source = tmp_path / "cache" / "trace" / "models" / layout
+    source.mkdir(parents=True)
+    (source / "model").write_text("fixture")
+
+    env = verify.child_env(tmp_path / "scratch")
+
+    copy = Path(env["TRACE_MODEL_CACHE"]) / layout / "model"
+    assert copy.read_text() == "fixture"
+    assert not copy.is_relative_to(source)
+
+
 def test_checkout_changes_report_a_file_and_a_directory(verify: ModuleType, tmp_path: Path) -> None:
     (tmp_path / "edited.txt").write_text("one", encoding="utf-8")
     (tmp_path / "resized.txt").write_text("one", encoding="utf-8")
@@ -104,10 +136,7 @@ def stub_main(
     command: str,
     effect: str,
 ) -> int:
-    """Run main() on a fake drive; the real model cache and preflight are not needed.
-
-    effect: "clean", "stray_file", "fail" (drive fails), "crash" or "network" (control only).
-    """
+    """Run main() on a fake drive without the real model cache or preflight."""
     drives = sys.modules["drives"]
     log = tmp_path / "network.log"
     log.touch()
@@ -125,7 +154,10 @@ def stub_main(
             raise RuntimeError("planted crash")
         if effect == "network":
             log.write_text("socket.connect: 192.0.2.1\n", encoding="utf-8")
-        raise drives.Failure(drives.CONTROL_FAILURE + " got nothing")
+        top_hit = "None" if effect == "missing_hit" else "('config/reranker.md', 'docs')"
+        raise drives.Failure(
+            f"keyword-search RERANKER_ENABLED: expected top hit docs/glossary/bm25.md, got {top_hit}"
+        )
 
     fake = SimpleNamespace(run=fake_drive, timeout=5.0, paths=[])
     monkeypatch.setattr(verify, "DRIVES", {"fake": fake})
@@ -157,6 +189,7 @@ def test_main_passes_a_clean_run(
         ("control", "stray_file"),
         ("control", "crash"),
         ("control", "network"),
+        ("control", "missing_hit"),
     ],
 )
 def test_main_fails_a_bad_run(

@@ -39,7 +39,7 @@ from drives import (  # noqa: E402
     CONTROL_FAILURE,
     DRIVES,
     GUARD,
-    MODEL_DIR,
+    MODEL_CACHE_DIRS,
     SMOKE,
     Context,
     Failure,
@@ -47,6 +47,7 @@ from drives import (  # noqa: E402
 )
 
 import trace_search  # noqa: E402
+from trace_search.indexing.embeddings import model_cache_dir  # noqa: E402
 
 GLOBAL_PATHS = ["pyproject.toml", "uv.lock", ".agents/skills/verify-trace/*"]
 REDACT = ("KEY", "TOKEN", "SECRET", "PASSWORD")
@@ -120,12 +121,10 @@ def select(files: set[str]) -> list[str]:
     return picked or [SMOKE]
 
 
-def model_source() -> Path:
-    override = os.environ.get("TRACE_MODEL_CACHE")
-    return Path(override).expanduser() if override else Path.home() / ".cache" / "trace" / "models"
-
-
 def child_env(scratch: Path) -> dict[str, str]:
+    cache = model_cache_dir()
+    if not any((cache / directory).is_dir() for directory in MODEL_CACHE_DIRS):
+        sys.exit(f"preflight: no cached embedding model under {cache}. Run just eval, then retry.")
     keep = ("PATH", "LANG", "LC_ALL", "TERM", "TMPDIR")
     env = {k: os.environ[k] for k in keep if k in os.environ}
     home = scratch / "home"
@@ -134,7 +133,7 @@ def child_env(scratch: Path) -> dict[str, str]:
     (guard / "sitecustomize.py").write_text(GUARD)
     models = scratch / "models"
     # A private copy: fastembed may write lock or download files into its cache.
-    shutil.copytree(model_source(), models, symlinks=True)
+    shutil.copytree(cache, models, symlinks=True)
     env.update(
         HOME=str(home),
         XDG_CONFIG_HOME=str(home / ".config"),
@@ -161,10 +160,6 @@ def preflight(env: dict[str, str], scratch: Path) -> None:
         sys.exit(f"preflight: trace_search imports from {src}, not this checkout's src/")
     if not Path(sys.executable).with_name("trace").is_file():
         sys.exit("preflight: the trace console script is missing; run just bootstrap")
-    if not (Path(env["TRACE_MODEL_CACHE"]) / MODEL_DIR).is_dir():
-        sys.exit(
-            f"preflight: no cached embedding model at {model_source() / MODEL_DIR}. Run `just integration` once to download it."
-        )
     probe = {**env, "KB_PATH": str(scratch), "INDEX_PATH": str(scratch / "probe-index")}
     code = "from trace_search.config import Settings as S; s=S(); print(s.kb_path, s.index_path, s.kb_collections)"
     out = subprocess.run(
@@ -279,7 +274,7 @@ def main(argv: list[str]) -> int:
         print(f"FAIL checkout: the run changed {changed[:10]}", flush=True)
     if command == "control":
         failures = [str(r["detail"]) for r in results if r["result"] == "FAIL"]
-        ok = len(failures) == 1 and failures[0].startswith(CONTROL_FAILURE) and not changed
+        ok = failures == [CONTROL_FAILURE] and not changed
         if ok:
             print("control: FAIL observed")
         elif failures:

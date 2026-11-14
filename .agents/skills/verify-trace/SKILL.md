@@ -34,7 +34,7 @@ The helper is `.agents/skills/verify-trace/verify`. It runs itself under `uv run
 ## Limits
 
 - Retrieval quality is not measured here. Use `just eval`, `just stress`, and the battle suites.
-- A machine without the cached model fails preflight. Run `just integration` once to download the model.
+- On a fresh machine, run `just eval` to cache the model before the first drive. Use the same cache settings for both commands.
 
 ## Gotchas
 

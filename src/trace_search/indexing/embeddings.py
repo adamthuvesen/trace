@@ -30,13 +30,10 @@ def model_cache_dir() -> Path:
     """
     override = os.environ.get("TRACE_MODEL_CACHE")
     if override:
-        path = Path(override).expanduser()
-    else:
-        base = os.environ.get("XDG_CACHE_HOME")
-        root = Path(base).expanduser() if base else Path.home() / ".cache"
-        path = root / "trace" / "models"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+        return Path(override).expanduser()
+    base = os.environ.get("XDG_CACHE_HOME")
+    root = Path(base).expanduser() if base else Path.home() / ".cache"
+    return root / "trace" / "models"
 
 
 type EmbeddingArray = NDArray[np.float32]
@@ -77,10 +74,12 @@ class OnnxBackend:
             raise ValueError(
                 f"Model '{model_name}' is not supported. Supported: {list(MODEL_SPECS)}."
             )
+        cache_dir = model_cache_dir()
+        cache_dir.mkdir(parents=True, exist_ok=True)
         self.model_name = model_name
         self._model = TextEmbedding(
             model_name=MODEL_SPECS[model_name].runtime_identifier,
-            cache_dir=str(model_cache_dir()),
+            cache_dir=str(cache_dir),
         )
         probe = next(iter(self._model.embed(["probe"])))
         self.dim = int(np.asarray(probe).shape[-1])

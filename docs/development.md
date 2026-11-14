@@ -55,6 +55,8 @@ TRACE_MODEL_CACHE=/persistent/trace-models just eval
 ```
 
 That command prepares and tests the default model through a scratch index.
+For the first verification run, use `just eval` to cache the model, then run `just verify search`.
+If you set `TRACE_MODEL_CACHE` or `XDG_CACHE_HOME`, keep it set for both commands.
 Check disconnected behavior in the target environment after preparing dependencies and models.
 Model resolution can depend on the embedding runtime and its cache state.
 

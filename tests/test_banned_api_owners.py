@@ -1,6 +1,7 @@
 """A per-file TID251 ignore lifts every ban for that file, so each owner is held to its own modules."""
 
 import ast
+import os
 import subprocess
 import sys
 import tomllib
@@ -30,6 +31,24 @@ def ruff_lint_config() -> dict[str, Any]:
 
 def banned_names() -> set[str]:
     return set(ruff_lint_config()["flake8-tidy-imports"]["banned-api"])
+
+
+# The bar's named process, network and paid-SDK modules. Deleting one from the ban list must fail.
+BAR_NAMED_BANS = {
+    "subprocess",
+    "pty",
+    "os.system",
+    "os.popen",
+    "asyncio.subprocess",
+    "socket",
+    "http.client",
+    "urllib.request",
+    "requests",
+    "httpx",
+    "openai",
+    "anthropic",
+    "snowflake",
+}
 
 
 def used_names(source: str) -> set[str]:
@@ -130,6 +149,7 @@ def nested_ruff_configs(root: Path) -> list[str]:
     listed = subprocess.run(
         ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
         cwd=root,
+        env={k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
         capture_output=True,
         text=True,
         check=True,
@@ -148,7 +168,11 @@ def test_no_nested_ruff_config_overrides_the_ban() -> None:
 
 
 def test_nested_ruff_config_scan_finds_a_planted_config(tmp_path: Path) -> None:
-    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(
+        ["git", "init", "-q", str(tmp_path)],
+        env={k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
+        check=True,
+    )
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "ruff.toml").write_text("[lint]\nselect = []\n", encoding="utf-8")
     assert nested_ruff_configs(tmp_path) == ["src/ruff.toml"]
@@ -159,6 +183,10 @@ def test_each_owner_uses_only_its_own_banned_modules() -> None:
     for path, allowed in OWNERS.items():
         extra = banned_uses((ROOT / path).read_text(encoding="utf-8"), banned) - allowed
         assert not extra, f"{path} uses banned modules outside its ownership: {sorted(extra)}"
+
+
+def test_ban_list_keeps_every_module_the_bar_names() -> None:
+    assert banned_names() >= BAR_NAMED_BANS
 
 
 def test_detector_finds_an_extra_banned_module() -> None:

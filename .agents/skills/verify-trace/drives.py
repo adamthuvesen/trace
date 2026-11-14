@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-MODEL_DIR = "models--qdrant--all-MiniLM-L6-v2-onnx"
+MODEL_CACHE_DIRS = ("models--qdrant--all-MiniLM-L6-v2-onnx", "fast-all-MiniLM-L6-v2")
 TOOLS = {
     "search",
     "semantic_search",
@@ -231,7 +231,10 @@ async def drive_search(ctx: Context, keyword_expected: str = "config/reranker.md
 
 
 # The control passes only when its drive fails on exactly this planted expectation.
-CONTROL_FAILURE = "keyword-search RERANKER_ENABLED: expected top hit docs/glossary/bm25.md, got "
+CONTROL_FAILURE = (
+    "keyword-search RERANKER_ENABLED: expected top hit docs/glossary/bm25.md, "
+    "got ('config/reranker.md', 'docs')"
+)
 
 
 async def control(ctx: Context) -> str:
