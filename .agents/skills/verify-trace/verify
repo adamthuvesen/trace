@@ -59,10 +59,8 @@ def git(*args: str) -> str:
 
 
 # Paths a drive may change: evidence, the environment, and tool caches.
+UNWATCHED_AT_ROOT = {".git", ".venv", ".verify"}
 UNWATCHED = {
-    ".git",
-    ".venv",
-    ".verify",
     "__pycache__",
     ".pytest_cache",
     ".ruff_cache",
@@ -87,7 +85,13 @@ def checkout_state() -> CheckoutState:
     facts = {fact: git(*args) for fact, args in GIT_FACTS.items()}
     files: dict[str, tuple[int, int]] = {}
     for directory, subdirs, names in os.walk(ROOT):
-        subdirs[:] = [d for d in subdirs if d not in UNWATCHED]
+        at_root = Path(directory) == ROOT
+        subdirs[:] = [
+            d for d in subdirs if d not in UNWATCHED and not (at_root and d in UNWATCHED_AT_ROOT)
+        ]
+        for name in subdirs:
+            path = Path(directory) / name
+            files[f"{path.relative_to(ROOT)}/"] = (0, 0)
         for name in names:
             path = Path(directory) / name
             stat = path.lstat()
@@ -192,10 +196,7 @@ async def run_one(
     start = time.monotonic()
     try:
         detail = await asyncio.wait_for(fn(ctx), timeout)
-        attempts = Path(ctx.env["TRACE_VERIFY_NETWORK_LOG"]).read_text()
         result = "PASS"
-        if attempts:
-            result, detail = "FAIL", f"external network attempted: {attempts.strip()}"
     except Failure as exc:
         result, detail = "FAIL", str(exc)
     except TimeoutError:
@@ -204,6 +205,9 @@ async def run_one(
         result, detail = "FAIL", f"{type(exc).__name__}: {exc}"
     finally:
         ctx.stop_processes()
+    attempts = Path(ctx.env["TRACE_VERIFY_NETWORK_LOG"]).read_text()
+    if attempts:
+        result, detail = "FAIL", f"external network attempted: {attempts.strip()} ({detail})"
     seconds = time.monotonic() - start
     print(f"{result} {name} {seconds:.1f}s {detail}", flush=True)
     return result, seconds, detail
