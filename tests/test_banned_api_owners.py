@@ -126,21 +126,32 @@ def test_ban_report_finds_a_noqa_silenced_import(tmp_path: Path) -> None:
     assert done.returncode != 0 and "requests" in done.stdout
 
 
-def test_no_nested_ruff_config_overrides_the_ban() -> None:
-    tracked = subprocess.run(
+def nested_ruff_configs(root: Path) -> list[str]:
+    listed = subprocess.run(
         ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
-        cwd=ROOT,
+        cwd=root,
         capture_output=True,
         text=True,
         check=True,
     ).stdout.splitlines()
-    nested = [
+    return [
         path
-        for path in tracked
+        for path in listed
         if Path(path).name in {"ruff.toml", ".ruff.toml"}
         or (path != "pyproject.toml" and Path(path).name == "pyproject.toml")
     ]
+
+
+def test_no_nested_ruff_config_overrides_the_ban() -> None:
+    nested = nested_ruff_configs(ROOT)
     assert not nested, f"a nested ruff config can silence the ban: {nested}"
+
+
+def test_nested_ruff_config_scan_finds_a_planted_config(tmp_path: Path) -> None:
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "ruff.toml").write_text("[lint]\nselect = []\n", encoding="utf-8")
+    assert nested_ruff_configs(tmp_path) == ["src/ruff.toml"]
 
 
 def test_each_owner_uses_only_its_own_banned_modules() -> None:
