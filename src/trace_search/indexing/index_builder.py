@@ -35,8 +35,7 @@ from trace_search.indexing.index_metadata import (
     metadata_matches_settings,
     utc_now_iso,
 )
-from trace_search.indexing.index_paths import chunk_id
-from trace_search.indexing.index_reader import IndexReader
+from trace_search.indexing.index_reader import IndexReader, chunk_id
 from trace_search.indexing.index_store import (
     ChunkMetadata,
     IndexCorruptError,

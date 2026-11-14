@@ -73,34 +73,6 @@ Trace pins FastMCP 4.1.6.
 Transport tests cover automatic negotiation, MCP `2025-11-25`, and MCP `2026-07-28` over stdio and HTTP.
 HTTP tests keep the same client connected across a server restart.
 
-## Document conversion
-
-The converter creates a Markdown mirror from PDF, Word, PowerPoint, CSV, Excel, Markdown, or text files.
-Use distinct source and output directories.
-
-```bash
-uv run --locked --extra convert python tools/convert_to_markdown.py \
-  --source-path /path/to/source --output-dir /path/to/markdown --dry-run
-uv run --locked --extra convert python tools/convert_to_markdown.py \
-  --source-path /path/to/source --output-dir /path/to/markdown
-```
-
-Planning validates every destination before conversion starts.
-It rejects destination collisions, overlapping roots, and paths that escape the allowed root through symlinks.
-CSV parsing rejects malformed rows.
-A conversion failure returns a nonzero status.
-
-Each output has a hidden `.<output-name>.trace-conversion.json` sidecar.
-The sidecar records the converter version, source identity, source hash, and output hash.
-A verified unchanged output can be reused.
-Changed sources are converted again.
-
-Existing outputs without matching provenance are `unverified`.
-The converter reports them and returns a nonzero status.
-Inspect those files, then use `--force` to regenerate them and establish provenance.
-A conversion publishes each output and sidecar separately from other files.
-The whole conversion batch is not a transaction.
-
 ## Making a change
 
 Read the subsystem document linked from [AGENTS.md](../AGENTS.md).

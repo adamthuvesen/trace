@@ -12,26 +12,12 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "pathspec>=0.12.1",      # .traceignore (gitignore semantics)
     "PyYAML>=6.0.0",         # Markdown frontmatter
-    # Document format extractors
-    "pymupdf>=1.24.0",       # PDF text extraction
-    "python-docx>=1.0.0",    # Word document extraction
-    "python-pptx>=0.6.0",    # PowerPoint extraction
     "numpy>=1.26.0,<2.5",
     "pydantic>=2.0.0",
 ]
 
 [project.scripts]
 trace = "trace_search.server.trace_server:main"
-
-[project.optional-dependencies]
-convert = [
-    "markitdown[pdf,docx,pptx]",  # Document conversion
-    "pandas>=2.0.0",              # CSV/XLSX handling
-    "tabulate>=0.9.0",            # DataFrame.to_markdown()
-    "openpyxl>=3.1.0",            # Excel support
-    "rich>=13.0.0",               # Progress bars
-    "click>=8.0.0",               # CLI
-]
 
 [dependency-groups]
 dev = [
@@ -42,7 +28,6 @@ dev = [
     "basedpyright==1.40.2",
     "types-pyyaml>=6.0.12.20260906",
     "import-linter>=2.15",
-    "pandas-stubs>=3.1.0.261029",
     "pytest-xdist>=3.8",
 ]
 

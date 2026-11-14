@@ -26,8 +26,7 @@ The default `search` uses BM25 when its leading document clearly wins.
 Otherwise it combines BM25 and semantic rankings per document.
 See [retrieval modes](docs/retrieval-modes.md) for the exact routing and ranking behavior.
 
-Supported formats include Markdown, PDF, Word, PowerPoint, CSV, SQL, Python, YAML, TypeScript, and Jupyter notebooks.
-The optional [converter](docs/development.md#document-conversion) creates a verified Markdown mirror.
+Supported formats are Markdown and, as plain text, SQL, Python, YAML, and TypeScript.
 
 ## CLI
 

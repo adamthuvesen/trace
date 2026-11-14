@@ -7,10 +7,13 @@ import threading
 from pathlib import Path
 
 from trace_search.config import Settings
-from trace_search.indexing.index_paths import chunk_id
 from trace_search.indexing.index_store import IndexSnapshot, load_snapshot, read_current
 
 logger = logging.getLogger(__name__)
+
+
+def chunk_id(path: str, chunk_index: int) -> str:
+    return f"{path}::{chunk_index}"
 
 
 class IndexReader:

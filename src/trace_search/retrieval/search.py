@@ -20,7 +20,6 @@ from trace_search.indexing.embeddings import EmbeddingBackend
 from trace_search.indexing.index_metadata import metadata_query_compatible
 from trace_search.indexing.index_store import ChunkMetadata, IndexSnapshot
 from trace_search.retrieval.formatting import query_terms
-from trace_search.retrieval.hit_builders import typed_chunk_hit
 from trace_search.retrieval.query_profile import (
     BM25_DOMINANCE_MARGIN,
     LEXICAL_STOPWORDS,
@@ -28,6 +27,7 @@ from trace_search.retrieval.query_profile import (
 )
 from trace_search.retrieval.search_types import (
     DocumentRef,
+    ScoreEvidence,
     SearchHit,
     SearchResponse,
 )
@@ -434,12 +434,12 @@ class SemanticSearch:
         ranked_hits: list[tuple[float, SearchHit]] = []
         for row in rows:
             row_index = int(row)
-            hit = typed_chunk_hit(
-                snapshot.chunks[row_index],
-                snapshot.texts[row_index],
-                float(scores[row_index]),
-                "semantic",
-                snapshot.generation,
+            hit = SearchHit(
+                metadata=snapshot.chunks[row_index],
+                content=snapshot.texts[row_index],
+                source="semantic",
+                evidence=ScoreEvidence(float(scores[row_index])),
+                generation=snapshot.generation,
             )
             content_terms = snapshot.row_terms(row_index, _extract_rank_terms)
             boost = _semantic_lexical_boost(query, hit, content_terms)
@@ -504,12 +504,12 @@ class KeywordSearch:
             if row < 0 or row >= len(snapshot):
                 continue
             hits.append(
-                typed_chunk_hit(
-                    snapshot.chunks[row],
-                    snapshot.texts[row],
-                    score,
-                    "keyword",
-                    snapshot.generation,
+                SearchHit(
+                    metadata=snapshot.chunks[row],
+                    content=snapshot.texts[row],
+                    source="keyword",
+                    evidence=ScoreEvidence(score),
+                    generation=snapshot.generation,
                 )
             )
 

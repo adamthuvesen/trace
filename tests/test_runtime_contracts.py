@@ -63,7 +63,7 @@ def test_empty_collection_path_cannot_select_current_directory():
 
 @pytest.mark.parametrize(
     "filename,body",
-    [("broken.md", b"\xff"), ("broken.ipynb", b"not-json"), ("broken.py", b"\xff")],
+    [("broken.md", b"\xff"), ("broken.py", b"\xff")],
 )
 def test_failed_extraction_preserves_generation_and_retry_reextracts(indexed, filename, body):
     generation = read_current(indexed.index_root)
@@ -72,9 +72,7 @@ def test_failed_extraction_preserves_generation_and_retry_reextracts(indexed, fi
     with pytest.raises(RuntimeError, match="Failed to extract"):
         indexed.build_index()
     assert read_current(indexed.index_root) == generation
-    source.write_text(
-        "# Repaired\n\nrepaired document" if source.suffix == ".md" else '{"cells": []}'
-    )
+    source.write_text("# Repaired\n\nrepaired document")
     indexed.build_index()
     assert read_current(indexed.index_root) != generation
     assert any(record.path == filename for record in indexed.snapshot().metadata.source_files)
@@ -312,7 +310,7 @@ def test_partial_reindex_reports_completed_and_failed_collections(tmp_path):
     good.mkdir()
     bad.mkdir()
     (good / "doc.md").write_text("# Good\n\ngood document")
-    (bad / "broken.ipynb").write_text("not json")
+    (bad / "broken.py").write_bytes(b"\xff")
     registry = CollectionRegistry({"good": good, "bad": bad})
     registry._backend = FakeBackend()
     registry._warmed = True

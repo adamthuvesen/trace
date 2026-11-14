@@ -15,7 +15,7 @@ description: "Drives Trace's real CLI, MCP server, and built wheel against temp 
 - `just verify <drive> ...` runs only the named drives.
 - `just verify control` drives `search` and expects the wrong top hit for a keyword query. It exits 0 only when it observes FAIL.
 
-The helper is `.agents/skills/verify-trace/verify`. It runs itself under `uv run --locked --extra convert` when started outside the project venv.
+The helper is `.agents/skills/verify-trace/verify`. It runs itself under `uv run --locked` when started outside the project venv.
 
 ## Reading results
 

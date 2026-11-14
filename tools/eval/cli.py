@@ -24,7 +24,7 @@ Usage:
     uv run python -m tools.eval.cli --category concepts --category indexing
 
     # File type filter
-    uv run python -m tools.eval.cli --file-type .pdf
+    uv run python -m tools.eval.cli --file-type .md
 
     # Compare to baseline
     uv run python -m tools.eval.cli --baseline results/baselines/latest.json
@@ -115,7 +115,7 @@ def resolve_eval_scope(
 @click.option(
     "--file-type",
     multiple=True,
-    help="Filter by file type (e.g., .md, .pdf)",
+    help="Filter by file type (e.g., .md, .sql)",
 )
 @click.option(
     "--baseline",

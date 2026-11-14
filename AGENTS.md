@@ -26,7 +26,6 @@ See [development.md](docs/development.md) for prerequisites and check coverage.
 | Ranking, hit identity, formatting | [retrieval-modes.md](docs/retrieval-modes.md) | `retrieval/search.py`, `search_types.py`, `formatting.py` |
 | Source capture, builds, generations | [architecture.md](docs/architecture.md#index-lifecycle) | `indexing/index_builder.py`, `index_reader.py`, `index_store.py` |
 | Query sets, metrics, baselines | [evaluation.md](docs/evaluation.md) | `tools/eval/` |
-| Document conversion | [development.md](docs/development.md#document-conversion) | `tools/convert_to_markdown.py` |
 
 Composed application behavior belongs in `TraceOperations`; CLI and MCP adapters stay thin.
 

@@ -9,7 +9,7 @@ The [retrieval guide](retrieval-modes.md) defines ranking behavior.
 | Module | Owns |
 | --- | --- |
 | `config.py` | Validated settings, model specifications, collection configuration |
-| `filesystem_paths.py` | Destination equivalence for index roots and conversion outputs |
+| `filesystem_paths.py` | Destination equivalence for index roots |
 | `extraction/` | Supported formats, corpus visibility, frontmatter, chunk construction |
 | `indexing/index_builder.py` | Source capture, incremental reuse, embedding, publication |
 | `indexing/index_reader.py` | Current generation loading, retained snapshots, neighbor lookup |
@@ -22,7 +22,6 @@ The [retrieval guide](retrieval-modes.md) defines ranking behavior.
 | `collections/operations.py` | Application operations, collection selection, snapshot pinning, merge, neighbors, errors |
 | `server/` | CLI parsing, MCP tools, transport configuration |
 | `tools/eval/` | Validated evaluation inputs, measurement, manifests, comparisons, reporting |
-| `tools/convert_to_markdown.py` | Conversion planning, destination validation, conversion provenance |
 
 The dependency contracts reject runtime imports from `server/`.
 They also reject indexing or extraction imports from retrieval and collections.

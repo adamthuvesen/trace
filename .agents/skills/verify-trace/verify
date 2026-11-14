@@ -28,8 +28,6 @@ if Path(sys.prefix).resolve() != (ROOT / ".venv").resolve():
         "run",
         "--quiet",
         "--locked",
-        "--extra",
-        "convert",
         "--project",
         str(ROOT),
     ]

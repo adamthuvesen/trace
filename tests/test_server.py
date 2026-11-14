@@ -17,7 +17,7 @@ SERVER_TOOL_NAMES = (
     "reindex",
     "doctor",
 )
-CODE_EXTENSIONS = (".sql", ".py", ".ts", ".tsx", ".yml", ".yaml", ".ipynb")
+CODE_EXTENSIONS = (".sql", ".py", ".ts", ".tsx", ".yml", ".yaml")
 
 
 @pytest.fixture()
@@ -33,17 +33,12 @@ class TestSupportedExtensions:
     def test_all_extensions_present(self):
         expected = {
             ".md",
-            ".pdf",
-            ".docx",
-            ".pptx",
-            ".csv",
             ".sql",
             ".py",
             ".yml",
             ".yaml",
             ".ts",
             ".tsx",
-            ".ipynb",
         }
         assert expected == SUPPORTED_EXTENSIONS
 
@@ -128,29 +123,12 @@ class TestServerImports:
 
 
 class TestGetDocumentFormats:
-    @pytest.mark.parametrize(
-        "filename", ["intro.md", "rows.csv", "report.pdf", "report.docx", "report.pptx"]
-    )
-    def test_get_document_extracts_generated_formats(self, document_kb, filename):
-        _, tools = build_multi_mcp("formats", {"documents": document_kb})
+    def test_get_document_and_list_documents_read_markdown(self, tmp_path):
+        (tmp_path / "intro.md").write_text("# Format fixture\n\nMarkdown content")
+        _, tools = build_multi_mcp("formats", {"documents": tmp_path})
 
-        content = tools["get_document"](filename)
-
-        assert "Format fixture" in content
-
-    def test_list_documents_includes_every_generated_format(self, document_kb):
-        _, tools = build_multi_mcp("formats", {"documents": document_kb})
-
-        content = tools["list_documents"]()
-
-        for filename in [
-            "intro.md",
-            "rows.csv",
-            "report.pdf",
-            "report.docx",
-            "report.pptx",
-        ]:
-            assert filename in content
+        assert "Format fixture" in tools["get_document"]("intro.md")
+        assert "intro.md" in tools["list_documents"]()
 
 
 class TestGetDocumentCodeFiles:
@@ -320,7 +298,7 @@ class TestListDocumentsDeterminism:
         (tmp_path / "b").mkdir()
         (tmp_path / "a" / "x.md").write_text("# X Doc\n\nContent", encoding="utf-8")
         (tmp_path / "a" / "a.sql").write_text("SELECT 1;", encoding="utf-8")
-        (tmp_path / "b" / "z.pdf").write_bytes(b"%PDF-1.4")
+        (tmp_path / "b" / "z.md").write_text("# Z Doc\n\nContent", encoding="utf-8")
 
         _, tools = build_multi_mcp("det-test", {"docs": tmp_path})
 
@@ -331,7 +309,7 @@ class TestListDocumentsDeterminism:
         assert "Found 2 documents" in first
         assert "`a/a.sql`" in first
         assert "`a/x.md`" in first
-        assert "`b/z.pdf`" not in first
+        assert "`b/z.md`" not in first
 
     def test_list_documents_uses_indexer_exclusions(self, tmp_path):
         (tmp_path / "docs").mkdir()
