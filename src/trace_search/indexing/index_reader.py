@@ -74,7 +74,6 @@ class IndexReader:
         return output
 
     def get_stats(self) -> dict[str, object]:
-        """Get index statistics."""
         snapshot = self.snapshot()
         return {
             "total_chunks": len(snapshot),

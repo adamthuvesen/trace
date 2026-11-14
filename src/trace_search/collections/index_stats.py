@@ -1,5 +1,3 @@
-"""Index statistics rendering helpers."""
-
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -25,7 +23,6 @@ def render_index_stats(
     cache_stats: Mapping[str, object],
     config: Settings | None = None,
 ) -> str:
-    """Render index statistics for one or more collections."""
     config = config or get_settings()
     sections = []
     for name, stats in collection_stats:

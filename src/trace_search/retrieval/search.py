@@ -351,7 +351,6 @@ class SemanticSearch:
     _cache_lock: ClassVar[threading.Lock] = threading.Lock()
 
     def __init__(self, indexer: WikiIndexer):
-        """Initialize semantic search over an indexer's current snapshot."""
         self.indexer = indexer
 
     def _get_query_embedding(self, query: str) -> NDArray[np.float32]:
@@ -385,7 +384,6 @@ class SemanticSearch:
 
     @classmethod
     def get_cache_stats(cls) -> dict[str, int | str]:
-        """Get cache statistics."""
         total = cls._cache_hits + cls._cache_misses
         hit_rate = cls._cache_hits / total if total > 0 else 0.0
         return {
@@ -463,7 +461,6 @@ class KeywordSearch:
     """BM25-based keyword search for fast lexical matching."""
 
     def __init__(self, indexer: WikiIndexer):
-        """Initialize keyword search over an indexer's current snapshot."""
         self.indexer = indexer
 
     def search(
@@ -565,7 +562,6 @@ class HybridSearch:
     """Semantic + keyword search fused by reciprocal rank per document."""
 
     def __init__(self, indexer: WikiIndexer):
-        """Initialize hybrid search over an indexer's current snapshot."""
         self.semantic = SemanticSearch(indexer)
         self.keyword = KeywordSearch(indexer)
 

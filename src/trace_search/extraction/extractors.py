@@ -11,7 +11,6 @@ from typing import cast
 
 logger = logging.getLogger(__name__)
 
-# Supported file extensions for indexing
 SUPPORTED_EXTENSIONS_ORDERED = (
     # Documents
     ".md",

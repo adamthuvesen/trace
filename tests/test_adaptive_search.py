@@ -1,5 +1,3 @@
-"""Tests for adaptive search routing and grouped search context."""
-
 from unittest.mock import MagicMock, patch
 
 from tests.search_hits import make_hit

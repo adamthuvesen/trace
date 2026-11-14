@@ -1,5 +1,3 @@
-"""Tests for chunking functions in indexer.py."""
-
 import pytest
 
 from trace_search.config import settings
@@ -8,7 +6,6 @@ from trace_search.extraction.chunking import (
     chunk_by_paragraphs,
 )
 
-# Sample markdown content for testing
 SAMPLE_MARKDOWN = """# Document Title
 
 This is the introduction paragraph with some text.

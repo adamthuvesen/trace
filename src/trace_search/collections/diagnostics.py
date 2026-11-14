@@ -68,8 +68,6 @@ class IndexDiagnosis:
 
 @dataclass
 class CollectionDiagnosis:
-    """Doctor details for one collection."""
-
     name: str
     kb_path: Path
     index_path: Path
@@ -91,8 +89,6 @@ class ProbeDiagnosis:
 
 @dataclass
 class DoctorReport:
-    """Complete doctor report."""
-
     config_valid: bool
     config_message: str
     collections: list[CollectionDiagnosis]
@@ -281,7 +277,6 @@ def diagnose_collections(
     sample_query_runner: SampleQueryRunner | None = None,
     sample_collection: str | None = None,
 ) -> DoctorReport:
-    """Build a doctor report for resolved collections."""
     config = config or get_settings()
     idx_root = index_root if index_root is not None else config.index_path
     collection_reports: list[CollectionDiagnosis] = []
@@ -404,7 +399,6 @@ def _append_probe_report(lines: list[str], probe: ProbeDiagnosis) -> None:
 
 
 def render_doctor_report(report: DoctorReport) -> str:
-    """Render a doctor report as Markdown."""
     lines = ["# Trace Doctor", ""]
     status = "valid" if report.config_valid else "invalid"
     lines.append(f"- **Configuration:** {status}")

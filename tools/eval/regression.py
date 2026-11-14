@@ -1,5 +1,3 @@
-"""Regression detection for evaluation results."""
-
 from __future__ import annotations
 
 import json
@@ -19,7 +17,6 @@ MIN_REGRESSED_QUERIES = 2
 
 
 def load_baseline(baseline_path: Path) -> EvaluationReport:
-    """Load a baseline report from JSON."""
     with baseline_path.open() as f:
         data = json.load(f)
     return EvaluationReport.from_dict(data)

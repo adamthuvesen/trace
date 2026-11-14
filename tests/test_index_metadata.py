@@ -1,5 +1,3 @@
-"""Tests for versioned index metadata helpers."""
-
 import json
 import os
 from dataclasses import replace

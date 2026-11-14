@@ -1,5 +1,3 @@
-"""Shared BM25 tokenization helpers."""
-
 from __future__ import annotations
 
 import bm25s
@@ -18,7 +16,6 @@ def english_stemmer() -> Stemmer.Stemmer:
 
 
 def tokenize_keywords(text: str) -> list[list[str]] | Tokenized:
-    """Tokenize a keyword query for BM25 retrieval."""
     return bm25s.tokenize(
         [text],
         stopwords="en",

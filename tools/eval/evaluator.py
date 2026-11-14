@@ -1,5 +1,3 @@
-"""Evaluation harness for Trace search."""
-
 from __future__ import annotations
 
 import logging

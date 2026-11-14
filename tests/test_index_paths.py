@@ -1,5 +1,3 @@
-"""Tests for canonical index path helpers."""
-
 from trace_search.indexing.index_paths import chunk_id
 
 

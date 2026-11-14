@@ -1,5 +1,3 @@
-"""Multi-collection orchestration for Trace."""
-
 from __future__ import annotations
 
 import threading
@@ -119,7 +117,6 @@ class CollectionRegistry:
         self._warmed = True
 
     def resolve(self, collection: str | None) -> list[Collection]:
-        """Resolve collection name to list of Collection objects."""
         if collection and collection.lower() != "all":
             col = self.collections.get(collection)
             if col is None:

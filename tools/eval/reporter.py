@@ -1,5 +1,3 @@
-"""Report generation for evaluation results."""
-
 from __future__ import annotations
 
 import json
@@ -369,7 +367,6 @@ def save_report(
     output_dir: Path,
     formats: list[str] | None = None,
 ) -> dict[str, Path]:
-    """Save report in multiple formats."""
     if formats is None:
         formats = ["json", "md"]
 

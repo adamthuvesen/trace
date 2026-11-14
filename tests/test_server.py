@@ -1,5 +1,3 @@
-"""Tests for MCP server functions."""
-
 import pytest
 
 from trace_search.config import settings

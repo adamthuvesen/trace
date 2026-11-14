@@ -1,5 +1,3 @@
-"""Tests for document content extractors."""
-
 import json
 from pathlib import Path
 

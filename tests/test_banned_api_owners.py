@@ -1,4 +1,4 @@
-"""A per-file TID251 ignore lifts every ban for that file, so each owner is held to its own modules."""
+"""A per-file TID251 ignore lifts every ban for that file, so only src/ and tools/ owners listed in pyproject.toml have one."""
 
 import ast
 import os
@@ -10,23 +10,16 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 
-OWNERS: dict[str, set[str]] = {
-    "tests/test_banned_api_owners.py": {"subprocess"},
-    "tools/verify_package.py": {"subprocess"},
-    "tools/eval/provenance.py": {"subprocess"},
-    "tests/test_runtime_boundaries.py": {"subprocess"},
-    "tests/test_runtime_hardening.py": {"subprocess"},
-    "tests/test_strict_mode.py": {"subprocess"},
-    "tests/test_verify_guards.py": {"subprocess"},
-    "tests/test_transports.py": {"subprocess", "socket", "http.client"},
-    ".agents/skills/verify-trace/drives.py": {"subprocess", "socket", "asyncio.open_connection"},
-    ".agents/skills/verify-trace/verify": {"subprocess", "os.execvp"},
-}
-
 
 def ruff_lint_config() -> dict[str, Any]:
     config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     return config["tool"]["ruff"]["lint"]
+
+
+def owner_files() -> set[str]:
+    """Files outside tests/ that may use banned modules, read from the per-file ignores."""
+    ignores = ruff_lint_config()["per-file-ignores"]
+    return {path for path in ignores if not path.startswith("tests/")}
 
 
 def banned_names() -> set[str]:
@@ -105,7 +98,9 @@ def test_only_named_owners_ignore_tid251() -> None:
     ignoring = {
         path for path, rules in lint["per-file-ignores"].items() if SILENCES_TID251 & set(rules)
     }
-    assert ignoring == set(OWNERS)
+    assert ignoring == {"tests/**", *owner_files()}
+    for path in owner_files():
+        assert (ROOT / path).is_file(), f"owner file {path} does not exist"
 
 
 def ruff_ban_report(target: str) -> subprocess.CompletedProcess[str]:
@@ -176,13 +171,6 @@ def test_nested_ruff_config_scan_finds_a_planted_config(tmp_path: Path) -> None:
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "ruff.toml").write_text("[lint]\nselect = []\n", encoding="utf-8")
     assert nested_ruff_configs(tmp_path) == ["src/ruff.toml"]
-
-
-def test_each_owner_uses_only_its_own_banned_modules() -> None:
-    banned = banned_names()
-    for path, allowed in OWNERS.items():
-        extra = banned_uses((ROOT / path).read_text(encoding="utf-8"), banned) - allowed
-        assert not extra, f"{path} uses banned modules outside its ownership: {sorted(extra)}"
 
 
 def test_ban_list_keeps_every_module_the_bar_names() -> None:

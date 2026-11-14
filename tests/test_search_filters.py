@@ -1,5 +1,3 @@
-"""Tests for search filter parsing and application."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

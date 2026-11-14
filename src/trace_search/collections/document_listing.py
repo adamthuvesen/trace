@@ -1,5 +1,3 @@
-"""Document listing helpers for collections."""
-
 from __future__ import annotations
 
 from collections import defaultdict
@@ -104,7 +102,6 @@ def render_document_list(
     folder: str | None,
     include_collection: bool,
 ) -> str:
-    """Render collection document listings as Markdown."""
     if not documents:
         return "No documents found."
 
@@ -129,7 +126,6 @@ def list_documents_for_collections(
     filters: SearchFilters,
     config: Settings | None = None,
 ) -> str:
-    """List documents across one or more collections."""
     include_collection = len(collections) > 1
     documents: list[ListedDocument] = []
     for name, kb_path in collections:

@@ -1,5 +1,3 @@
-"""Tests for startup embedding warmup behavior."""
-
 from __future__ import annotations
 
 from pathlib import Path

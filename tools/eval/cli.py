@@ -234,7 +234,6 @@ def _run(
     verbose: bool,
     output_dir: Path,
 ) -> None:
-    """Run Trace search evaluation suite."""
     if verbose:
         logging.getLogger("tools.eval").setLevel(logging.DEBUG)
 

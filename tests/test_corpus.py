@@ -1,5 +1,3 @@
-"""Tests for shared KB file iteration."""
-
 import os
 from pathlib import Path
 

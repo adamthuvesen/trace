@@ -245,7 +245,6 @@ def format_search_context(
 
 
 def format_results(hits: Sequence[SearchHit], include_content: bool = True) -> str:
-    """Format search results for display."""
     if not hits:
         return "No results found."
 

@@ -1,5 +1,3 @@
-"""Tests for the Trace command-line adapter."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field

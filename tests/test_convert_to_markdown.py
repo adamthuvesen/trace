@@ -1,5 +1,3 @@
-"""Tests for the markdown conversion helper."""
-
 import os
 from pathlib import Path
 

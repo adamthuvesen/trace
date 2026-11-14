@@ -1,5 +1,3 @@
-"""Build search hits from indexed chunks."""
-
 from __future__ import annotations
 
 from trace_search.indexing.index_store import ChunkMetadata

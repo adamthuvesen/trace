@@ -1,5 +1,3 @@
-"""Tests for the embedding backend."""
-
 from __future__ import annotations
 
 import numpy as np

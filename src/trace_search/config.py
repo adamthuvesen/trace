@@ -1,5 +1,3 @@
-"""Configuration management using pydantic-settings."""
-
 import logging
 import re
 from dataclasses import dataclass
@@ -72,8 +70,6 @@ def parse_kb_collections(value: str) -> dict[str, Path]:
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables."""
-
     # Knowledge base path (required for runtime index/search operations)
     kb_path: Path | None = Field(
         default=None,

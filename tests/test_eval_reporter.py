@@ -1,5 +1,3 @@
-"""Tests for evaluation report rendering."""
-
 from tools.eval.models import (
     CategoryMetrics,
     EvaluationReport,

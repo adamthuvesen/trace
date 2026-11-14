@@ -1,5 +1,3 @@
-"""Tests for multi-collection knowledge server."""
-
 from typing import Any
 
 import pytest

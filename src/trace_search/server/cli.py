@@ -1,5 +1,3 @@
-"""Command-line interface for Trace."""
-
 from __future__ import annotations
 
 import argparse

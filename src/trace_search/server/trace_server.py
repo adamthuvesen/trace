@@ -1,5 +1,3 @@
-"""Trace console entrypoint."""
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -59,7 +57,6 @@ def run_server(
 
 
 def main() -> None:
-    """Run the Trace CLI."""
     raise SystemExit(run_cli(serve=run_server))
 
 

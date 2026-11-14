@@ -1,5 +1,3 @@
-"""Tests for evaluation CLI option composition."""
-
 from pathlib import Path
 
 from tools.eval.battle_royale import load_suite

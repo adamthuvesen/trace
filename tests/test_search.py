@@ -1,5 +1,3 @@
-"""Tests for search module."""
-
 from pathlib import Path
 from typing import get_type_hints
 from unittest.mock import MagicMock
