@@ -34,7 +34,9 @@ def test_enforced_rules_cite_real_files():
         for citation in cited:
             relative, _, name = citation.partition("::")
             path = REPO_ROOT / relative
-            if not path.exists() or (name and not _definition(path, name).search(path.read_text())):
+            if not name:
+                missing.append(f"{citation}: cite a name in the file, not the file alone")
+            elif not path.exists() or not _definition(path, name).search(path.read_text()):
                 missing.append(citation)
     assert not missing, (
         "AGENTS.md Enforced Rules cites paths or names that do not exist. "

@@ -45,14 +45,16 @@ Composed application behavior belongs in `TraceOperations`; CLI and MCP adapters
 | MCP tool names stay stable | `tests/test_transports.py::test_fastmcp_inspector_loads_noarg_factory` | 2026-11-04 |
 | Unregistered pytest markers fail; `transport` tests run only in `just integration` | `pyproject.toml::strict_markers`, `justfile::integration` | 2026-11-06 |
 | `KB_COLLECTIONS` format stays stable | `tests/test_multi_collection.py::TestKBCollectionsParsing` | 2026-11-04 |
-| Filesystem ownership and failed publication keep the last complete index | `tests/test_runtime_boundaries.py` | 2026-11-04 |
+| Filesystem ownership and failed publication keep the last complete index | `tests/test_runtime_boundaries.py::test_unreadable_visible_subtree_aborts_build_and_retry_retains_documents`, `tests/test_runtime_boundaries.py::test_writer_lock_cannot_truncate_linked_source` | 2026-11-04 |
 | Committed benchmark artifacts hold no local home paths | `tests/test_eval_contracts.py::test_committed_benchmark_artifacts_contain_no_absolute_home_paths`, `tests/test_eval_contracts.py::test_home_path_scan_finds_a_planted_leak` | 2026-11-06 |
 | Fixture quality holds its committed baselines within tolerance | `justfile::eval`, `justfile::stress`, `tools/eval/regression.py::TOP_1_DROP_TOLERANCE` | 2026-11-04 |
 | Multi-KB quality holds per-mode baselines | `justfile::battle`, `justfile::battle-challenge` | 2026-11-04 |
-| The installed wheel exposes the public API | `tools/verify_package.py` | 2026-11-04 |
+| The installed wheel exposes the public API | `tools/verify_package.py::verify_package` | 2026-11-04 |
 | `just verify control` must observe FAIL before a verify pass counts | `.agents/skills/verify-trace/drives.py::control` | 2026-11-06 |
 | A verify run fails when it changes the checkout, ignored paths and git state included | `.agents/skills/verify-trace/verify::checkout_changes` | 2026-11-07 |
+| No bare `# noqa` or file-wide `# ruff: noqa`; name the rule | `pyproject.toml::select` | 2026-11-09 |
 | Every path cited in this table exists | `tests/test_agents_rules.py::test_enforced_rules_cite_real_files`, `tests/test_agents_rules.py::test_justfile_citations_match_whole_recipe_names` | 2026-11-06 |
+| Every `# pyright: ignore` names its rule and gives a reason, and no file disables lint file-wide with `# ruff: noqa` | `pyproject.toml::reportIgnoreCommentWithoutRule`, `tests/test_suppressions.py::test_no_suppression_lacks_a_rule_or_a_reason` | 2026-11-09 |
 | No file downgrades strict type checking with a `# pyright:` mode comment | `tests/test_strict_mode.py::test_no_file_downgrades_type_checking_mode`, `tests/test_strict_mode.py::test_detector_finds_an_unstaged_downgrade` | 2026-11-07 |
 
 ## Index and evaluation traps

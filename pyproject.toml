@@ -67,7 +67,7 @@ line-length = 100
 target-version = "py314"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PGH003", "PTH", "RUF", "TID251"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PGH003", "PGH004", "PTH", "RUF", "TID251"]
 # The formatter owns line length; E501 only flags text it cannot wrap.
 ignore = ["E501"]
 
@@ -132,6 +132,7 @@ ignore = ["E501"]
 typeCheckingMode = "strict"
 enableTypeIgnoreComments = false
 reportUnnecessaryTypeIgnoreComment = "error"
+reportIgnoreCommentWithoutRule = "error"
 pythonVersion = "3.14"
 include = ["src/trace_search", "tools", "tests"]
 exclude = ["**/__pycache__"]

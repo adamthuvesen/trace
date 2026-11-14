@@ -495,7 +495,7 @@ class KeywordSearch:
             k=fetch_n,
             show_progress=False,
             # bm25s accepts None for no mask; its annotation does not.
-            weight_mask=mask.astype(np.float32) if mask is not None else None,  # pyright: ignore[reportArgumentType]
+            weight_mask=mask.astype(np.float32) if mask is not None else None,  # pyright: ignore[reportArgumentType] -- bm25s accepts None
         )
 
         hits: list[SearchHit] = []

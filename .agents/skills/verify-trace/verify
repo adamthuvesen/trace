@@ -196,7 +196,7 @@ async def run_one(
         result, detail = "FAIL", str(exc)
     except TimeoutError:
         result, detail = "FAIL", f"timed out after {timeout:.0f}s"
-    except Exception as exc:  # a crash inside a drive is a FAIL with its reason
+    except (Exception, SystemExit) as exc:  # a crash or exit is a FAIL with its reason
         result, detail = "FAIL", f"{type(exc).__name__}: {exc}"
     finally:
         ctx.stop_processes()
