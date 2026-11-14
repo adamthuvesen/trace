@@ -1,6 +1,8 @@
 """A per-file TID251 ignore lifts every ban for that file, so each owner is held to its own modules."""
 
 import ast
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -8,6 +10,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 
 OWNERS: dict[str, set[str]] = {
+    "tests/test_banned_api_owners.py": {"subprocess"},
     "tools/verify_package.py": {"subprocess"},
     "tools/eval/provenance.py": {"subprocess"},
     "tests/test_runtime_boundaries.py": {"subprocess"},
@@ -29,22 +32,31 @@ def banned_names() -> set[str]:
 
 
 def used_names(source: str) -> set[str]:
-    """Dotted names a file imports or references."""
+    """Dotted names a file reaches through its imports, with `as` aliases resolved."""
+    tree = ast.parse(source)
+    bound: dict[str, str] = {}
     names: set[str] = set()
-    for node in ast.walk(ast.parse(source)):
+    for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            names.update(alias.name for alias in node.names)
+            for alias in node.names:
+                names.add(alias.name)
+                bound[alias.asname or alias.name.split(".")[0]] = (
+                    alias.name if alias.asname else alias.name.split(".")[0]
+                )
         elif isinstance(node, ast.ImportFrom) and node.module:
             names.add(node.module)
-            names.update(f"{node.module}.{alias.name}" for alias in node.names)
-        elif isinstance(node, ast.Attribute):
+            for alias in node.names:
+                names.add(f"{node.module}.{alias.name}")
+                bound[alias.asname or alias.name] = f"{node.module}.{alias.name}"
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute):
             parts = [node.attr]
             value = node.value
             while isinstance(value, ast.Attribute):
                 parts.append(value.attr)
                 value = value.value
-            if isinstance(value, ast.Name):
-                names.add(".".join([value.id, *reversed(parts)]))
+            if isinstance(value, ast.Name) and value.id in bound:
+                names.add(".".join([bound[value.id], *reversed(parts)]))
     return names
 
 
@@ -57,11 +69,47 @@ def banned_uses(source: str, banned: set[str]) -> set[str]:
     }
 
 
+SILENCES_TID251 = {"ALL", "TID", "TID2", "TID25", "TID251"}
+
+
 def test_only_named_owners_ignore_tid251() -> None:
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    ruff = config["tool"]["ruff"]
     lint = ruff_lint_config()
-    assert "TID251" not in lint.get("ignore", [])
-    ignoring = {path for path, rules in lint["per-file-ignores"].items() if "TID251" in rules}
+    assert not (ROOT / "ruff.toml").exists()
+    assert not (ROOT / ".ruff.toml").exists()
+    assert not ruff.get("exclude") and not ruff.get("extend-exclude") and not lint.get("exclude")
+    assert not lint.get("extend-per-file-ignores")
+    assert "TID251" in lint["select"]
+    assert not SILENCES_TID251 & set(lint.get("ignore", []))
+    ignoring = {
+        path for path, rules in lint["per-file-ignores"].items() if SILENCES_TID251 & set(rules)
+    }
     assert ignoring == set(OWNERS)
+
+
+def test_no_inline_comment_silences_the_ban() -> None:
+    """With `noqa` ignored, only the owners' per-file ignores may leave a banned use unreported."""
+    done = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "ruff",
+            "check",
+            "--ignore-noqa",
+            "--select",
+            "TID251",
+            "--quiet",
+            "--output-format",
+            "concise",
+            ".",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert done.returncode == 0, "a noqa comment hides a banned import:\n" + done.stdout
 
 
 def test_each_owner_uses_only_its_own_banned_modules() -> None:

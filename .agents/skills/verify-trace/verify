@@ -55,7 +55,7 @@ REDACT = ("KEY", "TOKEN", "SECRET", "PASSWORD")
 def git(*args: str) -> str:
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     result = subprocess.run(["git", *args], cwd=ROOT, env=env, capture_output=True, text=True)
-    return result.stdout.strip() if result.returncode == 0 else ""
+    return result.stdout.rstrip() if result.returncode == 0 else ""
 
 
 # Paths a drive may change: evidence, the environment, and tool caches.
