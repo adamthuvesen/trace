@@ -1,8 +1,7 @@
-"""Command-line interface for Trace."""
-
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import sys
 from collections.abc import Callable, Sequence
 from typing import Literal, TypedDict
@@ -26,6 +25,19 @@ def positive_int(value: str) -> int:
     if parsed < 1:
         raise argparse.ArgumentTypeError("must be at least 1")
     return parsed
+
+
+def validate_http_endpoint(host: str, port: int) -> None:
+    if not 1 <= port <= 65535:
+        raise ValueError("HTTP port must be between 1 and 65535")
+    if host == "localhost":
+        return
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError as error:
+        raise ValueError("HTTP host must be localhost or a loopback IP address") from error
+    if not address.is_loopback:
+        raise ValueError("Unauthenticated HTTP serving requires a loopback host")
 
 
 def _add_filter_args(parser: argparse.ArgumentParser) -> None:
@@ -64,9 +76,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Local search for file-backed knowledge bases.",
     )
     # Bare `trace` has no serve flags; these defaults keep it on stdio.
-    parser.set_defaults(
-        transport="stdio", host=DEFAULT_HTTP_HOST, port=DEFAULT_HTTP_PORT
-    )
+    parser.set_defaults(transport="stdio", host=DEFAULT_HTTP_HOST, port=DEFAULT_HTTP_PORT)
     subparsers = parser.add_subparsers(dest="command")
 
     serve = subparsers.add_parser("serve", help="start the Trace MCP server")
@@ -158,19 +168,30 @@ def run_cli(
     parse_argv = sys.argv[1:] if argv is None else list(argv)
     args = build_parser().parse_args(parse_argv)
 
-    if args.command in (None, "serve"):
-        if serve is None:
-            raise ValueError("serve runner is required")
-        serve(args.transport, args.host, args.port)
-        return 0
-
     try:
+        if args.command in (None, "serve"):
+            if serve is None:
+                raise ValueError("serve runner is required")
+            if args.transport == "http":
+                validate_http_endpoint(args.host, args.port)
+            serve(args.transport, args.host, args.port)
+            return 0
         operations = operations_factory()
+        if args.command == "doctor":
+            sample_query = " ".join(args.sample_query).strip() or None
+            report = operations.doctor_report(sample_query, args.collection)
+            print(render_doctor_report(report))
+            if not report.ok:
+                print(
+                    "Error: Trace doctor found problems. See the report.",
+                    file=sys.stderr,
+                )
+                return 1
+            return 0
         output = _dispatch(args, operations)
     except Exception as exc:
         if args.command == "doctor":
             print(render_doctor_report(invalid_config_report(str(exc))))
-            return 1
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
@@ -237,11 +258,5 @@ def _dispatch(args: argparse.Namespace, operations: TraceOperations) -> str:
             return operations.index_stats(args.collection)
         case "reindex":
             return operations.reindex(args.collection, force=args.force)
-        case "doctor":
-            sample_query = " ".join(args.sample_query).strip() or None
-            return operations.doctor(
-                sample_query=sample_query,
-                collection=args.collection,
-            )
         case _:
             raise ValueError(f"Unknown command: {args.command}")

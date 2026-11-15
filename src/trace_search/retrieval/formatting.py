@@ -4,16 +4,14 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from typing import Any
+from collections.abc import Sequence
 
-from trace_search.retrieval.search_types import SearchRoute
+from trace_search.retrieval.search_types import SearchHit, SearchResponse, SearchRoute
 
 
-def _query_terms(query: str) -> list[str]:
+def query_terms(query: str) -> list[str]:
     """Extract meaningful lowercase terms for hints and snippets."""
-    return [
-        term for term in re.findall(r"[A-Za-z0-9_/-]+", query.lower()) if len(term) > 1
-    ]
+    return [term for term in re.findall(r"[A-Za-z0-9_/-]+", query.lower()) if len(term) > 1]
 
 
 def _trim_at_boundary(text: str, limit: int) -> str:
@@ -31,7 +29,7 @@ def _best_quote(content: str, query: str, limit: int = 360) -> str | None:
     if not compact:
         return None
 
-    terms = _query_terms(query)
+    terms = query_terms(query)
     lowered = compact.lower()
     positions = [lowered.find(term) for term in terms if lowered.find(term) >= 0]
     if positions:
@@ -53,32 +51,20 @@ def _normalization_key(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()[:220]
 
 
-def _score_for_sort(hit: dict[str, Any]) -> float:
-    # `fused_score` is set on every hit of a multi-collection merge; raw
-    # per-collection scores are not comparable across collections.
-    score = hit.get(
-        "fused_score",
-        hit.get("rrf_score", hit.get("score", 0)),
-    )
-    return float(score or 0)
-
-
-def _format_followups(hits: list[dict[str, Any]], limit: int = 3) -> list[str]:
-    seen: set[tuple[str | None, str]] = set()
+def _format_followups(hits: Sequence[SearchHit], limit: int = 3) -> list[str]:
+    seen: set[tuple[str, str]] = set()
     followups: list[str] = []
     for hit in hits:
-        path = hit.get("path")
+        path = hit.path
         if not path:
             continue
-        collection = hit.get("collection")
-        key = (collection, str(path))
+        collection = hit.collection
+        key = (collection, path)
         if key in seen:
             continue
         seen.add(key)
         if collection:
-            followups.append(
-                f'- `get_document(path="{path}", collection="{collection}")`'
-            )
+            followups.append(f'- `get_document(path="{path}", collection="{collection}")`')
         else:
             followups.append(f'- `get_document(path="{path}")`')
         if len(followups) >= limit:
@@ -120,42 +106,34 @@ def _append_route_summary(lines: list[str], route: SearchRoute | None) -> None:
 
 
 def _group_hits_by_document(
-    sorted_hits: list[dict[str, Any]],
-    *,
-    max_documents: int,
-) -> list[list[dict[str, Any]]]:
-    grouped: dict[tuple[str | None, str], list[dict[str, Any]]] = defaultdict(list)
-    for hit in sorted_hits:
-        grouped[(hit.get("collection"), str(hit.get("path", "")))].append(hit)
-
-    return sorted(
-        grouped.values(),
-        key=lambda group: max(_score_for_sort(hit) for hit in group),
-        reverse=True,
-    )[:max_documents]
+    hits: Sequence[SearchHit], *, max_documents: int
+) -> list[list[SearchHit]]:
+    grouped: dict[tuple[str, str], list[SearchHit]] = defaultdict(list)
+    for hit in hits:
+        grouped[(hit.collection, hit.path)].append(hit)
+    return list(grouped.values())[:max_documents]
 
 
 def _matched_query_terms(query: str, quote: str) -> list[str]:
     quote_lower = quote.lower()
-    return [term for term in _query_terms(query) if term in quote_lower]
+    return [term for term in query_terms(query) if term in quote_lower]
 
 
 def _append_snippet(
     lines: list[str],
     *,
-    hit: dict[str, Any],
+    hit: SearchHit,
     title: str,
     query: str,
     quote: str,
     snippet_number: int,
 ) -> None:
-    breadcrumb = hit.get("breadcrumb") or title
+    breadcrumb = hit.metadata["breadcrumb"] or title
     lines.append("")
     lines.append(f"**Snippet {snippet_number}:** {breadcrumb}")
 
-    hints = hit.get("match_hints") or []
-    if hints:
-        lines.append(f"- **Match evidence:** {'; '.join(hints[:3])}")
+    if hit.match_hints:
+        lines.append(f"- **Match evidence:** {'; '.join(hit.match_hints[:3])}")
 
     matched_terms = _matched_query_terms(query, quote)
     if matched_terms:
@@ -164,27 +142,26 @@ def _append_snippet(
 
     lines.append(f"- **Best quote:** {quote}")
 
-    neighbor = hit.get("neighbor_content")
-    if neighbor:
-        lines.append(f"- **Nearby context:** {_trim_at_boundary(str(neighbor), 220)}")
+    if hit.neighbor_content:
+        lines.append(f"- **Nearby context:** {_trim_at_boundary(hit.neighbor_content, 220)}")
 
 
 def _append_document_group(
     lines: list[str],
     *,
     index: int,
-    group: list[dict[str, Any]],
+    group: list[SearchHit],
     query: str,
-    global_seen: set[tuple[str | None, str]],
+    global_seen: set[tuple[str, str]],
     dedupe_across_documents: bool,
     max_snippets: int,
 ) -> None:
     first = group[0]
-    path = str(first.get("path", ""))
-    title = first.get("title") or path or "Untitled"
-    collection = first.get("collection")
-    source = first.get("source", "unknown")
-    folder = first.get("folder", "")
+    path = first.path
+    title = first.metadata["title"] or path or "Untitled"
+    collection = first.collection
+    source = first.source
+    folder = first.metadata["folder"]
 
     lines.append("")
     lines.append(f"### {index}. {title}")
@@ -194,16 +171,16 @@ def _append_document_group(
     if folder:
         lines.append(f"- **Folder:** {folder}")
     lines.append(f"- **Source:** {source}")
-    status = first.get("status")
+    status = first.metadata.get("status")
     if status and status != "current":
         lines.append(f"- **Status:** {status}")
-    if first.get("as_of"):
-        lines.append(f"- **As of:** {first['as_of']}")
+    if as_of := first.metadata.get("as_of"):
+        lines.append(f"- **As of:** {as_of}")
 
     per_doc_seen: set[str] = set()
     snippets_added = 0
     for hit in group:
-        quote = _best_quote(str(hit.get("content", "")), query)
+        quote = _best_quote(hit.content, query)
         if not quote:
             continue
 
@@ -231,27 +208,23 @@ def _append_document_group(
 
 
 def format_search_context(
-    hits: list[dict[str, Any]],
+    response: SearchResponse,
     *,
     query: str,
-    route: SearchRoute | None = None,
     max_documents: int = 5,
     max_snippets_per_document: int = 2,
 ) -> str:
-    """Render grouped search context for agents."""
+    """Render grouped search context for agents in the response's ranking order."""
+    hits, route = response.hits, response.route
     if not hits:
         return _format_empty_results(route)
 
-    sorted_hits = sorted(hits, key=_score_for_sort, reverse=True)
     lines = [f"Found {len(hits)} results"]
     _append_route_summary(lines, route)
 
-    document_groups = _group_hits_by_document(
-        sorted_hits,
-        max_documents=max_documents,
-    )
+    document_groups = _group_hits_by_document(hits, max_documents=max_documents)
     lines.extend(["", "## Context"])
-    global_seen: set[tuple[str | None, str]] = set()
+    global_seen: set[tuple[str, str]] = set()
     for index, group in enumerate(document_groups, 1):
         _append_document_group(
             lines,
@@ -263,7 +236,7 @@ def format_search_context(
             max_snippets=max_snippets_per_document,
         )
 
-    followups = _format_followups(sorted_hits)
+    followups = _format_followups(hits)
     if followups:
         lines.extend(["", "## Suggested Follow-ups"])
         lines.extend(followups)
@@ -271,37 +244,33 @@ def format_search_context(
     return "\n".join(lines)
 
 
-def format_results(hits: list[dict[str, Any]], include_content: bool = True) -> str:
-    """Format search results for display."""
+def format_results(hits: Sequence[SearchHit], include_content: bool = True) -> str:
     if not hits:
         return "No results found."
 
     lines = [f"Found {len(hits)} results:\n"]
 
     for i, hit in enumerate(hits, 1):
-        score_str = (
-            f"{hit.get('score', 0):.3f}"
-            if isinstance(hit.get("score"), float)
-            else str(hit.get("score", ""))
-        )
-        source = hit.get("source", "unknown")
+        score = hit.evidence.score
+        score_str = f"{score:.3f}" if isinstance(score, float) else str(score)
+        source = hit.source
 
-        lines.append(f"---\n### {i}. {hit['title']}")
-        lines.append(f"**Path:** `{hit['path']}`")
-        if "collection" in hit:
-            lines.append(f"**Collection:** {hit['collection']}")
-        lines.append(f"**Folder:** {hit['folder']}")
+        lines.append(f"---\n### {i}. {hit.metadata['title']}")
+        lines.append(f"**Path:** `{hit.path}`")
+        if hit.collection:
+            lines.append(f"**Collection:** {hit.collection}")
+        lines.append(f"**Folder:** {hit.metadata['folder']}")
 
         if source == "keyword":
             lines.append(f"**BM25 Score:** {score_str}")
         elif source == "semantic":
             lines.append(f"**Similarity:** {score_str}")
         elif source == "hybrid":
-            rrf = hit.get("rrf_score", 0)
+            rrf = hit.evidence.rrf_score or 0
             lines.append(f"**RRF Score:** {rrf:.4f}")
 
         if include_content:
-            content = _trim_at_boundary(hit.get("content", ""), 500)
+            content = _trim_at_boundary(hit.content, 500)
             lines.append(f"\n**Preview:**\n{content}\n")
 
     return "\n".join(lines)

@@ -1,87 +1,70 @@
 # AGENTS.md
 
-Instructions for AI agents working in this repo. Human docs: [README.md](README.md)
+Project instructions for Trace. Human entrypoint: [README.md](README.md).
+The nearest project instructions override user-level defaults.
 
-User-level guidance (tone, principles, git etiquette) lives in `~/.claude/CLAUDE.md`
-and `~/dotfiles/agents/AGENTS.md` and is *not* repeated here. This file is for
-project-specific facts.
-
-## Project Overview
-
-Trace is an MCP server for semantic, keyword, and hybrid search over a local
-knowledge base.
-
-## Before You Start
-
-Use these entry points first:
-
-- Default entrypoint: `uv run trace`
-- Local inspector: `KB_PATH=/path/to/your/docs uv run fastmcp dev src/trace_search/server/trace_server.py`
-- Package layout (`src/trace_search/`): [`config.py`](src/trace_search/config.py) at
-  root; subpackages [`extraction/`](src/trace_search/extraction/) (extractors,
-  frontmatter, chunking, corpus), [`indexing/`](src/trace_search/indexing/)
-  (embeddings, kb_paths, index_paths, index_metadata, index_store,
-  wiki_indexer), [`retrieval/`](src/trace_search/retrieval/) (search,
-  bm25_tokenize, query_profile, search_types, hit_builders, formatting),
-  [`collections/`](src/trace_search/collections/) (collection_registry,
-  operations, diagnostics), [`server/`](src/trace_search/server/) (trace_server,
-  cli, mcp_tools, server_warmup)
-- Keep the public import surface flat via
-  [`trace_search/__init__.py`](src/trace_search/__init__.py) re-exports
-  (`WikiIndexer`, `AdaptiveSearch`, `CollectionRegistry`, `format_results`, …)
-- Indexes live under the KB root unless `INDEX_PATH` is set. Each build publishes
-  an immutable generation (`gen-*/`) and swaps `CURRENT` atomically; readers
-  hot-reload, and one `flock` writer per index is enforced
-  ([`indexing/index_store.py`](src/trace_search/indexing/index_store.py))
-- Bump `INDEX_METADATA_VERSION` whenever chunk text or chunk metadata changes,
-  or incremental reindex will reuse chunks built the old way
-- Run experiments against a scratch `INDEX_PATH`, never the indexes a running
-  daemon serves
-- `reindex` is incremental by default (skips unchanged files); pass `--force` / `force=true` to rebuild from scratch
-- All search tools and `list_documents` accept `path_prefix`, `extensions`, and `since` filters
-
-## Read The Matching Doc First
-
-Before editing a subsystem, read the matching doc:
-
-- **Retrieval modes (bm25/semantic/hybrid/adaptive)**: [docs/retrieval-modes.md](docs/retrieval-modes.md)
-- **Running the eval harness**: [docs/evaluation.md](docs/evaluation.md)
-- **Eval / benchmark results**: [docs/benchmarks/](docs/benchmarks/)
-
-`adaptive` is the production MCP default: BM25 alone when its top document scores at
-least 1.3x the runner-up, otherwise BM25 and semantic ranking fused per document.
-See [`retrieval/search.py`](src/trace_search/retrieval/search.py) and
-[`retrieval/bm25_tokenize.py`](src/trace_search/retrieval/bm25_tokenize.py).
-
-If a doc disagrees with code, fix the doc in the same change.
-
-## Commands
+## Start here
 
 ```bash
-# Setup
-uv sync
-
-# Run server
-uv run trace
-
-# Dev mode (FastMCP inspector)
-KB_PATH=/path/to/your/docs uv run fastmcp dev src/trace_search/server/trace_server.py
-
-# Tests
-KB_PATH=/path/to/your/docs uv run python -m pytest tests/ -v
-uv run python -m pytest -m "not slow"          # skip embedding tests
-
-# Lint + format (CI enforces both)
-uv run ruff check .
-uv run ruff format --check .
-
-# Type check (strict; src/trace_search only)
-uv run mypy
-
-# Evaluation: smoke test against the committed fixture (full guide: docs/evaluation.md)
-KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
-  uv run python -m tools.eval.cli --full --search adaptive
-
-# Module size guard (no file > 1000 lines)
-uv run python scripts/check_module_sizes.py
+just bootstrap
+just check
+just test-file tests/test_eval_contracts.py
 ```
+
+Use `just fix` to apply the lint and format fixers.
+
+Use `just eval` for the complete core fixture and `just stress` for the separate stress fixture.
+Use `just slow` for fast checks, model checks, packaging, and both battle suites.
+Prove changes with `just verify` (`verify-trace` skill at `.agents/skills/verify-trace/`).
+See [development.md](docs/development.md) for prerequisites and check coverage.
+
+## Choose the owner before editing
+
+| Change | Read first | Implementation owner |
+| --- | --- |
+| Application behavior, CLI, MCP | [architecture.md](docs/architecture.md) | `collections/operations.py`, then adapter |
+| Ranking, hit identity, formatting | [retrieval-modes.md](docs/retrieval-modes.md) | `retrieval/search.py`, `search_types.py`, `formatting.py` |
+| Source capture, builds, generations | [architecture.md](docs/architecture.md#index-lifecycle) | `indexing/index_builder.py`, `index_reader.py`, `index_store.py` |
+| Query sets, metrics, baselines | [evaluation.md](docs/evaluation.md) | `tools/eval/` |
+
+Composed application behavior belongs in `TraceOperations`; CLI and MCP adapters stay thin.
+
+## Enforced Rules
+
+`just check` runs the import contracts, types, and the fast tests above.
+`just integration` runs slow and transport tests, the baselines, battle suites, and wheel check.
+
+| Rule | Enforced by |
+| --- | --- |
+| Runtime code does not import `server/`; indexing does not import retrieval or collections | `pyproject.toml::tool.importlinter` |
+| Extraction does not import indexing; `server/` reaches runtime code only through `collections.operations`, `collections.errors`, `collections.diagnostics`, and `config` | `pyproject.toml::tool.importlinter` |
+| Process calls, network clients, and paid SDKs stay in the owner files listed in `pyproject.toml` per-file-ignores | `pyproject.toml::tool.ruff.lint.flake8-tidy-imports.banned-api`, `tests/test_banned_api_owners.py::test_only_named_owners_ignore_tid251` |
+| Chunk text or metadata changes bump `INDEX_METADATA_VERSION` | `tests/test_chunk_transform_golden.py::test_chunk_transform_changes_bump_index_metadata_version` |
+| MCP output text stays stable | `tests/test_mcp_output_golden.py::test_mcp_output_matches_golden` |
+| MCP tool names stay stable | `tests/test_transports.py::test_fastmcp_inspector_loads_noarg_factory` |
+| Unregistered pytest markers fail; `transport` tests run only in `just integration` | `pyproject.toml::strict_markers`, `justfile::integration` |
+| `KB_COLLECTIONS` format stays stable | `tests/test_multi_collection.py::TestKBCollectionsParsing` |
+| Filesystem ownership and failed publication keep the last complete index | `tests/test_runtime_boundaries.py::test_unreadable_visible_subtree_aborts_build_and_retry_retains_documents`, `tests/test_runtime_boundaries.py::test_writer_lock_cannot_truncate_linked_source` |
+| Committed benchmark artifacts hold no local home paths | `tests/test_eval_contracts.py::test_committed_benchmark_artifacts_contain_no_absolute_home_paths`, `tests/test_eval_contracts.py::test_home_path_scan_finds_a_planted_leak` |
+| Fixture quality holds its committed baselines within tolerance | `justfile::eval`, `justfile::stress`, `tools/eval/regression.py::TOP_1_DROP_TOLERANCE` |
+| Multi-KB quality holds per-mode baselines | `justfile::battle`, `justfile::battle-challenge` |
+| The installed wheel exposes the public API | `tools/verify_package.py::verify_package` |
+| `just verify control` must observe FAIL before a verify pass counts | `.agents/skills/verify-trace/drives.py::control` |
+| A verify run fails when it changes the checkout, ignored paths and git state included | `.agents/skills/verify-trace/verify::checkout_changes` |
+| Every skip, xfail, and unittest skip in the repo gives a reason | `tests/test_strict_mode.py::test_every_skip_gives_a_reason` |
+
+## Index and evaluation traps
+
+- Run manual experiments with a scratch `INDEX_PATH`. Evaluation CLIs create their own scratch indexes.
+- Read the [migration contract](docs/architecture.md#index-compatibility) before changing persisted schemas or backend identity.
+- Keep private query text out of committed benchmark artifacts. The path check cannot detect it.
+
+## Entrypoints
+
+```bash
+KB_PATH=/path/to/docs uv run --locked trace
+KB_PATH=/path/to/docs uv run --locked fastmcp dev inspector src/trace_search/server/trace_server.py:create_mcp
+```
+
+Use the `create_mcp` factory with the pinned FastMCP inspector.
+`uv run trace` without a subcommand starts the MCP server.

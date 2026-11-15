@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from trace_search.indexing.kb_paths import should_exclude_path
+from trace_search.extraction.source_paths import should_exclude_path
 from trace_search.indexing.wiki_indexer import WikiIndexer
 from trace_search.retrieval.search import KeywordSearch
 
@@ -23,9 +23,7 @@ class FakeBackend:
         self.dim = 3
 
     def encode(self, texts: list[str]):
-        arr = np.asarray(
-            [[float(i), 0.0, 0.0] for i, _ in enumerate(texts)], dtype=np.float32
-        )
+        arr = np.asarray([[float(i), 0.0, 0.0] for i, _ in enumerate(texts)], dtype=np.float32)
         return arr
 
     def encode_one(self, text: str):
@@ -190,37 +188,33 @@ def test_indexing_allows_hidden_parent_dirs(tmp_path, monkeypatch):
     assert [doc["path"] for doc in docs] == ["intro.md"]
 
 
-def test_indexing_walks_the_kb_once(tmp_path, monkeypatch):
-    """A build should traverse the KB with exactly one rglob('*') call."""
-    from unittest.mock import patch
+def test_indexing_scans_each_visible_directory_once(tmp_path, monkeypatch):
     from trace_search.config import get_settings
 
     (tmp_path / "docs").mkdir()
-    (tmp_path / "docs" / "intro.md").write_text("# Intro\n\ncontent", encoding="utf-8")
-    (tmp_path / "docs" / "query.sql").write_text("SELECT 1;", encoding="utf-8")
-
+    (tmp_path / "docs" / "intro.md").write_text("# Intro\n\ncontent")
+    (tmp_path / "docs" / "query.sql").write_text("SELECT 1;")
     monkeypatch.setenv("KB_PATH", str(tmp_path))
     get_settings.cache_clear()
+    scans = []
+    original = os.scandir
 
-    rglob_calls = []
-    original_rglob = Path.rglob
+    def scan(path):
+        if isinstance(path, (str, Path)):
+            candidate = Path(path)
+            if candidate.is_relative_to(tmp_path) and not any(
+                part.startswith(".") for part in candidate.relative_to(tmp_path).parts
+            ):
+                scans.append(candidate)
+        return original(path)
 
-    def spy_rglob(self, pattern):
-        rglob_calls.append(pattern)
-        return original_rglob(self, pattern)
-
+    monkeypatch.setattr(os, "scandir", scan)
     try:
-        indexer = WikiIndexer(backend=FakeBackend())
-        with patch.object(Path, "rglob", spy_rglob):
-            docs = _indexed_docs(indexer)
+        docs = _indexed_docs(WikiIndexer(backend=FakeBackend()))
     finally:
         get_settings.cache_clear()
-
-    assert rglob_calls == ["*"], (
-        f"Expected exactly one rglob('*') call, got: {rglob_calls}"
-    )
-    paths = [d["path"] for d in docs]
-    assert paths == sorted(paths)
+    assert scans == [tmp_path, tmp_path / "docs"]
+    assert [doc["path"] for doc in docs] == sorted(doc["path"] for doc in docs)
 
 
 class TestExcludePatternMatching:
@@ -264,9 +258,7 @@ class TestExcludePatternMatching:
 
         assert should_exclude_path(link, kb)
 
-    def test_indexing_skips_outside_symlink_but_keeps_inside_symlink(
-        self, tmp_path, monkeypatch
-    ):
+    def test_indexing_skips_outside_symlink_but_keeps_inside_symlink(self, tmp_path, monkeypatch):
         from trace_search.config import get_settings
 
         kb = tmp_path / "kb"

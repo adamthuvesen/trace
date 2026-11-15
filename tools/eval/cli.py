@@ -2,10 +2,10 @@
 """CLI for Trace search evaluation suite.
 
 Usage:
-    # Quick evaluation (~14 template queries; stress subset excluded by default)
+    # Quick evaluation (stress subset excluded by default)
     uv run python -m tools.eval.cli --quick
 
-    # Full evaluation (~26 template queries, excluding stress items)
+    # Full core evaluation (excluding stress items)
     uv run python -m tools.eval.cli --full
 
     # Include stress / paraphrase queries in quick or full
@@ -24,16 +24,16 @@ Usage:
     uv run python -m tools.eval.cli --category concepts --category indexing
 
     # File type filter
-    uv run python -m tools.eval.cli --file-type .pdf
+    uv run python -m tools.eval.cli --file-type .md
 
     # Compare to baseline
     uv run python -m tools.eval.cli --baseline results/baselines/latest.json
 
     # CI mode (exit 1 on regression)
-    uv run python -m tools.eval.cli --ci
+    uv run python -m tools.eval.cli --full --ci --search adaptive --baseline tools/eval/baselines/core-adaptive.json --quality-only
 
-    # CI against stress thresholds (implies --stress)
-    uv run python -m tools.eval.cli --ci-stress
+    # CI on the stress subset against its baseline (implies --stress)
+    uv run python -m tools.eval.cli --ci-stress --search adaptive --baseline tools/eval/baselines/stress-adaptive.json --quality-only
 
     # Promote current results to baseline
     uv run python -m tools.eval.cli --promote
@@ -42,7 +42,7 @@ Usage:
 from __future__ import annotations
 
 import logging
-import sys
+import tempfile
 from pathlib import Path
 
 import click
@@ -53,11 +53,11 @@ from tools.eval.evaluator import (
     run_evaluation,
 )
 from tools.eval.regression import (
-    check_ci_thresholds,
     compare_results,
     get_latest_baseline,
     load_baseline,
     promote_to_baseline,
+    regression_failures,
 )
 from tools.eval.reporter import (
     generate_console_report,
@@ -94,12 +94,12 @@ def resolve_eval_scope(
 @click.option(
     "--quick",
     is_flag=True,
-    help="Run quick evaluation (~14 template queries)",
+    help="Run queries marked quick_set (excluding stress by default)",
 )
 @click.option(
     "--full",
     is_flag=True,
-    help="Run full evaluation (~26 template queries)",
+    help="Run every core query (excluding stress by default)",
 )
 @click.option(
     "--search",
@@ -115,7 +115,7 @@ def resolve_eval_scope(
 @click.option(
     "--file-type",
     multiple=True,
-    help="Filter by file type (e.g., .md, .pdf)",
+    help="Filter by file type (e.g., .md, .sql)",
 )
 @click.option(
     "--baseline",
@@ -125,12 +125,12 @@ def resolve_eval_scope(
 @click.option(
     "--ci",
     is_flag=True,
-    help="CI mode: exit 1 on regression or critical threshold failure",
+    help="CI mode: exit 1 on regression against the baseline",
 )
 @click.option(
     "--ci-stress",
     is_flag=True,
-    help="Like --ci but evaluate only the stress subset and use stress CI thresholds",
+    help="Like --ci but evaluate only the stress subset",
 )
 @click.option(
     "--include-stress",
@@ -151,6 +151,11 @@ def resolve_eval_scope(
     "--strict-keywords-top1",
     is_flag=True,
     help="With --strict-keywords, match keywords only in the top-1 chunk body",
+)
+@click.option(
+    "--quality-only",
+    is_flag=True,
+    help="Compare baseline quality only, excluding cross-host latency regression.",
 )
 @click.option(
     "--promote",
@@ -182,11 +187,53 @@ def main(
     stress: bool,
     strict_keywords: bool,
     strict_keywords_top1: bool,
+    quality_only: bool,
     promote: bool,
     verbose: bool,
     output_dir: Path,
 ) -> None:
     """Run Trace search evaluation suite."""
+    try:
+        _run(
+            quick,
+            full,
+            search,
+            category,
+            file_type,
+            baseline,
+            ci,
+            ci_stress,
+            include_stress,
+            stress,
+            strict_keywords,
+            strict_keywords_top1,
+            quality_only,
+            promote,
+            verbose,
+            output_dir,
+        )
+    except (ValueError, OSError) as error:
+        raise click.ClickException(str(error)) from error
+
+
+def _run(
+    quick: bool,
+    full: bool,
+    search: str,
+    category: tuple[str, ...],
+    file_type: tuple[str, ...],
+    baseline: Path | None,
+    ci: bool,
+    ci_stress: bool,
+    include_stress: bool,
+    stress: bool,
+    strict_keywords: bool,
+    strict_keywords_top1: bool,
+    quality_only: bool,
+    promote: bool,
+    verbose: bool,
+    output_dir: Path,
+) -> None:
     if verbose:
         logging.getLogger("tools.eval").setLevel(logging.DEBUG)
 
@@ -219,6 +266,18 @@ def main(
         include_stress=include_stress_queries,
     )
     click.echo(f"Loaded {len(queries)} queries for evaluation")
+    baseline_report = None
+    if baseline is not None:
+        baseline_report = load_baseline(baseline)
+    elif ci_mode:
+        latest = get_latest_baseline(search_mode=search)
+        if latest is None:
+            raise ValueError("CI requires a comparative baseline. Supply --baseline PATH.")
+        baseline_report = load_baseline(latest)
+    if baseline_report is not None and baseline_report.manifest is None:
+        raise ValueError(
+            "Cannot compare legacy reports without provenance. Re-run or explicitly migrate the baseline."
+        )
 
     # Initialize indexer
     from trace_search.config import settings
@@ -229,46 +288,27 @@ def main(
     click.echo(f"Embedding model: {settings.embedding_model}")
     click.echo()
 
-    indexer = WikiIndexer()
+    with tempfile.TemporaryDirectory(prefix="trace-eval-") as scratch:
+        indexer = WikiIndexer(index_root=Path(scratch))
+        click.echo("Building scratch index...")
+        indexer.build_index(force=True)
+        click.echo("Running evaluation...")
+        report = run_evaluation(
+            indexer=indexer,
+            search_mode=search,
+            quick_only=quick_only,
+            categories=categories,
+            file_types=file_types,
+            stress_only=stress_only,
+            include_stress=include_stress_queries,
+            strict_keywords=strict_keywords,
+            strict_keywords_top1=strict_keywords_top1,
+        )
 
-    if not indexer.has_index():
-        click.echo("Building index (first time)...")
-    else:
-        click.echo(f"Refreshing existing index: {len(indexer.snapshot())} chunks")
-    indexer.build_index()
-
-    # Mirror production bootstrap so eval p95 reflects what MCP consumers see.
-    from trace_search.server.server_warmup import warm_embedding_model
-
-    warm_embedding_model(indexer.backend)
-
-    click.echo()
-
-    click.echo("Running evaluation...")
-    report = run_evaluation(
-        indexer=indexer,
-        search_mode=search,
-        quick_only=quick_only,
-        categories=categories,
-        file_types=file_types,
-        stress_only=stress_only,
-        include_stress=include_stress_queries,
-        strict_keywords=strict_keywords,
-        strict_keywords_top1=strict_keywords_top1,
-    )
-
-    if baseline:
-        click.echo(f"Loading baseline: {baseline}")
-        baseline_report = load_baseline(baseline)
-        report.regression = compare_results(report, baseline_report)
-    elif ci_mode:
-        latest = get_latest_baseline(search_mode=search)
-        if latest:
-            click.echo(f"Using latest baseline: {latest}")
-            baseline_report = load_baseline(latest)
-            report.regression = compare_results(report, baseline_report)
-        else:
-            click.echo("No baseline found, skipping regression check")
+    if baseline_report is not None:
+        report.regression = compare_results(
+            report, baseline_report, compare_latency=not quality_only
+        )
 
     click.echo(generate_console_report(report))
 
@@ -277,22 +317,22 @@ def main(
     for fmt, path in saved.items():
         click.echo(f"  {fmt}: {path}")
 
-    if promote:
-        baseline_path = promote_to_baseline(report)
-        click.echo(f"Promoted to baseline: {baseline_path}")
-
     if ci_mode:
-        passed, failures = check_ci_thresholds(report, stress_subset=ci_stress)
-        if not passed:
+        failures = regression_failures(report)
+        if failures:
             click.echo()
             click.echo("CI FAILURES:")
             for failure in failures:
                 click.echo(f"  - {failure}")
-            sys.exit(1)
+            raise click.exceptions.Exit(1)
         else:
             click.echo()
             suffix = " (stress subset)" if ci_stress else ""
-            click.echo(f"CI: All thresholds passed{suffix}")
+            click.echo(f"CI: No regression against the baseline{suffix}")
+
+    if promote:
+        baseline_path = promote_to_baseline(report)
+        click.echo(f"Promoted to baseline: {baseline_path}")
 
 
 if __name__ == "__main__":

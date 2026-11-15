@@ -2,289 +2,152 @@
 
 ![License](https://img.shields.io/github/license/adamthuvesen/trace) ![Python](https://img.shields.io/badge/python-3.13%2B-blue)
 
-Local retrieval over a folder of files, for an agent or for you. Trace indexes
-documents on disk and serves search, document fetch, and diagnostics over a CLI
-or an MCP server. That lets an agent pull the right passages from a knowledge
-base without you pasting the whole thing into context.
+Trace searches a local folder through a CLI or MCP server.
+It returns ranked passages, source paths, and suggested document fetches.
+Use it when an agent or a person needs evidence from files on disk.
 
-The default `search` is adaptive and BM25-first. When BM25's top document
-clearly leads the runner-up, Trace returns BM25's ranking. When it doesn't, it
-fuses in semantic ranking per document. Retrieval runs entirely locally, and
-embeddings run on-device (ONNX int8). Nothing leaves the machine.
+Retrieval runs locally with ONNX embeddings.
+Initial setup can download dependencies and models.
+See [model prerequisites](docs/development.md#models-and-network-prerequisites) before disconnected use.
 
-The CLI and MCP server wrap the same Python primitives (`WikiIndexer`,
-`AdaptiveSearch`, `CollectionRegistry`, and result formatters), so you can use
-the pieces directly from a script or library.
-
-Formats: Markdown, PDF, Word, PowerPoint, CSV, SQL, Python, YAML, TypeScript,
-Jupyter notebooks.
-
-## Install
+## Install and search
 
 Trace needs Python 3.13+ and `uv`.
+This example searches the committed fixture with a scratch index.
 
 ```bash
-uv sync
+uv sync --locked
+KB_PATH=tests/fixtures/eval_kb INDEX_PATH="$(mktemp -d)" \
+  uv run --locked trace search "BM25 ranking" --top-k 2
 ```
 
-## Demo With A Committed Fixture
+The response includes the selected strategy, ranked document snippets, paths, and `get_document` follow-ups.
+The default `search` uses BM25 when its leading document clearly wins.
+Otherwise it combines BM25 and semantic rankings per document.
+See [retrieval modes](docs/retrieval-modes.md) for the exact routing and ranking behavior.
 
-This command searches the committed fixture in `tests/fixtures/eval_kb`.
-
-```console
-$ KB_PATH=tests/fixtures/eval_kb uv run trace search "BM25 ranking" --top-k 2
-Found 2 results
-
-## Strategy
-- **Selected:** hybrid
-- **Fallback used:** yes
-- **Reason:** BM25 matched only one document
-
-## Context
-
-### 1. BM25
-- **Path:** `glossary/bm25.md`
-- **Folder:** glossary
-- **Source:** hybrid
-
-**Snippet 1:** BM25
-- **Match evidence:** title matches: bm25; path matches: bm25; breadcrumb matches: bm25
-- **Matched terms:** `bm25`, `ranking`
-- **Best quote:** Document: BM25 Folder: glossary # BM25 BM25 is a classic **keyword** ranking function for lexical retrieval...
-
-### 2. Reranking
-...
-
-## Suggested Follow-ups
-- `get_document(path="glossary/bm25.md")`
-- `get_document(path="features/reranking.md")`
-```
+Supported formats are Markdown and, as plain text, SQL, Python, YAML, and TypeScript.
 
 ## CLI
 
-Use `uv run trace ...` from the repo, or `trace ...` once installed.
+Use `uv run trace ...` in this checkout, or `trace ...` after package installation.
+With no subcommand, `trace` starts the MCP server.
 
 ```bash
-# Single collection
-KB_PATH=/path/to/docs uv run trace search "sample query"
-
-# Named collections
-KB_COLLECTIONS="docs:/path/to/docs,team:/path/to/second-kb" \
-  uv run trace search "sample query" --collection docs
-
-# Check setup
-KB_PATH=/path/to/docs uv run trace doctor
-
-# Start the MCP server
-KB_PATH=/path/to/docs uv run trace serve
+KB_PATH=/path/to/docs uv run --locked trace search "sample query"
+KB_PATH=/path/to/docs uv run --locked trace doctor
+KB_PATH=/path/to/docs uv run --locked trace reindex
+KB_PATH=/path/to/docs uv run --locked trace serve
 ```
 
-With no subcommand, `uv run trace` starts the MCP server.
-
-| Command | Description |
+| Command | Behavior |
 | --- | --- |
-| `trace search "query"` | BM25-first search that fuses in semantic ranking when BM25 has no clear winner |
-| `trace semantic-search "query"` | Vector similarity search |
-| `trace keyword-search "term"` | Direct BM25 keyword search for exact terms |
-| `trace hybrid-search "query"` | BM25 and semantic ranking fused per document |
-| `trace get-document path/to/doc.md` | Fetch a document by path |
-| `trace list-documents` | List documents, optionally by folder |
-| `trace index-stats` | Show index status |
-| `trace doctor "sample query"` | Diagnose config, visible docs, exclusions, indexes |
-| `trace reindex` | Update indexes incrementally; `--force` to rebuild |
-| `trace serve` | Start the MCP server (stdio; `--transport http` for a shared server) |
+| `search "query"` | Adaptive BM25 and semantic retrieval |
+| `semantic-search "query"` | Vector similarity with lexical ranking evidence |
+| `keyword-search "term"` | Direct BM25 retrieval |
+| `hybrid-search "query"` | BM25 and semantic fusion per document |
+| `get-document path/to/doc.md` | Read a current source document |
+| `list-documents` | Scan visible current files |
+| `index-stats` | Show index status |
+| `doctor "sample query"` | Diagnose configuration, visibility, and existing indexes |
+| `reindex` | Incremental update, or complete rebuild with `--force` |
+| `serve` | MCP over stdio, or HTTP with `--transport http` |
 
-Search commands take `--top-k` (`keyword-search` uses `--max-results`);
-`list-documents` takes `--folder` and `--limit`. Search commands and
-`list-documents` also take `--path-prefix` (repeatable), `--extensions`
-(`.md,.py`), and `--since` (ISO 8601) to scope results. Collection-aware
-commands take `--collection`.
+Search commands accept `--top-k`.
+`keyword-search` uses `--max-results`.
+Search commands and `list-documents` accept repeated `--path-prefix`, comma-separated `--extensions`, and ISO 8601 `--since`.
+Filters combine with AND.
+`list-documents` also accepts `--folder` and `--limit`.
 
-## MCP server
-
-Trace speaks MCP over stdio by default. Point it at one collection with
-`KB_PATH` or several named ones with `KB_COLLECTIONS`. The server name is
-`trace`; tools are exposed as `mcp__trace__<tool>`.
-
-Trace pins FastMCP 4.0.0b2 so clients can negotiate MCP `2026-07-28` or an
-older protocol revision.
-
-To share one long-lived server between many clients instead of spawning one
-process per chat, serve streamable HTTP:
+For named collections, replace `KB_PATH` with `KB_COLLECTIONS`.
+Use `--collection` to select one collection.
 
 ```bash
-KB_COLLECTIONS="docs:/path/to/docs" \
-  uv run trace serve --transport http --host 127.0.0.1 --port 7421
+KB_COLLECTIONS="docs:/path/to/docs,team:/path/to/team" \
+  uv run --locked trace search "sample query" --collection docs
 ```
 
-Clients connect to `http://127.0.0.1:7421/mcp`. The server is stateless (no
-session ids to lose across a restart), has no authentication, and rejects
-requests whose `Host` or `Origin` is not local, so keep it on a loopback
-address.
+Failures return a nonzero exit status.
+CLI errors appear on stderr.
+MCP failures use the tool error flag.
+A search with no matches is a successful empty result.
 
-### Claude Code
+## MCP
+
+The default transport is stdio.
+The server exposes `search`, `semantic_search`, `keyword_search`, `search_hybrid`, `get_document`, `list_documents`, `index_stats`, `doctor`, and `reindex`.
+Search and listing tools accept the same scope filters as the CLI.
+Multi-collection tools also accept `collection`.
+
+For Claude Code:
 
 ```bash
-claude mcp add trace \
-  --transport stdio \
-  --env KB_COLLECTIONS="docs:/path/to/docs,team:/path/to/second-kb" \
+claude mcp add trace --transport stdio \
+  --env KB_PATH=/path/to/docs \
   -- uv run --directory /path/to/trace trace serve
 ```
 
+For one shared loopback server:
+
 ```bash
-# Inspector
-KB_COLLECTIONS="docs:/path/to/docs,team:/path/to/second-kb" \
-  uv run fastmcp dev src/trace_search/server/trace_server.py
+KB_PATH=/path/to/docs uv run --locked trace serve \
+  --transport http --host 127.0.0.1 --port 7421
 ```
 
-The tools map one-to-one onto the CLI:
+Clients connect to `http://127.0.0.1:7421/mcp`.
+The server is stateless and unauthenticated.
+It restricts the listener to loopback and protects requests through host and origin checks.
+The [development guide](docs/development.md#mcp-inspector) documents the FastMCP inspector factory.
 
-| Tool | Description |
-| --- | --- |
-| `search` | BM25-first search that fuses in semantic ranking when BM25 has no clear winner (default) |
-| `semantic_search` | Vector similarity search |
-| `keyword_search` | Direct BM25 keyword search for exact terms |
-| `search_hybrid` | BM25 and semantic ranking fused per document |
-| `get_document` | Fetch a document by path |
-| `list_documents` | List documents, optionally by folder |
-| `index_stats` | Show index status |
-| `doctor` | Diagnose config, visible docs, exclusions, indexes |
-| `reindex` | Update indexes incrementally; `force=true` to rebuild |
+## Configuration and indexes
 
-In multi-collection mode, search and document tools take an optional
-`collection`. Search tools and `list_documents` take the same
-`path_prefix` / `extensions` / `since` filters as the CLI; filters combine with
-AND and show up in `search` output under `Active filters`, so an empty result
-explains itself.
-
-Start with `search`. It reports which strategy won, groups context by document,
-includes match evidence, and suggests `get_document(path=...)` follow-ups. Reach
-for `keyword_search` / `semantic_search` / `search_hybrid` when you want one
-mode for debugging or deterministic comparison.
-
-## Configuration
-
-| Variable | Description | Default |
+| Variable | Default | Purpose |
 | --- | --- | --- |
-| `KB_PATH` | Path to a single collection (`~` expanded) | unset |
-| `KB_COLLECTIONS` | Comma-separated `name:path` pairs (`~` expanded) | unset |
-| `INDEX_PATH` | Root path for indexes (`~` expanded) | unset |
-| `LOG_LEVEL` | `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`/`NOTSET` | `INFO` |
-| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` or `BAAI/bge-base-en-v1.5` | `all-MiniLM-L6-v2` |
+| `KB_PATH` | unset | One knowledge base |
+| `KB_COLLECTIONS` | unset | Comma-separated `name:path` collections |
+| `INDEX_PATH` | KB-local `.mcp-search/indexes/` | Index storage root |
+| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Default model, or `BAAI/bge-base-en-v1.5` |
+| `TRACE_MODEL_CACHE` | XDG cache or `~/.cache/trace/models` | Durable model storage |
+| `LOG_LEVEL` | `INFO` | Python logging level |
 
-`KB_PATH` and `KB_COLLECTIONS` are mutually exclusive. Setting both fails at
-startup, as do invalid paths, collection names, and log levels.
+`KB_PATH` and `KB_COLLECTIONS` are mutually exclusive.
+Invalid paths, duplicate collection names, and invalid settings fail during configuration.
+In multi-collection mode, `INDEX_PATH` contains one directory per collection.
 
-Indexes live under each collection in `.mcp-search/indexes/`. Set `INDEX_PATH`
-to store them elsewhere: single-collection mode writes there directly,
-multi-collection mode uses one subdirectory per collection.
+Frontmatter `title`, `aliases`, and `summary` contribute to retrieval.
+Other YAML keys stay outside ranking text.
+`status: superseded` and `status: deprecated` demote replaced pages.
+A KB-root `.traceignore` supports gitignore patterns and negation.
+Trace also skips hidden paths and configured excluded directories within the KB.
 
-### Markdown frontmatter
+Reindexing publishes a complete immutable generation and swaps `CURRENT` atomically.
+Running readers notice the generation on a later request.
+Searches retain one generation per collection through ranking and neighbor lookup.
+`get-document` reads the current source file, so it can contain newer text.
+See [index compatibility](docs/architecture.md#index-compatibility) for the v6 to v7 migration and build recipe rules.
 
-Trace reads YAML frontmatter instead of indexing it as text. `title`,
-`aliases`, and `summary` (or `name` and `description`) go into a short card
-at the top of the first chunk, and every other key stays out of ranking. A
-query that is a page's title or one of its aliases ranks that page first. A
-page with `status: superseded` or `status: deprecated` ranks below its
-replacement, and search output shows its status and `as_of` date.
+## Development and evaluation
 
-```yaml
----
-title: Release runbook
-aliases: [deploy process, shipping checklist]
-summary: How to cut, tag, verify, and roll back a release.
-status: current
-as_of: 2026-08-04
----
-```
+[AGENTS.md](AGENTS.md) lists the development commands and the checks they enforce.
+`just eval` and `just stress` check the public fixture against committed quality baselines.
+The fixtures test retrieval behavior on a small corpus. They do not establish corpus-scale performance.
 
-### Per-collection `.traceignore`
+Read [development](docs/development.md) for commands and check coverage.
+Read [evaluation](docs/evaluation.md) for metrics, manifests, baseline migration, and private query sets.
+Read [architecture](docs/architecture.md) for module ownership and compatibility boundaries.
 
-Trace always skips dot-prefixed paths and the global `EXCLUDE_PATTERNS`
-directory names. To narrow one collection further, put a `.traceignore` at its
-KB root. It uses gitignore syntax, including `!` negation, matched against the
-KB-relative path, and document paths keep their prefix. This allowlist indexes
-only `wiki/`, minus its log files:
+## Historical benchmark results
 
-```gitignore
-/*
-!/wiki/
-/wiki/log.md
-/wiki/log/
-```
+These results come from committed reports dated 2026-06-13.
+They describe those historical runs, including their original timing protocol.
+Current fixture gates use separately recorded baselines.
 
-Edits take effect on the next scan without a restart. The next incremental
-`reindex` removes files that became ignored, and `doctor` notes when the
-file is active and counts what it excluded.
+| Mode and source | Top-1 | Top-5 | MRR | p50 ms | p95 ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| [bm25](docs/benchmarks/eval_bm25.json) | 88.2% | 94.1% | 0.912 | 0.16 | 2.64 |
+| [semantic](docs/benchmarks/eval_semantic.json) | 88.2% | 100.0% | 0.941 | 6.71 | 7.14 |
+| [hybrid](docs/benchmarks/eval_hybrid.json) | 88.2% | 100.0% | 0.941 | 7.10 | 10.87 |
+| [adaptive](docs/benchmarks/eval_adaptive.json) | 88.2% | 100.0% | 0.941 | 7.20 | 10.56 |
 
-## Reindexing
-
-`reindex` is incremental: Trace fingerprints each file (SHA-256 + mtime + size)
-and re-embeds only what was added or changed; removed files drop out. Run
-`trace reindex --force` (`force=true` over MCP) to rebuild every file after a
-model change or to recover from corruption.
-
-Each build writes a complete new index generation (chunks, an embedding matrix,
-and the BM25 index) and then atomically points `CURRENT` at it. A running server
-notices the new generation on its next search, so a CLI `reindex` beside a
-long-lived daemon takes effect without a restart, and a failed build leaves the
-previous generation serving. Only one process can reindex a collection at a
-time: a second writer fails fast with the first one's pid. Searches never write
-to an existing index; a collection with no index yet is built on first use.
-
-`doctor` reports the next-reindex plan and a change summary:
-
-```text
-- Index status: stale
-  - 1 added, 2 changed, 1 removed since last index.
-  - Next `reindex` will run incrementally on changed files.
-- Source changes since last index: unchanged=27, added=1, changed=2, removed=1
-```
-
-When given a sample query, `doctor` probes existing indexes only. It tells you
-to `reindex` rather than building as a side effect.
-
-## Retrieval quality
-
-Trace includes an eval harness (`tools/eval/`) for golden-query checks. The committed fixture is a small, deliberately tricky smoke test: 24 short Markdown docs and 17 queries with near-duplicate concepts, exact-token lookups, and paraphrases.
-
-| Mode | Top-1 | Top-5 | MRR | p50 | p95 |
-| --- | --- | --- | --- | --- | --- |
-| `bm25` | 82% | 88% | 0.853 | 0.13 ms | 0.3 ms |
-| `semantic` | 100% | 100% | 1.000 | 3.23 ms | 3.7 ms |
-| `hybrid` | 88% | 100% | 0.941 | 3.33 ms | 5.3 ms |
-| `adaptive` | 88% | 100% | 0.941 | 3.48 ms | 4.8 ms |
-
-The fixture is paraphrase-heavy, so semantic search wins it. On real knowledge
-bases BM25 usually leads: on an 83-case private wiki eval, `adaptive` scores
-0.878 MRR against 0.864 for BM25 alone and 0.823 for semantic. The
-[2026-09-29 benchmark note](docs/benchmarks/2026-09-29-trace-overhaul.md) has
-the full numbers and what each change bought.
-
-Reproduce the fixture numbers with:
-
-```bash
-KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
-  uv run python -m tools.eval.cli --full --search adaptive
-```
-
-For the multi-KB battle suite, see
-[`docs/retrieval-modes.md`](docs/retrieval-modes.md).
-
-## Development
-
-```bash
-uv run python -m pytest -m "not slow"        # skip embedding tests
-uv run python scripts/check_module_sizes.py  # no module > 1000 lines
-uv run ruff check .
-uv build
-
-# Search evaluation against the committed fixture
-KB_PATH=tests/fixtures/eval_kb EVAL_GOLDEN_QUERIES=tests/fixtures/eval_golden_queries.yaml \
-  uv run python -m tools.eval.cli --full --search adaptive
-```
-
-To evaluate against your own corpus, copy
-`tools/eval/golden_queries.example.yaml` to `tools/eval/golden_queries.yaml`,
-point `KB_PATH` at the matching docs, build the index, then run
-`uv run python -m tools.eval.cli --quick`.
+[Benchmark notes](docs/benchmarks/README.md) explain the historical artifacts.
+The [2026-09-29 investigation](docs/benchmarks/2026-09-29-trace-overhaul.md) covers later experiments and their limits.

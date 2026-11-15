@@ -1,5 +1,3 @@
-"""Tests for search filter parsing and application."""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -10,11 +8,11 @@ import pytest
 from tests.test_runtime_hardening import FakeBackend
 from trace_search.indexing.wiki_indexer import WikiIndexer
 from trace_search.retrieval.search import (
+    AdaptiveSearch,
     HybridSearch,
     KeywordSearch,
     SearchFilters,
     SemanticSearch,
-    AdaptiveSearch,
     parse_filters,
 )
 
@@ -127,9 +125,7 @@ def filter_kb(tmp_path: Path) -> tuple[WikiIndexer, Path]:
     (kb / "architecture" / "notes.md").write_text(
         "# Architecture notes\n\nrouter scales horizontally", encoding="utf-8"
     )
-    (kb / "rfcs" / "001.md").write_text(
-        "# RFC 001\n\nrouter behavior change", encoding="utf-8"
-    )
+    (kb / "rfcs" / "001.md").write_text("# RFC 001\n\nrouter behavior change", encoding="utf-8")
     (kb / "rfcs" / "002.py").write_text(
         '"""router config."""\n\ndef build():\n    pass\n', encoding="utf-8"
     )
@@ -149,7 +145,7 @@ class TestKeywordSearchFilters:
         filters = parse_filters(path_prefix="architecture/")
         hits = searcher.search("router", max_results=10, filters=filters)
         assert hits
-        assert all(h["path"].startswith("architecture/") for h in hits)
+        assert all(h.path.startswith("architecture/") for h in hits)
 
     def test_extension_scopes_keyword_search(self, filter_kb):
         indexer, _ = filter_kb
@@ -157,7 +153,7 @@ class TestKeywordSearchFilters:
         filters = parse_filters(extensions=[".py"])
         hits = searcher.search("router", max_results=10, filters=filters)
         assert hits
-        assert all(h["path"].endswith(".py") for h in hits)
+        assert all(h.path.endswith(".py") for h in hits)
 
 
 class TestSemanticSearchFilters:
@@ -167,7 +163,7 @@ class TestSemanticSearchFilters:
         filters = parse_filters(extensions=[".md"])
         hits = searcher.search("router", top_k=10, filters=filters)
         assert hits
-        assert all(h["path"].endswith(".md") for h in hits)
+        assert all(h.path.endswith(".md") for h in hits)
 
     def test_path_prefix_scopes_semantic_search(self, filter_kb):
         indexer, _ = filter_kb
@@ -175,7 +171,7 @@ class TestSemanticSearchFilters:
         filters = parse_filters(path_prefix="rfcs/")
         hits = searcher.search("router", top_k=10, filters=filters)
         assert hits
-        assert all(h["path"].startswith("rfcs/") for h in hits)
+        assert all(h.path.startswith("rfcs/") for h in hits)
 
 
 class TestHybridSearchFilters:
@@ -185,7 +181,7 @@ class TestHybridSearchFilters:
         filters = parse_filters(path_prefix="architecture/")
         hits = searcher.search("router", top_k=10, filters=filters)
         assert hits
-        assert all(h["path"].startswith("architecture/") for h in hits)
+        assert all(h.path.startswith("architecture/") for h in hits)
 
 
 class TestAdaptiveSearchFilters:
@@ -194,11 +190,13 @@ class TestAdaptiveSearchFilters:
         searcher = AdaptiveSearch(indexer)
         filters = parse_filters(path_prefix="architecture/")
         result = searcher.search("router", top_k=5, filters=filters)
+        assert result.route is not None
         assert result.route.filters.path_prefix == ("architecture/",)
-        assert all(h["path"].startswith("architecture/") for h in result.hits)
+        assert all(h.path.startswith("architecture/") for h in result.hits)
 
     def test_default_search_has_empty_route_filters(self, filter_kb):
         indexer, _ = filter_kb
         searcher = AdaptiveSearch(indexer)
         result = searcher.search("router", top_k=5)
+        assert result.route is not None
         assert result.route.filters.is_empty

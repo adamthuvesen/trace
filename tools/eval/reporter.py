@@ -1,43 +1,11 @@
-"""Report generation for evaluation results."""
-
 from __future__ import annotations
 
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from tools.eval import load_thresholds
-
 if TYPE_CHECKING:
     from tools.eval.models import EvaluationReport
-
-
-def get_status_indicator(
-    value: float, target: float, warning: float, critical: float
-) -> str:
-    """Get a status indicator based on thresholds (higher value is better)."""
-    if value >= target:
-        return "✓"
-    elif value >= warning:
-        return "~"
-    elif value >= critical:
-        return "!"
-    else:
-        return "✗"
-
-
-def get_latency_status(
-    latency_ms: float, target: float, warning: float, critical: float
-) -> str:
-    """Get a status indicator for latency (lower is better)."""
-    if latency_ms <= target:
-        return "✓"
-    elif latency_ms <= warning:
-        return "~"
-    elif latency_ms <= critical:
-        return "!"
-    else:
-        return "✗"
 
 
 def generate_json_report(report: EvaluationReport) -> str:
@@ -70,76 +38,41 @@ def _append_markdown_run_flags(lines: list[str], report: EvaluationReport) -> No
         run_flags.append("includes stress queries")
     if report.strict_keywords:
         run_flags.append(
-            "strict keywords"
-            + (" (top-1 scope)" if report.strict_keywords_top1 else "")
+            "strict keywords" + (" (top-1 scope)" if report.strict_keywords_top1 else "")
         )
     if run_flags:
         lines.extend(["**Eval mode:** " + ", ".join(run_flags), ""])
 
 
-def _append_markdown_overall_metrics(
-    lines: list[str],
-    report: EvaluationReport,
-    path_thresh: dict,
-    keyword_thresh: dict,
-) -> None:
-    t1_path_status = get_status_indicator(
-        report.top_1_path_accuracy,
-        path_thresh["top_1"]["target"],
-        path_thresh["top_1"]["warning"],
-        path_thresh["top_1"]["critical"],
-    )
-    t5_path_status = get_status_indicator(
-        report.top_5_path_accuracy,
-        path_thresh["top_5"]["target"],
-        path_thresh["top_5"]["warning"],
-        path_thresh["top_5"]["critical"],
-    )
-    t1_kw_status = get_status_indicator(
-        report.top_1_keyword_accuracy,
-        keyword_thresh["top_1"]["target"],
-        keyword_thresh["top_1"]["warning"],
-        keyword_thresh["top_1"]["critical"],
-    )
-    t5_kw_status = get_status_indicator(
-        report.top_5_keyword_accuracy,
-        keyword_thresh["top_5"]["target"],
-        keyword_thresh["top_5"]["warning"],
-        keyword_thresh["top_5"]["critical"],
-    )
-
+def _append_markdown_overall_metrics(lines: list[str], report: EvaluationReport) -> None:
     lines.extend(
         [
             "## Overall Metrics",
             "",
-            "| Metric | Value | Status | Target |",
-            "|--------|-------|--------|--------|",
-            f"| Top-1 Path Accuracy | {report.top_1_path_accuracy:.1%} | {t1_path_status} | ≥{path_thresh['top_1']['target']:.0%} |",
-            f"| Top-5 Path Accuracy | {report.top_5_path_accuracy:.1%} | {t5_path_status} | ≥{path_thresh['top_5']['target']:.0%} |",
-            f"| Top-1 Keyword Accuracy | {report.top_1_keyword_accuracy:.1%} | {t1_kw_status} | ≥{keyword_thresh['top_1']['target']:.0%} |",
-            f"| Top-5 Keyword Accuracy | {report.top_5_keyword_accuracy:.1%} | {t5_kw_status} | ≥{keyword_thresh['top_5']['target']:.0%} |",
-            f"| Mean Reciprocal Rank (path) | {report.mean_reciprocal_rank:.3f} | - | - |",
-            f"| Within max_rank Path | {report.within_max_rank_path_accuracy:.1%} | - | - |",
+            "| Metric | Value |",
+            "|--------|-------|",
+            f"| Top-1 Path Accuracy | {report.top_1_path_accuracy:.1%} |",
+            f"| Top-5 Path Accuracy | {report.top_5_path_accuracy:.1%} |",
+            f"| Top-1 Keyword Accuracy | {report.top_1_keyword_accuracy:.1%} |",
+            f"| Top-5 Keyword Accuracy | {report.top_5_keyword_accuracy:.1%} |",
+            f"| Mean Reciprocal Rank (path) | {report.mean_reciprocal_rank:.3f} |",
+            f"| Within max_rank Path | {report.within_max_rank_path_accuracy:.1%} |",
             "",
         ]
     )
 
 
-def _append_markdown_latency(
-    lines: list[str],
-    report: EvaluationReport,
-    latency_thresh: dict,
-) -> None:
+def _append_markdown_latency(lines: list[str], report: EvaluationReport) -> None:
     lines.extend(
         [
             "## Latency",
             "",
-            "| Percentile | Value | Target |",
-            "|------------|-------|--------|",
-            f"| p50 | {report.latency_p50_ms:.1f}ms | ≤{latency_thresh['p50']['target']}ms |",
-            f"| p95 | {report.latency_p95_ms:.1f}ms | ≤{latency_thresh['p95']['target']}ms |",
-            f"| p99 | {report.latency_p99_ms:.1f}ms | ≤{latency_thresh['p99']['target']}ms |",
-            f"| mean | {report.latency_mean_ms:.1f}ms | - |",
+            "| Percentile | Value |",
+            "|------------|-------|",
+            f"| p50 | {report.latency_p50_ms:.1f}ms |",
+            f"| p95 | {report.latency_p95_ms:.1f}ms |",
+            f"| p99 | {report.latency_p99_ms:.1f}ms |",
+            f"| mean | {report.latency_mean_ms:.1f}ms |",
             "",
         ]
     )
@@ -201,6 +134,8 @@ def _append_markdown_regression(lines: list[str], report: EvaluationReport) -> N
                 "",
                 f"**Baseline:** {reg.baseline_timestamp}",
                 f"**Has Regression:** {'Yes' if reg.has_regression else 'No'}",
+                f"**Latency regression gate:** {'enabled' if reg.latency_compared else 'disabled (quality-only comparison)'}",
+                f"**Experiment differences:** {', '.join(reg.experiment_differences) or 'none'}",
                 "",
                 "| Metric | Baseline | Current | Delta |",
                 "|--------|----------|---------|-------|",
@@ -250,9 +185,7 @@ def _append_markdown_failures(lines: list[str], report: EvaluationReport) -> Non
         for r in failed[:20]:
             query_short = r.query[:40] + "..." if len(r.query) > 40 else r.query
             path_short = (
-                r.retrieved_path[:50] + "..."
-                if len(r.retrieved_path) > 50
-                else r.retrieved_path
+                r.retrieved_path[:50] + "..." if len(r.retrieved_path) > 50 else r.retrieved_path
             )
             lines.append(f"| {r.query_id} | {query_short} | {path_short} |")
 
@@ -264,18 +197,12 @@ def _append_markdown_failures(lines: list[str], report: EvaluationReport) -> Non
 
 def generate_markdown_report(report: EvaluationReport) -> str:
     """Generate markdown report for human review."""
-    thresholds = load_thresholds()
     lines: list[str] = []
 
     _append_markdown_header(lines, report)
     _append_markdown_run_flags(lines, report)
-    _append_markdown_overall_metrics(
-        lines,
-        report,
-        thresholds["path_accuracy"],
-        thresholds["keyword_accuracy"],
-    )
-    _append_markdown_latency(lines, report, thresholds["latency"])
+    _append_markdown_overall_metrics(lines, report)
+    _append_markdown_latency(lines, report)
     _append_markdown_category_metrics(lines, report)
     _append_markdown_file_type_metrics(lines, report)
     _append_markdown_regression(lines, report)
@@ -308,37 +235,16 @@ def _append_console_header(lines: list[str], report: EvaluationReport) -> None:
     lines.append("")
 
 
-def _console_status_str(
-    value: float,
-    target: float,
-    warning: float,
-    critical: float,
-) -> str:
-    indicator = get_status_indicator(value, target, warning, critical)
-    if indicator == "✓":
-        return f"{value:.1%} [PASS]"
-    if indicator == "~":
-        return f"{value:.1%} [WARN]"
-    if indicator == "!":
-        return f"{value:.1%} [ATTN]"
-    return f"{value:.1%} [FAIL]"
-
-
-def _append_console_accuracy(
-    lines: list[str],
-    report: EvaluationReport,
-    path_thresh: dict,
-    keyword_thresh: dict,
-) -> None:
+def _append_console_accuracy(lines: list[str], report: EvaluationReport) -> None:
     lines.extend(
         [
             "-" * 40,
             "ACCURACY METRICS",
             "-" * 40,
-            f"Top-1 Path:    {_console_status_str(report.top_1_path_accuracy, path_thresh['top_1']['target'], path_thresh['top_1']['warning'], path_thresh['top_1']['critical'])} (target: ≥{path_thresh['top_1']['target']:.0%})",
-            f"Top-5 Path:    {_console_status_str(report.top_5_path_accuracy, path_thresh['top_5']['target'], path_thresh['top_5']['warning'], path_thresh['top_5']['critical'])} (target: ≥{path_thresh['top_5']['target']:.0%})",
-            f"Top-1 Keyword: {_console_status_str(report.top_1_keyword_accuracy, keyword_thresh['top_1']['target'], keyword_thresh['top_1']['warning'], keyword_thresh['top_1']['critical'])} (target: ≥{keyword_thresh['top_1']['target']:.0%})",
-            f"Top-5 Keyword: {_console_status_str(report.top_5_keyword_accuracy, keyword_thresh['top_5']['target'], keyword_thresh['top_5']['warning'], keyword_thresh['top_5']['critical'])} (target: ≥{keyword_thresh['top_5']['target']:.0%})",
+            f"Top-1 Path:    {report.top_1_path_accuracy:.1%}",
+            f"Top-5 Path:    {report.top_5_path_accuracy:.1%}",
+            f"Top-1 Keyword: {report.top_1_keyword_accuracy:.1%}",
+            f"Top-5 Keyword: {report.top_5_keyword_accuracy:.1%}",
             f"MRR (path):      {report.mean_reciprocal_rank:.3f}",
             f"Within max_rank: {report.within_max_rank_path_accuracy:.1%}",
             "",
@@ -419,7 +325,9 @@ def _append_console_regression(lines: list[str], report: EvaluationReport) -> No
                 f"Status:   {'REGRESSION DETECTED' if reg.has_regression else 'OK'}",
                 f"Top-1 Delta: {reg.top_1_delta:+.1%}",
                 f"Top-5 Delta: {reg.top_5_delta:+.1%}",
-                f"Latency Delta: {reg.latency_delta_pct:+.0%}",
+                f"Latency Delta: {reg.latency_delta_pct:+.0%}"
+                + ("" if reg.latency_compared else " (reported only)"),
+                f"Experiment differences: {', '.join(reg.experiment_differences) or 'none'}",
             ]
         )
 
@@ -436,16 +344,10 @@ def _append_console_regression(lines: list[str], report: EvaluationReport) -> No
 
 def generate_console_report(report: EvaluationReport) -> str:
     """Generate colored console report."""
-    thresholds = load_thresholds()
     lines: list[str] = []
 
     _append_console_header(lines, report)
-    _append_console_accuracy(
-        lines,
-        report,
-        thresholds["path_accuracy"],
-        thresholds["keyword_accuracy"],
-    )
+    _append_console_accuracy(lines, report)
     _append_console_latency(lines, report)
     _append_console_category_metrics(lines, report)
     _append_console_file_type_metrics(lines, report)
@@ -465,7 +367,6 @@ def save_report(
     output_dir: Path,
     formats: list[str] | None = None,
 ) -> dict[str, Path]:
-    """Save report in multiple formats."""
     if formats is None:
         formats = ["json", "md"]
 

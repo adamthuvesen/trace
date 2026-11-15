@@ -1,5 +1,3 @@
-"""Tests for evaluation CLI option composition."""
-
 from pathlib import Path
 
 from tools.eval.battle_royale import load_suite
@@ -82,9 +80,7 @@ def test_battle_suite_resolves_fixture_paths():
 
 
 def test_challenge_battle_suite_includes_stress_queries():
-    description, kbs, modes = load_suite(
-        Path("tests/fixtures/eval_battle_royale_challenge.yaml")
-    )
+    description, kbs, modes = load_suite(Path("tests/fixtures/eval_battle_royale_challenge.yaml"))
 
     assert "challenge" in description
     assert {"retrieval", "support", "api"} == {kb.kb_id for kb in kbs}

@@ -1,7 +1,6 @@
-"""Configuration management using pydantic-settings."""
-
 import logging
 import re
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -10,16 +9,28 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-SUPPORTED_MODELS = {
-    "all-MiniLM-L6-v2": {"dims": 384},
-    "BAAI/bge-base-en-v1.5": {"dims": 768},
+@dataclass(frozen=True)
+class ModelSpec:
+    dimensions: int
+    runtime_identifier: str
+
+
+MODEL_SPECS = {
+    "all-MiniLM-L6-v2": ModelSpec(384, "sentence-transformers/all-MiniLM-L6-v2"),
+    "BAAI/bge-base-en-v1.5": ModelSpec(768, "BAAI/bge-base-en-v1.5"),
 }
+SUPPORTED_MODELS = {name: {"dims": spec.dimensions} for name, spec in MODEL_SPECS.items()}
 COLLECTION_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 VALID_LOG_LEVELS = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"}
 
 
 def validate_collection_name(name: str) -> str:
     """Validate a collection name before using it as a selector and path segment."""
+    if name.lower() == "all":
+        raise ValueError(
+            "Collection name 'all' is reserved for selecting every collection. "
+            "Choose another collection name."
+        )
     if not COLLECTION_NAME_PATTERN.fullmatch(name):
         raise ValueError(
             f"Invalid collection name '{name}'. "
@@ -32,12 +43,13 @@ def _parse_collection_entry(entry: str) -> tuple[str, Path]:
     entry = entry.strip()
     if ":" not in entry:
         raise ValueError(
-            f"Invalid KB_COLLECTIONS entry '{entry}'. "
-            "Expected format: 'name:/path/to/kb'"
+            f"Invalid KB_COLLECTIONS entry '{entry}'. Expected format: 'name:/path/to/kb'"
         )
 
     name, path_str = entry.split(":", 1)
     name = validate_collection_name(name.strip())
+    if not path_str.strip():
+        raise ValueError(f"Collection '{name}' path must not be empty")
     path = Path(path_str.strip()).expanduser()
     if not path.exists():
         raise ValueError(f"Collection '{name}' path does not exist: {path}")
@@ -58,8 +70,6 @@ def parse_kb_collections(value: str) -> dict[str, Path]:
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables."""
-
     # Knowledge base path (required for runtime index/search operations)
     kb_path: Path | None = Field(
         default=None,
@@ -75,38 +85,36 @@ class Settings(BaseSettings):
 
     eval_golden_queries: Path | None = Field(
         default=None,
-        description="Optional path to your golden queries YAML (overrides default tools/eval/golden_queries.yaml)",
+        description=(
+            "Optional path to your golden queries YAML "
+            "(overrides default tools/eval/golden_queries.yaml)"
+        ),
     )
 
     # Embedding model
     embedding_model: str = "all-MiniLM-L6-v2"
 
     # BM25 parameters tuned for short document chunks.
-    bm25_k1: float = Field(
-        default=1.2, gt=0, description="BM25 k1 (term frequency saturation)"
-    )
+    bm25_k1: float = Field(default=1.2, gt=0, description="BM25 k1 (term frequency saturation)")
     bm25_b: float = Field(
         default=0.5, ge=0, le=1, description="BM25 b (document length normalization)"
     )
 
     # Chunking. 1500 chars beat 1000 and 2000 on both measured corpora
     # (docs/benchmarks/2026-09-29-trace-overhaul.md).
-    char_chunk_size: int = Field(
-        default=1500, gt=0, le=10000, description="Max chars per chunk"
-    )
+    char_chunk_size: int = Field(default=1500, gt=0, le=10000, description="Max chars per chunk")
     char_overlap_size: int = Field(
         default=100, ge=0, description="Character overlap between chunks; 0 disables"
     )
 
     # Directory exclusions (comma-separated)
-    exclude_patterns: str = (
-        "node_modules,.venv,__pycache__,.next,.git,dbt_packages,.mcp-search"
-    )
+    exclude_patterns: str = "node_modules,.venv,__pycache__,.next,.git,dbt_packages,.mcp-search"
 
     # Logging
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(
+        extra="forbid",
         env_prefix="",
         case_sensitive=False,
         env_file=".env",
@@ -142,8 +150,7 @@ class Settings(BaseSettings):
         normalized = v.strip().upper()
         if normalized not in VALID_LOG_LEVELS:
             raise ValueError(
-                f"Invalid LOG_LEVEL: {v}. "
-                f"Supported levels: {', '.join(sorted(VALID_LOG_LEVELS))}"
+                f"Invalid LOG_LEVEL: {v}. Supported levels: {', '.join(sorted(VALID_LOG_LEVELS))}"
             )
         return normalized
 
@@ -152,8 +159,7 @@ class Settings(BaseSettings):
     def validate_embedding_model(cls, v: str) -> str:
         if v not in SUPPORTED_MODELS:
             raise ValueError(
-                f"Unknown embedding model: {v}. "
-                f"Supported models: {list(SUPPORTED_MODELS.keys())}"
+                f"Unknown embedding model: {v}. Supported models: {list(SUPPORTED_MODELS.keys())}"
             )
         return v
 
@@ -168,7 +174,7 @@ class Settings(BaseSettings):
 
     @property
     def embedding_dims(self) -> int:
-        return SUPPORTED_MODELS[self.embedding_model]["dims"]
+        return MODEL_SPECS[self.embedding_model].dimensions
 
     @property
     def model_slug(self) -> str:
@@ -204,10 +210,10 @@ class Settings(BaseSettings):
         if self.kb_collections:
             return parse_kb_collections(self.kb_collections)
         if self.kb_path:
-            return {self.kb_path.name: self.kb_path}
+            name = self.kb_path.resolve().name or "default"
+            return {"default" if name.lower() == "all" else name: self.kb_path}
         raise ValueError(
-            "Set KB_COLLECTIONS or KB_PATH. "
-            "KB_COLLECTIONS format: 'name:/path,name:/path'"
+            "Set KB_COLLECTIONS or KB_PATH. KB_COLLECTIONS format: 'name:/path,name:/path'"
         )
 
 

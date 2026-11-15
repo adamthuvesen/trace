@@ -1,27 +1,27 @@
-"""Tests for adaptive search routing and grouped search context."""
-
 from unittest.mock import MagicMock, patch
 
-from trace_search.retrieval.search import (
-    SearchRoute,
-    AdaptiveSearch,
-    format_search_context,
-)
+from tests.search_hits import make_hit
+from trace_search.retrieval.formatting import format_search_context
+from trace_search.retrieval.search import AdaptiveSearch
+from trace_search.retrieval.search_types import SearchResponse, SearchRoute
 
 
-def _hit(path="doc.md", score=2.0, source="keyword", content="BM25 ranking docs"):
-    return {
-        "id": f"{path}::0",
-        "path": path,
-        "title": "Doc",
-        "folder": "",
-        "content": content,
-        "score": score,
-        "source": source,
-        "chunk_index": 0,
-        "chunk_count": 1,
-        "breadcrumb": "Doc > Search",
-    }
+def _hit(
+    path="doc.md",
+    score=2.0,
+    source="keyword",
+    content="BM25 ranking docs",
+    collection="",
+):
+    return make_hit(
+        path,
+        title="Doc",
+        content=content,
+        score=score,
+        source=source,
+        collection=collection,
+        breadcrumb="Doc > Search",
+    )
 
 
 def test_adaptive_search_keeps_strong_keyword_results():
@@ -36,10 +36,11 @@ def test_adaptive_search_keeps_strong_keyword_results():
 
     result = adaptive.search("BM25", top_k=3)
 
+    assert result.route is not None
     assert result.route.strategy == "keyword"
     assert not result.route.fallback_used
     adaptive.hybrid.search.assert_not_called()
-    assert result.hits[0]["match_hints"]
+    assert result.hits[0].match_hints
 
 
 def test_adaptive_search_falls_back_for_weak_keyword_results():
@@ -48,16 +49,15 @@ def test_adaptive_search_falls_back_for_weak_keyword_results():
     adaptive.keyword = MagicMock()
     adaptive.hybrid = MagicMock()
     adaptive.keyword.search.return_value = []
-    adaptive.hybrid.search.return_value = [
-        _hit(path="semantic.md", score=0.7, source="hybrid")
-    ]
+    adaptive.hybrid.search.return_value = [_hit(path="semantic.md", score=0.7, source="hybrid")]
 
     result = adaptive.search("how does semantic ranking work", top_k=5)
 
+    assert result.route is not None
     assert result.route.strategy == "hybrid"
     assert result.route.fallback_used
     adaptive.hybrid.search.assert_called_once()
-    assert result.hits[0]["source"] == "hybrid"
+    assert result.hits[0].source == "hybrid"
 
 
 def test_adaptive_search_abstains_when_fallback_confidence_is_low():
@@ -66,16 +66,15 @@ def test_adaptive_search_abstains_when_fallback_confidence_is_low():
     adaptive.keyword = MagicMock()
     adaptive.hybrid = MagicMock()
     adaptive.keyword.search.return_value = []
-    adaptive.hybrid.search.return_value = [
-        _hit(path="weak.md", score=0.29, source="hybrid")
-    ]
+    adaptive.hybrid.search.return_value = [_hit(path="weak.md", score=0.29, source="hybrid")]
 
     result = adaptive.search(
         "sourdough starter hydration rye flour feeding schedule",
         top_k=5,
     )
 
-    assert result.hits == []
+    assert result.hits == ()
+    assert result.route is not None
     assert result.route.strategy == "hybrid"
     assert result.route.reason == "hybrid fallback confidence was too low"
     assert result.route.fallback_used
@@ -86,13 +85,12 @@ def test_adaptive_search_keeps_confident_fallback_without_keyword_hits():
     adaptive.keyword = MagicMock()
     adaptive.hybrid = MagicMock()
     adaptive.keyword.search.return_value = []
-    adaptive.hybrid.search.return_value = [
-        _hit(path="semantic.md", score=0.56, source="hybrid")
-    ]
+    adaptive.hybrid.search.return_value = [_hit(path="semantic.md", score=0.56, source="hybrid")]
 
     result = adaptive.search("alternate phrasing for retrieval", top_k=5)
 
-    assert [hit["path"] for hit in result.hits] == ["semantic.md"]
+    assert [hit.path for hit in result.hits] == ["semantic.md"]
+    assert result.route is not None
     assert result.route.strategy == "hybrid"
     assert result.route.fallback_used
 
@@ -106,7 +104,8 @@ def test_adaptive_search_does_not_fallback_for_empty_keywordish_query():
 
     result = adaptive.search("kubernetes pod security policy", top_k=5)
 
-    assert result.hits == []
+    assert result.hits == ()
+    assert result.route is not None
     assert result.route.strategy == "keyword"
     assert result.route.reason == "keyword query had no meaningful BM25 hits"
     assert not result.route.fallback_used
@@ -128,12 +127,11 @@ def test_adaptive_search_falls_back_when_weak_tail_inflates_hit_count():
         _hit(path="b.md", score=0.34),
         _hit(path="c.md", score=0.33),
     ]
-    adaptive.hybrid.search.return_value = [
-        _hit(path="right.md", score=0.7, source="hybrid")
-    ]
+    adaptive.hybrid.search.return_value = [_hit(path="right.md", score=0.7, source="hybrid")]
 
     result = adaptive.search("how do I set the knowledge base path", top_k=5)
 
+    assert result.route is not None
     assert result.route.strategy == "hybrid"
     assert result.route.fallback_used
     adaptive.hybrid.search.assert_called_once()
@@ -155,14 +153,11 @@ def test_adaptive_search_falls_back_when_top_hit_is_not_dominant():
         _hit(path="d.md", score=0.90),
         _hit(path="e.md", score=0.85),
     ]
-    adaptive.hybrid.search.return_value = [
-        _hit(path="right.md", score=0.7, source="hybrid")
-    ]
+    adaptive.hybrid.search.return_value = [_hit(path="right.md", score=0.7, source="hybrid")]
 
-    result = adaptive.search(
-        "find nearby vectors fast without scanning every one", top_k=5
-    )
+    result = adaptive.search("find nearby vectors fast without scanning every one", top_k=5)
 
+    assert result.route is not None
     assert result.route.strategy == "hybrid"
     assert result.route.fallback_used
     adaptive.hybrid.search.assert_called_once()
@@ -181,6 +176,7 @@ def test_adaptive_search_trusts_decisive_conceptual_keyword_hit():
 
     result = adaptive.search("how do agents keep sentences across chunk boundaries")
 
+    assert result.route is not None
     assert result.route.strategy == "keyword"
     assert not result.route.fallback_used
     adaptive.hybrid.search.assert_not_called()
@@ -192,22 +188,20 @@ def test_adaptive_search_fuses_near_tie_even_when_top_hit_is_anchored():
     adaptive = AdaptiveSearch.__new__(AdaptiveSearch)
     adaptive.keyword = MagicMock()
     adaptive.hybrid = MagicMock()
-    anchored = _hit(path="wrong.md", score=1.2)
-    anchored["bm25_metadata_overlap"] = 0.25
+    anchored = make_hit("wrong.md", score=1.2, bm25_metadata_overlap=0.25)
     adaptive.keyword.search.return_value = [
         anchored,
         _hit(path="right.md", score=1.1),
         _hit(path="tail.md", score=1.0),
     ]
-    adaptive.hybrid.search.return_value = [
-        _hit(path="right.md", score=0.7, source="hybrid")
-    ]
+    adaptive.hybrid.search.return_value = [_hit(path="right.md", score=0.7, source="hybrid")]
 
     result = adaptive.search("what shapes the analytics landscape")
 
+    assert result.route is not None
     assert result.route.strategy == "hybrid"
     assert result.route.fallback_used
-    assert result.hits[0]["path"] == "right.md"
+    assert result.hits[0].path == "right.md"
 
 
 def test_adaptive_search_empty_query_does_not_call_engines():
@@ -217,7 +211,8 @@ def test_adaptive_search_empty_query_does_not_call_engines():
 
     result = adaptive.search("   ", top_k=5)
 
-    assert result.hits == []
+    assert result.hits == ()
+    assert result.route is not None
     assert result.route.reason == "empty query"
     adaptive.keyword.search.assert_not_called()
     adaptive.hybrid.search.assert_not_called()
@@ -230,15 +225,12 @@ def test_search_context_groups_by_document_and_includes_followups():
         _hit(path="other.md", content="Semantic search finds related concepts."),
     ]
 
-    rendered = format_search_context(
-        hits,
-        query="BM25 ranking",
-        route=SearchRoute(
-            strategy="keyword",
-            reason="BM25 returned strong exact-match results",
-            fallback_used=False,
-        ),
+    route = SearchRoute(
+        strategy="keyword",
+        reason="BM25 returned strong exact-match results",
+        fallback_used=False,
     )
+    rendered = format_search_context(SearchResponse(tuple(hits), route), query="BM25 ranking")
 
     assert "**Selected:** keyword" in rendered
     assert rendered.count("### ") == 2
@@ -248,17 +240,15 @@ def test_search_context_groups_by_document_and_includes_followups():
 
 
 def test_search_context_includes_collection_in_followups():
-    hit = _hit(path="shared.md")
-    hit["collection"] = "docs"
+    hit = _hit(path="shared.md", collection="docs")
 
-    rendered = format_search_context([hit], query="BM25")
+    rendered = format_search_context(SearchResponse((hit,)), query="BM25")
 
     assert 'get_document(path="shared.md", collection="docs")' in rendered
 
 
 def test_default_search_tool_uses_adaptive_registry_path(tmp_path):
-    from trace_search.retrieval.search import AdaptiveSearchResult
-    from trace_search.collections.collection_registry import CollectionRegistry
+    from trace_search.collections.operations import TraceOperations
     from trace_search.server.mcp_tools import build_multi_mcp
 
     kb = tmp_path / "docs"
@@ -266,10 +256,10 @@ def test_default_search_tool_uses_adaptive_registry_path(tmp_path):
     _, tools = build_multi_mcp("trace-test", {"docs": kb})
 
     with patch.object(
-        CollectionRegistry,
-        "search_adaptive",
-        return_value=AdaptiveSearchResult(
-            hits=[_hit()],
+        TraceOperations,
+        "search_response",
+        return_value=SearchResponse(
+            hits=(_hit(),),
             route=SearchRoute(
                 strategy="keyword",
                 reason="test route",
@@ -286,8 +276,7 @@ def test_default_search_tool_uses_adaptive_registry_path(tmp_path):
 def test_default_search_tool_renders_all_top_k_documents(tmp_path):
     """An explicit top_k must not be silently truncated by the grouped-context
     default of 5 documents: a hit at rank 6-10 is still a returned result."""
-    from trace_search.retrieval.search import AdaptiveSearchResult
-    from trace_search.collections.collection_registry import CollectionRegistry
+    from trace_search.collections.operations import TraceOperations
     from trace_search.server.mcp_tools import build_multi_mcp
 
     kb = tmp_path / "docs"
@@ -295,14 +284,13 @@ def test_default_search_tool_renders_all_top_k_documents(tmp_path):
     _, tools = build_multi_mcp("trace-test", {"docs": kb})
 
     hits = [
-        _hit(path=f"doc{i}.md", score=10.0 - i, content=f"Distinct content {i}")
-        for i in range(10)
+        _hit(path=f"doc{i}.md", score=10.0 - i, content=f"Distinct content {i}") for i in range(10)
     ]
     with patch.object(
-        CollectionRegistry,
-        "search_adaptive",
-        return_value=AdaptiveSearchResult(
-            hits=hits,
+        TraceOperations,
+        "search_response",
+        return_value=SearchResponse(
+            hits=tuple(hits),
             route=SearchRoute(
                 strategy="keyword",
                 reason="test route",
@@ -317,85 +305,51 @@ def test_default_search_tool_renders_all_top_k_documents(tmp_path):
 
 
 def test_multi_collection_adaptive_search_batches_neighbor_fetches(tmp_path):
-    """Multi-collection adaptive search should fetch neighbors once per collection,
-    not once per hit."""
-    from trace_search.retrieval.search import AdaptiveSearchResult
+    from tests.test_runtime_hardening import FakeBackend
     from trace_search.collections.collection_registry import CollectionRegistry
+    from trace_search.collections.operations import TraceOperations
 
-    kb1 = tmp_path / "kb1"
-    kb1.mkdir()
-    kb2 = tmp_path / "kb2"
-    kb2.mkdir()
-
-    registry = CollectionRegistry({"kb1": kb1, "kb2": kb2})
-    registry._backend = MagicMock()
+    paths = {name: tmp_path / name for name in ("kb1", "kb2")}
+    for kb in paths.values():
+        kb.mkdir()
+        for i in range(5):
+            (kb / f"doc{i}.md").write_text(f"# Query {i}\n\nquery details {i}")
+    registry = CollectionRegistry(paths)
+    registry._backend = FakeBackend()
     registry._warmed = True
-
-    def make_hits(prefix, n=5):
-        return [
-            {
-                "id": f"{prefix}/doc{i}.md::1",
-                "path": f"{prefix}/doc{i}.md",
-                "title": f"Doc {i}",
-                "folder": prefix,
-                "content": f"Content {i}",
-                "score": 3.0 - i * 0.1,
-                "source": "keyword",
-                "chunk_index": 1,
-                "chunk_count": 3,
-                "breadcrumb": f"{prefix} > Doc {i}",
-            }
-            for i in range(n)
-        ]
-
-    hits_by_col = {"kb1": make_hits("kb1"), "kb2": make_hits("kb2")}
-
-    adaptive_by_indexer = {}
-    for name, col in registry.collections.items():
-        col._indexer = MagicMock()
-        adaptive = MagicMock()
-        adaptive.search.return_value = AdaptiveSearchResult(
-            hits=hits_by_col[name],
-            route=SearchRoute(
-                strategy="keyword",
-                reason="test route",
-                fallback_used=False,
-            ),
-        )
-        adaptive_by_indexer[id(col._indexer)] = adaptive
-
-    with patch(
-        "trace_search.collections.collection_registry.AdaptiveSearch",
-        side_effect=lambda indexer: adaptive_by_indexer[id(indexer)],
+    indexers = [col.indexer(registry.shared_backend) for col in registry.collections.values()]
+    with (
+        patch.object(
+            indexers[0],
+            "neighbor_contents_batch",
+            wraps=indexers[0].neighbor_contents_batch,
+        ) as first,
+        patch.object(
+            indexers[1],
+            "neighbor_contents_batch",
+            wraps=indexers[1].neighbor_contents_batch,
+        ) as second,
     ):
-        result = registry.search_adaptive("query", top_k=10, collection=None)
-
+        result = TraceOperations(registry).search_response("adaptive", "query", 10)
     assert len(result.hits) == 10
-    assert {h["collection"] for h in result.hits} == {"kb1", "kb2"}
-
-    kb1_batch = registry.collections["kb1"]._indexer.neighbor_contents_batch
-    kb2_batch = registry.collections["kb2"]._indexer.neighbor_contents_batch
-    assert kb1_batch.call_count == 1
-    assert kb2_batch.call_count == 1
-    assert len(kb1_batch.call_args.args[0]) == 5  # one batch per collection
+    first.assert_called_once()
+    second.assert_called_once()
+    assert first.call_args.kwargs["snapshot"].generation is not None
+    assert second.call_args.kwargs["snapshot"].generation is not None
 
 
-def test_specialist_keyword_tool_bypasses_adaptive_registry_path(tmp_path):
-    from trace_search.collections.collection_registry import CollectionRegistry
+def test_specialist_keyword_tool_uses_keyword_operations(tmp_path):
+    from trace_search.collections.operations import TraceOperations
     from trace_search.server.mcp_tools import build_multi_mcp
 
     kb = tmp_path / "docs"
     kb.mkdir()
     _, tools = build_multi_mcp("trace-test", {"docs": kb})
-
-    with (
-        patch.object(CollectionRegistry, "search_keyword", return_value=[]) as keyword,
-        patch.object(CollectionRegistry, "search_adaptive") as search_adaptive,
-    ):
+    with patch.object(
+        TraceOperations, "search_response", return_value=SearchResponse(())
+    ) as search:
         tools["keyword_search"]("BM25")
-
-    keyword.assert_called_once()
-    search_adaptive.assert_not_called()
+    assert search.call_args.args[0] == "keyword"
 
 
 def test_adaptive_search_top_one_still_compares_against_runner_up():
@@ -403,13 +357,14 @@ def test_adaptive_search_top_one_still_compares_against_runner_up():
     adaptive = AdaptiveSearch.__new__(AdaptiveSearch)
     adaptive.keyword = MagicMock()
     adaptive.hybrid = MagicMock()
-    adaptive.keyword.search.side_effect = lambda query, max_results, filters: [
+    adaptive.keyword.search.side_effect = lambda query, max_results, filters, snapshot: [
         _hit(path="right.md", score=4.0),
         _hit(path="runner-up.md", score=1.0),
     ][:max_results]
 
     result = adaptive.search("BM25", top_k=1)
 
+    assert result.route is not None
     assert result.route.strategy == "keyword"
-    assert [hit["path"] for hit in result.hits] == ["right.md"]
+    assert [hit.path for hit in result.hits] == ["right.md"]
     adaptive.hybrid.search.assert_not_called()

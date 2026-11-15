@@ -1,5 +1,3 @@
-"""Tests for the Trace command-line adapter."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -7,14 +5,16 @@ from typing import Any
 
 import pytest
 
+from tests.typed_fakes import fake_operations_factory, settings_without_dotenv
+from trace_search.collections.diagnostics import DoctorReport
 from trace_search.server.cli import run_cli
-
 
 _FILTER_KEYS = ("path_prefix", "extensions", "since")
 
 
 def _filter_tuple(kwargs: dict[str, Any]) -> tuple[Any, Any, Any]:
-    return tuple(kwargs.get(key) for key in _FILTER_KEYS)
+    path_prefix, extensions, since = (kwargs.get(key) for key in _FILTER_KEYS)
+    return path_prefix, extensions, since
 
 
 @dataclass
@@ -28,9 +28,7 @@ class FakeOperations:
         collection: str | None = None,
         **filter_kwargs: Any,
     ) -> str:
-        self.calls.append(
-            ("search", (query, top_k, collection, *_filter_tuple(filter_kwargs)))
-        )
+        self.calls.append(("search", (query, top_k, collection, *_filter_tuple(filter_kwargs))))
         return "# Search"
 
     def semantic_search(
@@ -105,13 +103,13 @@ class FakeOperations:
         self.calls.append(("reindex", (collection, force)))
         return "Reindex complete."
 
-    def doctor(
+    def doctor_report(
         self,
         sample_query: str | None = None,
         collection: str | None = None,
-    ) -> str:
+    ) -> DoctorReport:
         self.calls.append(("doctor", (sample_query, collection)))
-        return "# Trace Doctor"
+        return DoctorReport(config_valid=True, config_message="Configured", collections=[])
 
 
 @pytest.fixture()
@@ -126,7 +124,7 @@ def run_with_fake(
 ) -> tuple[int, str, str]:
     code = run_cli(
         argv,
-        operations_factory=lambda: fake_operations,
+        operations_factory=fake_operations_factory(lambda: fake_operations),
         serve=lambda *_: None,
     )
     captured = capsys.readouterr()
@@ -151,7 +149,7 @@ def test_serve_starts_server(capsys, argv, expected_serve):
     def serve(transport: str, host: str, port: int) -> None:
         served.append((transport, host, port))
 
-    code = run_cli(argv, operations_factory=FakeOperations, serve=serve)
+    code = run_cli(argv, operations_factory=fake_operations_factory(FakeOperations), serve=serve)
 
     assert code == 0
     assert served == [expected_serve]
@@ -287,7 +285,7 @@ def test_operation_errors_return_nonzero(capsys):
 
     code = run_cli(
         ["search", "anything"],
-        operations_factory=failing_factory,
+        operations_factory=fake_operations_factory(failing_factory),
         serve=lambda *_: None,
     )
 
@@ -301,14 +299,16 @@ def test_doctor_config_errors_keep_doctor_report(capsys):
         raise ValueError("Set KB_COLLECTIONS or KB_PATH")
 
     code = run_cli(
-        ["doctor"], operations_factory=failing_factory, serve=lambda *_: None
+        ["doctor"],
+        operations_factory=fake_operations_factory(failing_factory),
+        serve=lambda *_: None,
     )
 
     captured = capsys.readouterr()
     assert code == 1
     assert "# Trace Doctor" in captured.out
     assert "Set KB_COLLECTIONS or KB_PATH" in captured.out
-    assert captured.err == ""
+    assert "Set KB_COLLECTIONS or KB_PATH" in captured.err
 
 
 def test_invalid_numeric_argument_exits_nonzero():
@@ -316,3 +316,83 @@ def test_invalid_numeric_argument_exits_nonzero():
         run_cli(["search", "anything", "--top-k", "0"], serve=lambda *_: None)
 
     assert exc_info.value.code != 0
+
+
+@pytest.mark.parametrize("argv", [[], ["serve"], ["serve", "--transport", "http"]])
+def test_serve_initialization_errors_return_nonzero_without_traceback(argv, capsys):
+    def failing_server(*_):
+        raise ValueError("Set KB_COLLECTIONS or KB_PATH")
+
+    code = run_cli(argv, serve=failing_server)
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.out == ""
+    assert "Set KB_COLLECTIONS or KB_PATH" in captured.err
+    assert "Traceback" not in captured.err
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "192.168.1.1", "example.com", "::"])
+def test_http_rejects_nonloopback_hosts_before_server_creation(host, capsys):
+    called = []
+
+    code = run_cli(
+        ["serve", "--transport", "http", "--host", host],
+        serve=lambda *_: called.append(True),
+    )
+
+    assert code == 1
+    assert not called
+    assert "loopback" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("port", ["0", "65536", "-1", "not-a-port"])
+def test_http_rejects_invalid_ports(port, capsys):
+    called = []
+    try:
+        code = run_cli(
+            ["serve", "--transport", "http", "--port", port],
+            serve=lambda *_: called.append(True),
+        )
+    except SystemExit as error:
+        code = error.code
+
+    assert code != 0
+    assert not called
+    assert "Traceback" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "argv", [["get-document", "missing.md"], ["list-documents", "--limit", "501"]]
+)
+def test_real_operation_failure_has_no_success_stdout(tmp_path, capsys, argv):
+    from trace_search.collections.collection_registry import CollectionRegistry
+    from trace_search.collections.operations import TraceOperations
+
+    config = settings_without_dotenv(kb_path=tmp_path)
+    operations = TraceOperations(CollectionRegistry({"documents": tmp_path}, config=config))
+
+    code = run_cli(argv, operations_factory=lambda: operations)
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.out == ""
+    assert "Error:" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_doctor_unbuilt_index_returns_nonzero_with_report(tmp_path, capsys):
+    from trace_search.collections.collection_registry import CollectionRegistry
+    from trace_search.collections.operations import TraceOperations
+
+    (tmp_path / "hello.md").write_text("# Hello\n\nFixture")
+    config = settings_without_dotenv(kb_path=tmp_path)
+    operations = TraceOperations(CollectionRegistry({"documents": tmp_path}, config=config))
+
+    code = run_cli(["doctor"], operations_factory=lambda: operations)
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "# Trace Doctor" in captured.out
+    assert "missing" in captured.out.lower()
+    assert "Trace doctor found problems" in captured.err

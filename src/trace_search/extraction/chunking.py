@@ -1,11 +1,9 @@
-"""Document chunking for indexing."""
-
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 
-from trace_search.config import settings
+from trace_search.config import get_settings
 
 
 @dataclass(frozen=True)
@@ -34,9 +32,7 @@ def _split_oversized_text(text: str, *, params: ChunkingParams) -> list[str]:
         if 0 < params.overlap_size < params.max_size
         else params.max_size
     )
-    return [
-        text[start : start + params.max_size] for start in range(0, len(text), step)
-    ]
+    return [text[start : start + params.max_size] for start in range(0, len(text), step)]
 
 
 def _prepend_overlap_if_fits(
@@ -59,9 +55,7 @@ def _merge_tiny_chunks(chunks: list[str], *, params: ChunkingParams) -> list[str
     if len(chunks) <= 1:
         return chunks
 
-    tiny_threshold = (
-        200 if params.max_size >= 200 else max(10, int(params.max_size * 0.5))
-    )
+    tiny_threshold = 200 if params.max_size >= 200 else max(10, int(params.max_size * 0.5))
 
     merged: list[str] = []
     i = 0
@@ -159,12 +153,8 @@ def _resolve_chunking_params(
 ) -> ChunkingParams:
     """Resolve chunking parameters with defaults from settings (overlap 0 = off)."""
     return ChunkingParams(
-        max_size=settings.char_chunk_size
-        if max_chunk_chars is None
-        else max_chunk_chars,
-        overlap_size=settings.char_overlap_size
-        if overlap_chars is None
-        else overlap_chars,
+        max_size=get_settings().char_chunk_size if max_chunk_chars is None else max_chunk_chars,
+        overlap_size=get_settings().char_overlap_size if overlap_chars is None else overlap_chars,
     )
 
 

@@ -1,17 +1,13 @@
-"""Document listing helpers for collections."""
-
 from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
+from trace_search.config import Settings, get_settings
 from trace_search.extraction.corpus import iter_kb_files
 from trace_search.extraction.extractors import extract_title
-from trace_search.retrieval.search import SearchFilters
-
-DEFAULT_LIST_LIMIT = 50
-MAX_LIST_LIMIT = 500
+from trace_search.retrieval.search_types import SearchFilters
 
 
 @dataclass(frozen=True)
@@ -32,12 +28,6 @@ class ListedDocument:
         if include_collection and self.collection:
             return f"{self.collection}/{folder}"
         return folder
-
-
-def _normalize_limit(limit: int) -> int:
-    if limit < 1:
-        limit = DEFAULT_LIST_LIMIT
-    return min(limit, MAX_LIST_LIMIT)
 
 
 def _resolve_folder_root(kb_path: Path, folder: str | None) -> Path | None:
@@ -74,13 +64,16 @@ def _list_collection_documents(
     folder: str | None,
     filters: SearchFilters,
     include_collection: bool,
+    config: Settings,
 ) -> list[ListedDocument]:
     search_path = _resolve_folder_root(kb_path, folder)
     if search_path is None:
         return []
 
     documents: list[ListedDocument] = []
-    for file_path in iter_kb_files(kb_path, root=search_path):
+    for file_path in iter_kb_files(
+        kb_path, root=search_path, exclude_patterns=config.exclude_patterns_list
+    ):
         ext = file_path.suffix.lower()
         rel_path = str(file_path.relative_to(kb_path))
         try:
@@ -109,20 +102,13 @@ def render_document_list(
     folder: str | None,
     include_collection: bool,
 ) -> str:
-    """Render collection document listings as Markdown."""
     if not documents:
         return "No documents found."
 
-    lines = [
-        f"Found {len(documents)} documents"
-        + (f" in {folder}" if folder else "")
-        + ":\n"
-    ]
+    lines = [f"Found {len(documents)} documents" + (f" in {folder}" if folder else "") + ":\n"]
     by_folder: dict[str, list[ListedDocument]] = defaultdict(list)
     for document in documents:
-        by_folder[document.group_key(include_collection=include_collection)].append(
-            document
-        )
+        by_folder[document.group_key(include_collection=include_collection)].append(document)
 
     for folder_name, folder_documents in sorted(by_folder.items()):
         lines.append(f"\n## {folder_name}")
@@ -138,8 +124,8 @@ def list_documents_for_collections(
     folder: str | None,
     limit: int,
     filters: SearchFilters,
+    config: Settings | None = None,
 ) -> str:
-    """List documents across one or more collections."""
     include_collection = len(collections) > 1
     documents: list[ListedDocument] = []
     for name, kb_path in collections:
@@ -150,10 +136,10 @@ def list_documents_for_collections(
                 folder=folder,
                 filters=filters,
                 include_collection=include_collection,
+                config=config or get_settings(),
             )
         )
 
-    limit = _normalize_limit(limit)
     documents = sorted(documents, key=lambda document: document.sort_key)[:limit]
     return render_document_list(
         documents,

@@ -1,5 +1,3 @@
-"""Tests for evaluation report rendering."""
-
 from tools.eval.models import (
     CategoryMetrics,
     EvaluationReport,
@@ -81,10 +79,7 @@ def test_markdown_report_keeps_section_contract():
     rendered = generate_markdown_report(_sample_report())
 
     assert "# Trace Search Evaluation Report" in rendered
-    assert (
-        "**Eval mode:** includes stress queries, strict keywords (top-1 scope)"
-        in rendered
-    )
+    assert "**Eval mode:** includes stress queries, strict keywords (top-1 scope)" in rendered
     assert "## Overall Metrics" in rendered
     assert "| Top-1 Path Accuracy | 50.0%" in rendered
     assert "## By Category" in rendered

@@ -1,16 +1,14 @@
-"""Tests for startup embedding warmup behavior."""
-
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from tests.test_runtime_hardening import FakeBackend
+from tests.typed_fakes import fake_indexer
 from trace_search.collections.collection_registry import CollectionRegistry
+from trace_search.indexing.embedding_warmup import warm_embedding_model
 from trace_search.retrieval.search import SemanticSearch
-from trace_search.server.server_warmup import warm_embedding_model
 
 
 class RecordingBackend(FakeBackend):
@@ -25,11 +23,11 @@ class RecordingBackend(FakeBackend):
 
 @pytest.fixture(autouse=True)
 def _reset_semantic_cache():
-    SemanticSearch._embedding_cache.clear()
+    SemanticSearch.clear_embedding_cache()
     SemanticSearch._cache_hits = 0
     SemanticSearch._cache_misses = 0
     yield
-    SemanticSearch._embedding_cache.clear()
+    SemanticSearch.clear_embedding_cache()
     SemanticSearch._cache_hits = 0
     SemanticSearch._cache_misses = 0
 
@@ -38,7 +36,7 @@ def test_registry_warms_backend_on_first_load(tmp_path: Path, monkeypatch):
     backend = RecordingBackend()
     monkeypatch.setattr(
         "trace_search.collections.collection_registry.build_embedding_backend",
-        lambda: backend,
+        lambda config: backend,
     )
     registry = CollectionRegistry({"fixture": tmp_path})
 
@@ -50,7 +48,7 @@ def test_registry_warms_backend_exactly_once(tmp_path: Path, monkeypatch):
     backend = RecordingBackend()
     monkeypatch.setattr(
         "trace_search.collections.collection_registry.build_embedding_backend",
-        lambda: backend,
+        lambda config: backend,
     )
     registry = CollectionRegistry({"fixture": tmp_path})
 
@@ -69,7 +67,7 @@ def test_warmup_does_not_populate_query_cache():
 
 def test_warmup_input_still_cache_misses_as_user_query():
     backend = RecordingBackend()
-    semantic = SemanticSearch(SimpleNamespace(backend=backend))
+    semantic = SemanticSearch(fake_indexer(backend=backend))
     warm_embedding_model(backend)
 
     before_misses = SemanticSearch._cache_misses
