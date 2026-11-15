@@ -11,6 +11,12 @@ from typing import Literal
 
 from trace_search.config import Settings, get_settings
 from trace_search.extraction.corpus import iter_kb_files
+from trace_search.extraction.source_paths import (
+    TRACEIGNORE_FILENAME,
+    is_traceignored,
+    load_traceignore,
+    should_exclude_path,
+)
 from trace_search.indexing.index_metadata import (
     INDEX_METADATA_VERSION,
     IndexMetadata,
@@ -25,13 +31,7 @@ from trace_search.indexing.index_store import (
     read_current,
     read_current_metadata,
 )
-from trace_search.indexing.kb_paths import (
-    TRACEIGNORE_FILENAME,
-    get_default_index_root,
-    is_traceignored,
-    load_traceignore,
-    should_exclude_path,
-)
+from trace_search.indexing.kb_paths import get_default_index_root
 from trace_search.retrieval.search_types import SearchHit
 
 SampleQueryRunner = Callable[[str, str | None], Sequence[SearchHit]]

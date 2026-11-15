@@ -37,6 +37,7 @@ Composed application behavior belongs in `TraceOperations`; CLI and MCP adapters
 | Rule | Enforced by |
 | --- | --- |
 | Runtime code does not import `server/`; indexing does not import retrieval or collections | `pyproject.toml::tool.importlinter` |
+| Extraction does not import indexing; `server/` reaches runtime code only through `collections.operations`, `collections.errors`, `collections.diagnostics`, and `config` | `pyproject.toml::tool.importlinter` |
 | Process calls, network clients, and paid SDKs stay in the owner files listed in `pyproject.toml` per-file-ignores | `pyproject.toml::tool.ruff.lint.flake8-tidy-imports.banned-api`, `tests/test_banned_api_owners.py::test_only_named_owners_ignore_tid251` |
 | Chunk text or metadata changes bump `INDEX_METADATA_VERSION` | `tests/test_chunk_transform_golden.py::test_chunk_transform_changes_bump_index_metadata_version` |
 | MCP output text stays stable | `tests/test_mcp_output_golden.py::test_mcp_output_matches_golden` |
@@ -50,6 +51,7 @@ Composed application behavior belongs in `TraceOperations`; CLI and MCP adapters
 | The installed wheel exposes the public API | `tools/verify_package.py::verify_package` |
 | `just verify control` must observe FAIL before a verify pass counts | `.agents/skills/verify-trace/drives.py::control` |
 | A verify run fails when it changes the checkout, ignored paths and git state included | `.agents/skills/verify-trace/verify::checkout_changes` |
+| Every skip, xfail, and unittest skip in the repo gives a reason | `tests/test_strict_mode.py::test_every_skip_gives_a_reason` |
 
 ## Index and evaluation traps
 

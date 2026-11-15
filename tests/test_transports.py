@@ -8,13 +8,14 @@ import os
 import socket
 import subprocess
 import sys
-import time
 from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
+
+from tests.polling import wait_until
 
 TOOL_NAMES = {
     "search",
@@ -178,16 +179,21 @@ def http_server(environment, port, log_path):
             stderr=log,
         )
         try:
-            deadline = time.monotonic() + 20
-            while time.monotonic() < deadline:
+
+            def accepts_connections() -> bool:
                 if process.poll() is not None:
                     pytest.fail(f"HTTP server exited: {log_path.read_text()}")
                 try:
                     with socket.create_connection(("127.0.0.1", port), timeout=0.2):
-                        break
+                        return True
                 except OSError:
-                    time.sleep(0.05)
-            else:
+                    return False
+
+            try:
+                wait_until(
+                    accepts_connections, timeout=20, what="the HTTP server to accept connections"
+                )
+            except AssertionError:
                 pytest.fail(f"HTTP server did not become ready: {log_path.read_text()}")
             yield process
         finally:

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from trace_search.config import get_settings
 from trace_search.extraction.extractors import SUPPORTED_EXTENSIONS
-from trace_search.indexing.kb_paths import (
+from trace_search.extraction.source_paths import (
     is_traceignored_directory,
     should_exclude_path,
 )

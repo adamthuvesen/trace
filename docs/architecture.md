@@ -37,6 +37,7 @@ Every search method returns `SearchHit` values or a `SearchResponse`.
 That text is the stable output contract.
 
 `WikiIndexer` is the public handle for one index: it opens snapshots, builds generations, and reads neighbors.
+A `WikiIndexer` is one collection's index handle, and `kb_path` (`KB_PATH` in config) is that collection's root directory.
 `CollectionRegistry` owns collection resources only. Every collection operation goes through `TraceOperations`.
 `trace_search/__init__.py` exposes the public imports and typed retrieval records.
 

@@ -57,49 +57,49 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PGH003", "PGH004", "PTH",
 ignore = ["E501"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
-"subprocess".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"pty".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.system".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.popen".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"asyncio.streams".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (network client). Add a new owner file there, with a reason."
-"asyncio.open_connection".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (network client). Add a new owner file there, with a reason."
-"asyncio.open_unix_connection".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (network client). Add a new owner file there, with a reason."
-"asyncio.start_server".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (network client). Add a new owner file there, with a reason."
-"asyncio.start_unix_server".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (network client). Add a new owner file there, with a reason."
-"asyncio.subprocess".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.posix_spawn".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.posix_spawnp".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.fork".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.forkpty".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"asyncio.create_subprocess_exec".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"asyncio.create_subprocess_shell".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"socket".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (network client). Add a new owner file there, with a reason."
-"http.client".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (network client). Add a new owner file there, with a reason."
-"urllib.request".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (network client). Add a new owner file there, with a reason."
-"requests".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (network client). Add a new owner file there, with a reason."
-"httpx".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (network client). Add a new owner file there, with a reason."
-"aiohttp".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (network client). Add a new owner file there, with a reason."
-"openai".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (paid SDK). Add a new owner file there, with a reason."
-"anthropic".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (paid SDK). Add a new owner file there, with a reason."
-"cohere".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (paid SDK). Add a new owner file there, with a reason."
-"voyageai".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (paid SDK). Add a new owner file there, with a reason."
-"snowflake".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (warehouse driver). Add a new owner file there, with a reason."
-"os.execl".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.execle".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.execlp".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.execlpe".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.execv".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.execve".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.execvp".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.execvpe".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.spawnl".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.spawnle".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.spawnlp".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.spawnlpe".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.spawnv".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.spawnve".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.spawnvp".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
-"os.spawnvpe".msg = "Only the owner files in pyproject.toml per-file-ignores may use this (process calls). Add a new owner file there, with a reason."
+"subprocess".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"pty".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.system".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.popen".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"asyncio.streams".msg = "trace_search opens no connections itself; FastMCP in trace_search/server owns transports. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"asyncio.open_connection".msg = "trace_search opens no connections itself; FastMCP in trace_search/server owns transports. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"asyncio.open_unix_connection".msg = "trace_search opens no connections itself; FastMCP in trace_search/server owns transports. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"asyncio.start_server".msg = "trace_search opens no connections itself; FastMCP in trace_search/server owns transports. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"asyncio.start_unix_server".msg = "trace_search opens no connections itself; FastMCP in trace_search/server owns transports. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"asyncio.subprocess".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.posix_spawn".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.posix_spawnp".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.fork".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.forkpty".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"asyncio.create_subprocess_exec".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"asyncio.create_subprocess_shell".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"socket".msg = "trace_search opens no connections itself; FastMCP in trace_search/server owns transports. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"http.client".msg = "trace_search opens no connections itself; FastMCP in trace_search/server owns transports. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"urllib.request".msg = "trace_search opens no connections itself; FastMCP in trace_search/server owns transports. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"requests".msg = "trace_search opens no connections itself; FastMCP in trace_search/server owns transports. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"httpx".msg = "trace_search opens no connections itself; FastMCP in trace_search/server owns transports. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"aiohttp".msg = "trace_search opens no connections itself; FastMCP in trace_search/server owns transports. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"openai".msg = "Paid model SDKs are banned; embeddings run locally in trace_search/indexing/embeddings.py. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"anthropic".msg = "Paid model SDKs are banned; embeddings run locally in trace_search/indexing/embeddings.py. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"cohere".msg = "Paid model SDKs are banned; embeddings run locally in trace_search/indexing/embeddings.py. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"voyageai".msg = "Paid model SDKs are banned; embeddings run locally in trace_search/indexing/embeddings.py. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"snowflake".msg = "Warehouse drivers are banned; trace indexes local files only. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.execl".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.execle".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.execlp".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.execlpe".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.execv".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.execve".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.execvp".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.execvpe".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.spawnl".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.spawnle".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.spawnlp".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.spawnlpe".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.spawnv".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.spawnve".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.spawnvp".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
+"os.spawnvpe".msg = "trace_search runs no processes. Put the call in a tools/ or verify-drive owner file. Only owner files in [tool.ruff.lint.per-file-ignores] may use it; add one there with a reason."
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["TID251"]
@@ -136,13 +136,34 @@ reportPrivateUsage = false
 root_package = "trace_search"
 
 [[tool.importlinter.contracts]]
-name = "Runtime code does not depend on server adapters"
+name = "Runtime code (collections, retrieval, indexing, extraction) must not import server; server calls runtime, not back"
 type = "forbidden"
 source_modules = ["trace_search.collections", "trace_search.retrieval", "trace_search.indexing", "trace_search.extraction"]
 forbidden_modules = ["trace_search.server"]
 
 [[tool.importlinter.contracts]]
-name = "Index construction does not depend on retrieval or collection operations"
+name = "Indexing and extraction must not import retrieval or collections; move shared code down into indexing"
 type = "forbidden"
 source_modules = ["trace_search.indexing", "trace_search.extraction"]
 forbidden_modules = ["trace_search.retrieval", "trace_search.collections"]
+
+[[tool.importlinter.contracts]]
+name = "Extraction must not import indexing; indexing calls extraction, so move shared code into extraction"
+type = "forbidden"
+source_modules = ["trace_search.extraction"]
+forbidden_modules = ["trace_search.indexing"]
+
+[[tool.importlinter.contracts]]
+name = "Server must not import runtime internals; add a TraceOperations method in collections/operations.py"
+type = "forbidden"
+source_modules = ["trace_search.server"]
+allow_indirect_imports = true
+forbidden_modules = [
+    "trace_search.collections.collection_registry",
+    "trace_search.collections.document_listing",
+    "trace_search.collections.index_stats",
+    "trace_search.extraction",
+    "trace_search.indexing",
+    "trace_search.retrieval",
+    "trace_search.filesystem_paths",
+]

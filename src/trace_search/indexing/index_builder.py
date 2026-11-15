@@ -24,6 +24,7 @@ from trace_search.extraction.extractors import (
     extract_title,
 )
 from trace_search.extraction.frontmatter import Frontmatter, split_frontmatter
+from trace_search.extraction.source_paths import should_exclude_path
 from trace_search.indexing.embeddings import (
     EmbeddingArray,
     EmbeddingBackend,
@@ -43,7 +44,6 @@ from trace_search.indexing.index_store import (
     write_snapshot,
     writer_lock,
 )
-from trace_search.indexing.kb_paths import should_exclude_path
 
 logger = logging.getLogger(__name__)
 

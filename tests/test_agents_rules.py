@@ -30,7 +30,9 @@ def test_enforced_rules_cite_real_files():
     for row in rows:
         cited = re.findall(r"`([^`]+)`", row.split("|")[2])
         if not cited:
-            missing.append(f"{row.split('|')[1].strip()}: no citation")
+            missing.append(
+                f"{row.split('|')[1].strip()}: no citation; add a backticked `path::name`"
+            )
         for citation in cited:
             relative, _, name = citation.partition("::")
             path = REPO_ROOT / relative

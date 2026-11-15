@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from trace_search.indexing.kb_paths import should_exclude_path
+from trace_search.extraction.source_paths import should_exclude_path
 from trace_search.indexing.wiki_indexer import WikiIndexer
 from trace_search.retrieval.search import KeywordSearch
 

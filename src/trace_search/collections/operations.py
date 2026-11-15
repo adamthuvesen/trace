@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
+from pathlib import Path
 from typing import Literal
 
 from trace_search.collections.collection_registry import CollectionRegistry
@@ -20,10 +21,10 @@ from trace_search.collections.errors import (
     ReindexError,
 )
 from trace_search.collections.index_stats import render_index_stats
-from trace_search.config import get_settings
+from trace_search.config import Settings, get_settings
 from trace_search.extraction.extractors import extract_content
+from trace_search.extraction.source_paths import actual_path_spelling, should_exclude_path
 from trace_search.indexing.index_metadata import metadata_query_compatible
-from trace_search.indexing.kb_paths import actual_path_spelling, should_exclude_path
 from trace_search.retrieval.formatting import format_results, format_search_context
 from trace_search.retrieval.search import (
     AdaptiveSearch,
@@ -59,14 +60,23 @@ class TraceOperations:
         self.registry = registry
 
     @classmethod
+    def for_collections(
+        cls,
+        collections: dict[str, Path],
+        index_root: Path | None = None,
+        *,
+        config: Settings | None = None,
+    ) -> TraceOperations:
+        return cls(CollectionRegistry(collections, index_root, config=config))
+
+    @classmethod
     def from_settings(cls) -> TraceOperations:
         app_settings = get_settings()
-        registry = CollectionRegistry(
+        return cls.for_collections(
             app_settings.parsed_collections,
-            index_root=app_settings.index_path,
+            app_settings.index_path,
             config=app_settings,
         )
-        return cls(registry)
 
     def search(
         self,

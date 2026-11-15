@@ -10,7 +10,6 @@ from typing import ParamSpec
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 
-from trace_search.collections.collection_registry import CollectionRegistry
 from trace_search.collections.errors import OperationError
 from trace_search.collections.operations import TraceOperations
 from trace_search.config import Settings
@@ -60,11 +59,10 @@ def build_multi_mcp(
     config: Settings | None = None,
 ) -> tuple[FastMCP, dict[str, Callable[..., str]]]:
     """Build a server and return its registered tool functions for direct use."""
-    registry = CollectionRegistry(collections, index_root, config=config)
-    operations = TraceOperations(registry)
+    operations = TraceOperations.for_collections(collections, index_root, config=config)
 
     if instructions is None:
-        instructions = _build_multi_instructions(registry.collection_names)
+        instructions = _build_multi_instructions(operations.registry.collection_names)
 
     mcp = FastMCP(server_name, instructions=instructions, strict_input_validation=True)
 
